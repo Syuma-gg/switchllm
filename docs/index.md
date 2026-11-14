@@ -13,6 +13,7 @@
 | [PLANS.md](PLANS.md) | 実行計画の書き方と一覧（進行中 / 完了） |
 | [exec-plans/tech-debt-tracker.md](exec-plans/tech-debt-tracker.md) | 既知の負債 |
 | [QUALITY_SCORE.md](QUALITY_SCORE.md) | 領域ごとの品質評価 |
+| [quality-gates.md](quality-gates.md) | 品質検査の方針（原則、仕組み、落ちたときの直し方）。テンプレートの写しで、switchllm 用には書き換えない |
 | [RELIABILITY.md](RELIABILITY.md) | タイムアウト、リトライ、ストリーミングが失敗したときの扱い |
 | [SECURITY.md](SECURITY.md) | APIキーの扱い、ツール実行の注意 |
 
@@ -38,4 +39,4 @@
 - 2つの README（英語の `README.md` と日本語の `README.ja.md`）のリンクが、すべて GitHub の絶対 URL で、指すファイルがリポジトリにある（PyPI のページでは相対リンクとページ内リンクが切れるため）
 - 2つの README の見出しの並び、コードブロックの数、リンク先がそろっている
 
-これとは別に、`tests/test_quality_gate.py` が、`# noqa`・`# pragma: no cover` に理由が書いてあることを検査する。ruff・pytest・カバレッジをまとめて回すのは `scripts/quality_gate.py` で、Claude Code の Stop フックと CI から呼ぶ（[品質検査の方針](design-docs/quality-gates.md)）。
+これとは別に、`tests/test_quality_gate.py` が、`# noqa`・`# pragma: no cover` に理由が書いてあることを検査する。ruff・pytest・カバレッジをまとめて回すのは `scripts/quality_gate.py` で、Claude Code の Stop フックと CI から呼ぶ（[品質検査の方針](quality-gates.md)）。品質検査の仕組みは他のプロジェクトでも使うテンプレート（[harness/quality-gate/](../harness/quality-gate/README.md)）の写しで、`tests/test_harness.py` が一致を検査する。

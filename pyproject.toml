@@ -56,7 +56,7 @@ testpaths = ["tests"]
 
 # ---- 品質検査の基準 ----
 # scripts/quality_gate.py（Claude Code の Stop フックと CI）がこの値で検査する。
-# 基準を緩めるのはユーザーの了承を得てから（docs/design-docs/quality-gates.md）。
+# 基準を緩めるのはユーザーの了承を得てから（docs/quality-gates.md）。
 [tool.ruff.lint]
 select = ["F", "E9", "B"]
 

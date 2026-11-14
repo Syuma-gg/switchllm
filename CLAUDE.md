@@ -12,7 +12,7 @@ OpenAI / Anthropic / Gemini / OpenAI互換サーバーを同じコードで呼�
 pip install -e ".[dev]"
 python -m pytest                     # 全テスト（ネットワーク不要・数秒）。docs と層構造の検査を含む
 python -m pytest tests/test_gemini.py -q
-ruff check src tests scripts         # 規則は pyproject.toml
+ruff check                           # プロジェクト全体。規則は pyproject.toml
 python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop フックと CI と同じ検査）
 ```
 
@@ -22,7 +22,7 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 
 ## 品質検査
 
-作業を終える前に、Stop フック（`.claude/settings.json`）が ruff・pytest・カバレッジを検査する。落ちたら直してから終える。直し方は [quality-gates.md](docs/design-docs/quality-gates.md) に従う。
+作業を終える前に、Stop フック（`.claude/settings.json`）が ruff・pytest・カバレッジを検査する。落ちたら直してから終える。直し方は [品質検査の方針](docs/quality-gates.md) に従う。
 
 - 検査は品質を上げるための手段。数字を通すために品質を落とさない
 - テストには振る舞いを確かめる assert を書く。基準（`pyproject.toml` の `fail_under`・ruff のルール・除外）を緩めない
@@ -42,7 +42,8 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 | 進行中の作業、次にやること | [docs/PLANS.md](docs/PLANS.md) |
 | 既知の負債 | [docs/exec-plans/tech-debt-tracker.md](docs/exec-plans/tech-debt-tracker.md) |
 | テストと検証の状況 | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md) |
-| 検査に落ちたときの直し方、基準を変えてよいか | [docs/design-docs/quality-gates.md](docs/design-docs/quality-gates.md) |
+| 検査に落ちたときの直し方、基準を変えてよいか | [docs/quality-gates.md](docs/quality-gates.md) |
+| 品質検査のテンプレート（他のプロジェクトに入れる、検査そのものを直す） | [harness/quality-gate/README.md](harness/quality-gate/README.md) |
 | リトライ、タイムアウト、例外 | [docs/RELIABILITY.md](docs/RELIABILITY.md) |
 
 ## 壊してはいけない不変条件

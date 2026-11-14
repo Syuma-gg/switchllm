@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && for py in .venv/Scripts/python.exe .venv/bin/python venv/Scripts/python.exe venv/bin/python; do if [ -x \"$py\" ]; then exec \"$py\" scripts/quality_gate.py; fi; done; echo \"quality gate: 仮想環境（.venv か venv）が見つかりません。作って開発用の依存を入れてください\" >&2; exit 1",
+            "timeout": 180,
+            "statusMessage": "品質検査（ruff・pytest・カバレッジ）"
+          }
+        ]
+      }
+    ]
+  }
+}

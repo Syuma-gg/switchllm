@@ -68,8 +68,9 @@ providers/     Provider   parse_response() / parse_stream(): 各社の JSON → 
 | `tests/test_architecture.py` | 層の規則、ランタイム依存が httpx だけであること |
 | `tests/test_docs.py` | リンク切れ、索引漏れ、公開 API とプリセットの一覧の一致、CLAUDE.md の長さ |
 | `tests/test_quality_gate.py` | 品質検査（`scripts/quality_gate.py`）の判定、`noqa`・`pragma: no cover` に理由があること |
+| `tests/test_harness.py` | 品質検査のファイル・Stop フック・CLAUDE.md の節が、テンプレート（`harness/quality-gate/`）と同じであること |
 
-`scripts/smoke_test.py` だけは実 API を叩く（料金が発生する）。`scripts/quality_gate.py` は ruff・pytest・カバレッジをまとめて回す（Stop フックと CI から呼ぶ。[方針](docs/design-docs/quality-gates.md)）。
+`scripts/smoke_test.py` だけは実 API を叩く（料金が発生する）。`scripts/quality_gate.py` は ruff・pytest・カバレッジをまとめて回す（Stop フックと CI から呼ぶ。[方針](docs/quality-gates.md)）。これは `harness/quality-gate/` にある、他のプロジェクトでも使うテンプレートの写しなので、直すときはテンプレートも同じ変更で直す（[テンプレート](harness/quality-gate/README.md)）。
 
 ## よくある変更
 

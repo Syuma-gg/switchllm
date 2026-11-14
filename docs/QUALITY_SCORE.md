@@ -4,7 +4,7 @@
 
 テストは GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確認した）。
 
-カバレッジ（分岐を含む）は 87.68%（2026-11-14、Python 3.12）。基準は `pyproject.toml` の `fail_under = 87` で、上がったら引き上げる（[品質検査の方針](design-docs/quality-gates.md)）。主な未到達は、`_http.py` の接続エラーのリトライ・`Retry-After` の解釈・エラー本体からのメッセージの取り出し。
+カバレッジ（分岐を含む）は 87.68%（2026-11-14、Python 3.12）。基準は `pyproject.toml` の `fail_under = 87` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）。主な未到達は、`_http.py` の接続エラーのリトライ・`Retry-After` の解釈・エラー本体からのメッセージの取り出し。
 
 ## 評価の基準
 

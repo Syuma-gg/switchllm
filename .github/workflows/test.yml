@@ -1,6 +1,6 @@
 # push と pull request のたびに、ネットワーク不要のテスト（python -m pytest）を回す。
 # Ubuntu では対応する全版、Windows（作者の開発環境）では最古版と最新版だけを試す。
-# quality ジョブは、Claude Code の Stop フックと同じ品質検査（docs/design-docs/quality-gates.md）。
+# quality ジョブは、Claude Code の Stop フックと同じ品質検査（docs/quality-gates.md）。
 name: test
 
 on:
