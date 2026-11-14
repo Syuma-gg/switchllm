@@ -1,6 +1,8 @@
 # sdist に入れる追加のファイル。sdist を展開した先で python -m pytest が全部通るようにする
-# （tests/test_docs.py が CLAUDE.md・README・ARCHITECTURE.md・docs/ を読む）。wheel には影響しない。
+# （tests/test_docs.py が CLAUDE.md・README・ARCHITECTURE.md・docs/ を、
+#   tests/test_quality_gate.py が scripts/ を読む）。wheel には影響しない。
 include CHANGELOG.md README.ja.md ARCHITECTURE.md CLAUDE.md
 graft docs
+graft scripts
 graft tests
 global-exclude __pycache__ *.py[cod]

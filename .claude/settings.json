@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && for py in .venv/Scripts/python.exe .venv/bin/python; do if [ -x \"$py\" ]; then exec \"$py\" scripts/quality_gate.py; fi; done; echo \"quality gate: .venv が見つかりません。CLAUDE.md のコマンドで作ってください\" >&2; exit 1",
+            "timeout": 180,
+            "statusMessage": "品質検査（ruff・pytest・カバレッジ）"
+          }
+        ]
+      }
+    ]
+  }
+}

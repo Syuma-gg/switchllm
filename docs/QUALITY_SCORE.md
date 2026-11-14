@@ -4,6 +4,8 @@
 
 テストは GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確認した）。
 
+カバレッジ（分岐を含む）は 87.68%（2026-11-14、Python 3.12）。基準は `pyproject.toml` の `fail_under = 87` で、上がったら引き上げる（[品質検査の方針](design-docs/quality-gates.md)）。主な未到達は、`_http.py` の接続エラーのリトライ・`Retry-After` の解釈・エラー本体からのメッセージの取り出し。
+
 ## 評価の基準
 
 | 評価 | 意味 |
@@ -30,6 +32,7 @@
 | リトライ、例外 | B | `tests/test_client.py` | 実際の 429 / 5xx / 切断での挙動は未確認 |
 | プロバイダーの切り替え | B | `tests/test_cross_provider.py` | U5、U8 |
 | `@tool`、`run_tool_calls` | B | `tests/test_tools.py` | 生成したスキーマを各社が受け付けるかは実 API で確認する |
+| 画像入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py` | 4アダプターのリクエスト形状、Gemini の URL 拒否、`from_file` の形式判定。実 API では未確認 |
 | SSE パース | B | `tests/test_client.py` | |
 | 層構造、ランタイム依存 | — | `tests/test_architecture.py` | 検査そのもの |
 | ドキュメント | — | `tests/test_docs.py` | リンク・索引・公開 API・プリセットの一致を検査 |

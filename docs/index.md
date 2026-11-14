@@ -37,3 +37,5 @@
 - [public-api.md](product-specs/public-api.md) の一覧が `switchllm.__all__` と、プリセット表が `PRESETS` と一致する
 - 2つの README（英語の `README.md` と日本語の `README.ja.md`）のリンクが、すべて GitHub の絶対 URL で、指すファイルがリポジトリにある（PyPI のページでは相対リンクとページ内リンクが切れるため）
 - 2つの README の見出しの並び、コードブロックの数、リンク先がそろっている
+
+これとは別に、`tests/test_quality_gate.py` が、`# noqa`・`# pragma: no cover` に理由が書いてあることを検査する。ruff・pytest・カバレッジをまとめて回すのは `scripts/quality_gate.py` で、Claude Code の Stop フックと CI から呼ぶ（[品質検査の方針](design-docs/quality-gates.md)）。

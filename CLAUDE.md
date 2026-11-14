@@ -12,12 +12,22 @@ OpenAI / Anthropic / Gemini / OpenAI互換サーバーを同じコードで呼�
 pip install -e ".[dev]"
 python -m pytest                     # 全テスト（ネットワーク不要・数秒）。docs と層構造の検査を含む
 python -m pytest tests/test_gemini.py -q
-ruff check src tests --select F,E9,B --ignore B006   # ruff は任意
+ruff check src tests scripts         # 規則は pyproject.toml
+python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop フックと CI と同じ検査）
 ```
 
 - CI（`.github/workflows/test.yml`）は同じ `python -m pytest` を Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す。対応する Python の版を変えたら、ここと `pyproject.toml` の `requires-python`・`classifiers` を合わせる
 - **`scripts/smoke_test.py` は実 API を叩き、料金が発生する。実行前に必ずユーザーに確認すること。**
 - APIキーは環境変数で渡す。コードやファイルに書かない（[docs/SECURITY.md](docs/SECURITY.md)）。
+
+## 品質検査
+
+作業を終える前に、Stop フック（`.claude/settings.json`）が ruff・pytest・カバレッジを検査する。落ちたら直してから終える。直し方は [quality-gates.md](docs/design-docs/quality-gates.md) に従う。
+
+- 検査は品質を上げるための手段。数字を通すために品質を落とさない
+- テストには振る舞いを確かめる assert を書く。基準（`pyproject.toml` の `fail_under`・ruff のルール・除外）を緩めない
+- `# noqa`・`# pragma: no cover`・skip は品質上の理由があるときだけ使い、同じ行に理由を書き、報告で伝える
+- 品質を落とさずに直せないときは、止まって状況と選択肢をユーザーに報告する
 
 ## どこを読むか
 
@@ -32,6 +42,7 @@ ruff check src tests --select F,E9,B --ignore B006   # ruff は任意
 | 進行中の作業、次にやること | [docs/PLANS.md](docs/PLANS.md) |
 | 既知の負債 | [docs/exec-plans/tech-debt-tracker.md](docs/exec-plans/tech-debt-tracker.md) |
 | テストと検証の状況 | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md) |
+| 検査に落ちたときの直し方、基準を変えてよいか | [docs/design-docs/quality-gates.md](docs/design-docs/quality-gates.md) |
 | リトライ、タイムアウト、例外 | [docs/RELIABILITY.md](docs/RELIABILITY.md) |
 
 ## 壊してはいけない不変条件

@@ -187,6 +187,7 @@ git clone https://github.com/Syuma-gg/switchllm.git
 cd switchllm
 pip install -e ".[dev]"
 python -m pytest          # モック API に対するテスト（APIキー不要）
+python scripts/quality_gate.py --ci   # ruff・テスト・カバレッジ（CI と同じ検査）
 ```
 
 - 構造: [ARCHITECTURE.md](https://github.com/Syuma-gg/switchllm/blob/main/ARCHITECTURE.md)

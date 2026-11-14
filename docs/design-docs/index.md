@@ -16,3 +16,4 @@
 | [@tool の自動変換は対応する型を固定する](tool-schema-scope.md) | 採用（2026-11-09） | — |
 | [プリセットは base_url を確認したものだけ](verified-presets.md) | 採用（2026-11-09） | 公式ドキュメントで確認 |
 | [公開 API を最小にする](minimal-public-api.md) | 採用（2026-11-09） | — |
+| [品質検査のために品質を落とさない](quality-gates.md) | 採用（2026-11-14） | — |

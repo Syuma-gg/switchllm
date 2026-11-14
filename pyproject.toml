@@ -38,7 +38,11 @@ Issues = "https://github.com/Syuma-gg/switchllm/issues"
 Changelog = "https://github.com/Syuma-gg/switchllm/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.17",
+    "coverage[toml]>=7.6",  # [toml] は Python 3.10 で下の [tool.coverage] を読むのに要る
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -47,5 +51,20 @@ where = ["src"]
 version = { attr = "switchllm.__version__" }
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "scripts"]  # scripts/ は tests/test_quality_gate.py が読む
 testpaths = ["tests"]
+
+# ---- 品質検査の基準 ----
+# scripts/quality_gate.py（Claude Code の Stop フックと CI）がこの値で検査する。
+# 基準を緩めるのはユーザーの了承を得てから（docs/design-docs/quality-gates.md）。
+[tool.ruff.lint]
+select = ["F", "E9", "B"]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["switchllm"]
+
+[tool.coverage.report]
+fail_under = 87  # 実測値（2026-11-14 に 87.68%）の小数を切り捨てた値。上がったら引き上げる。下げない
+show_missing = true
+skip_covered = true

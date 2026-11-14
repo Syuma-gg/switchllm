@@ -17,7 +17,7 @@ def get_weather(
     city: Annotated[str, "都市名"],
     unit: Literal["c", "f"] = "c",
     days: Optional[int] = None,
-    tags: list[str] = [],  # noqa: B006
+    tags: list[str] = [],  # noqa: B006 - 利用者が書きがちな可変の既定値でも、任意の引数として扱えるか確かめる
 ) -> dict:
     """指定した都市の天気を返す。
 

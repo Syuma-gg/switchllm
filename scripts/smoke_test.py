@@ -28,7 +28,7 @@ def check(model: str) -> list[tuple[str, bool, str]]:
     def run(name: str, fn) -> None:
         try:
             results.append((name, True, fn()))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 - どの例外でも結果に記録し、残りの確認を続ける
             results.append((name, False, f"{type(e).__name__}: {e}"))
             traceback.print_exc()
 

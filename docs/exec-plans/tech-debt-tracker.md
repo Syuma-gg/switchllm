@@ -10,3 +10,5 @@
 | 設計文書・CHANGELOG・コメントが日本語だけ（README は英語版がある） | 海外の利用者は、設計の理由や変更履歴を読めない | 要望が出たら、利用者が直接読む CHANGELOG から英語化を検討する |
 | `ProviderState` が公開 API にない | `Message.provider_state` の型を利用者が import できない | 型ヒントで必要になったら公開を検討する |
 | ストリーミング中のエラーイベントのテストが一部のアダプターにない | 実 API で初めて壊れていると分かる可能性がある | [QUALITY_SCORE.md](../QUALITY_SCORE.md) の「足りないテスト」を参照 |
+| 接続エラーのリトライ、`Retry-After` の解釈、エラー本体の解釈にテストがない（カバレッジ 87.68%） | 失敗したときの挙動が壊れても気づけない | テストを足し、`pyproject.toml` の `fail_under` を引き上げる（[品質検査の方針](../design-docs/quality-gates.md)） |
+| `ImagePart` を `data` も `url` もなしで作れる | 中身のない画像（`data: None` や `base64,None`）をそのまま送り、API のエラーで初めて気づく | 作るときに `ValueError` にするか検討する。公開 API の挙動が変わるので、先に判断を残す |

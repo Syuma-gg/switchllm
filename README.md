@@ -187,6 +187,7 @@ git clone https://github.com/Syuma-gg/switchllm.git
 cd switchllm
 pip install -e ".[dev]"
 python -m pytest          # tests against mocked APIs (no API keys needed)
+python scripts/quality_gate.py --ci   # ruff, tests and coverage, same as CI
 ```
 
 The documents below are written in Japanese.
