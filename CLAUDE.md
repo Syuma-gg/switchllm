@@ -17,6 +17,7 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 ```
 
 - CI（`.github/workflows/test.yml`）は同じ `python -m pytest` を Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す。対応する Python の版を変えたら、ここと `pyproject.toml` の `requires-python`・`classifiers` を合わせる
+- 公開は `.github/workflows/publish.yml`（手動で実行すると TestPyPI、GitHub の Release を公開すると PyPI）。設定と手順は [v0.1 公開](docs/exec-plans/active/v0.1-release.md)
 - **`scripts/smoke_test.py` は実 API を叩き、料金が発生する。実行前に必ずユーザーに確認すること。**
 - APIキーは環境変数で渡す。コードやファイルに書かない（[docs/SECURITY.md](docs/SECURITY.md)）。
 
