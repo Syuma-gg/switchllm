@@ -1,6 +1,22 @@
 from conftest import WEATHER_TOOL
-from switchllm import Message, register_provider
+from switchllm import ImagePart, Message, TextPart, register_provider
 from switchllm.providers import PRESETS
+
+
+def test_image_parts_become_image_url(api):
+    api.reply_json({"choices": [{"message": {"role": "assistant", "content": "どちらも猫"}, "finish_reason": "stop"}]})
+    images = [ImagePart(url="https://example.com/a.png"), ImagePart(data="iVBORw0KGgo=", media_type="image/png")]
+    api.client("ollama:llava").chat([Message.user([TextPart("比べて"), *images])])
+    assert api.body()["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "比べて"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}},
+            ],
+        }
+    ]
 
 
 def test_ollama_preset_without_key(api):

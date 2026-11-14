@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import WEATHER_TOOL
-from switchllm import Message, StreamError
+from switchllm import ImagePart, Message, StreamError, TextPart
 
 
 def test_request_shape(api):
@@ -24,6 +24,32 @@ def test_request_shape(api):
     assert body["tool_choice"] == {"type": "any"}
     assert body["stop_sequences"] == ["END"]
     assert res.text == "やあ" and res.stop_reason == "end"
+
+
+def test_image_parts_become_image_blocks(api):
+    api.reply_json({"content": [{"type": "text", "text": "猫です"}], "stop_reason": "end_turn", "usage": {}})
+    api.client("anthropic:claude-sonnet-5-5").chat(
+        [
+            Message.user(
+                [
+                    TextPart("これは何？"),
+                    TextPart(""),  # 空の text ブロックは拒否されるので送らない
+                    ImagePart(data="iVBORw0KGgo=", media_type="image/png"),
+                    ImagePart(url="https://example.com/cat.jpg"),
+                ]
+            )
+        ]
+    )
+    assert api.body()["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "これは何？"},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo="}},
+                {"type": "image", "source": {"type": "url", "url": "https://example.com/cat.jpg"}},
+            ],
+        }
+    ]
 
 
 def test_usage_includes_cache_tokens(api):

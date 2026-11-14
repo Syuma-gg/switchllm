@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import WEATHER_TOOL
-from switchllm import Message, UnsupportedFeatureError
+from switchllm import ImagePart, Message, TextPart, UnsupportedFeatureError
 
 
 def _text_response(text="こんにちは"):
@@ -35,6 +35,22 @@ def test_text_request_and_response(api):
     assert res.stop_reason == "end"
     assert (res.usage.input_tokens, res.usage.output_tokens) == (12, 30)
     assert res.provider == "openai"
+
+
+def test_image_parts_become_input_image(api):
+    api.reply_json(_text_response("どちらも猫"))
+    images = [ImagePart(url="https://example.com/a.png"), ImagePart(data="iVBORw0KGgo=", media_type="image/png")]
+    api.client("openai:gpt-5.5").chat([Message.user([TextPart("比べて"), *images])])
+    assert api.body()["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "比べて"},
+                {"type": "input_image", "image_url": "https://example.com/a.png"},
+                {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgo="},
+            ],
+        }
+    ]
 
 
 def test_tool_roundtrip_replays_output_items(api):

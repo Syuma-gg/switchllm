@@ -1,5 +1,7 @@
+import pytest
+
 from conftest import WEATHER_TOOL
-from switchllm import Message
+from switchllm import ImagePart, Message, TextPart, UnsupportedFeatureError
 from switchllm.providers.gemini import SYNTHETIC_ID_PREFIX
 
 
@@ -27,6 +29,24 @@ def test_request_shape(api):
     assert body["toolConfig"] == {"functionCallingConfig": {"mode": "NONE"}}
     assert res.text == "こんにちは"
     assert (res.usage.input_tokens, res.usage.output_tokens) == (8, 10)  # thoughts を出力に含める
+
+
+def test_image_file_becomes_inline_data(api, tmp_path):
+    # webp は mimetypes が判定できない環境がある（Windows の Python 3.12）。拡張子の表で image/webp にする
+    path = tmp_path / "cat.WEBP"
+    path.write_bytes(b"RIFF")
+    api.reply_json(_resp([{"text": "猫です"}]))
+    api.client("gemini:gemini-flash-latest").chat([Message.user([TextPart("これは何？"), ImagePart.from_file(path)])])
+    assert api.body()["contents"] == [
+        {"role": "user", "parts": [{"text": "これは何？"}, {"inlineData": {"mimeType": "image/webp", "data": "UklGRg=="}}]}
+    ]
+
+
+def test_image_url_is_rejected_before_sending(api):
+    client = api.client("gemini:gemini-flash-latest")
+    with pytest.raises(UnsupportedFeatureError, match="from_file"):
+        client.chat([Message.user([ImagePart(url="https://example.com/cat.png")])])
+    assert api.requests == []  # 黙って画像を落として送らない
 
 
 def test_parallel_calls_keep_signature_and_order(api):

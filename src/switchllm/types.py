@@ -23,6 +23,17 @@ StopReason = Literal["end", "tool_use", "max_tokens", "content_filter", "other"]
 # --------------------------------------------------------------------------- #
 # メッセージ本文のパーツ
 # --------------------------------------------------------------------------- #
+# 各社が受け付ける画像形式。mimetypes の結果は OS と Python の版で変わる
+# （例: Windows の Python 3.12 は .webp を判定できず None を返す）ので、先にこの表を引く
+_IMAGE_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
 @dataclass
 class TextPart:
     text: str
@@ -41,7 +52,7 @@ class ImagePart:
     @classmethod
     def from_file(cls, path: str | Path) -> "ImagePart":
         p = Path(path)
-        media_type = mimetypes.guess_type(p.name)[0] or "image/png"
+        media_type = _IMAGE_MEDIA_TYPES.get(p.suffix.lower()) or mimetypes.guess_type(p.name)[0] or "image/png"
         return cls(data=base64.b64encode(p.read_bytes()).decode("ascii"), media_type=media_type)
 
     def as_data_url(self) -> str:
