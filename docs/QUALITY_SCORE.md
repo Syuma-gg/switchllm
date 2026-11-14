@@ -2,7 +2,7 @@
 
 領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-14）。
 
-テストは GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す。GitHub のリポジトリを作るまでは動いていない。
+テストは GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確認した）。
 
 ## 評価の基準
 
