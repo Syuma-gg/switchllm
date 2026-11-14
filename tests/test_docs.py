@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 ENTRY = ROOT / "CLAUDE.md"
 PUBLIC_API = DOCS / "product-specs" / "public-api.md"
+READMES = [ROOT / "README.md", ROOT / "README.ja.md"]  # 英語版（PyPI に載る）と日本語版
+REPO_FILES = "https://github.com/Syuma-gg/switchllm/blob/main/"
 MAX_ENTRY_LINES = 100
 
 _LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
@@ -23,7 +25,7 @@ _CODE_BLOCK = re.compile(r"```.*?```", re.S)
 
 
 def _md_files() -> list[Path]:
-    return [ENTRY, ROOT / "README.md", ROOT / "ARCHITECTURE.md", *sorted(DOCS.rglob("*.md"))]
+    return [ENTRY, *READMES, ROOT / "ARCHITECTURE.md", *sorted(DOCS.rglob("*.md"))]
 
 
 def _links(path: Path) -> list[str]:
@@ -77,6 +79,44 @@ def test_indexes_list_every_doc_in_their_directory():
             if p.resolve() != index.resolve() and p.resolve() not in linked:
                 missing.append(f"{_rel(index)} に {_rel(p)} へのリンクがない")
     assert not missing, "索引に載っていない文書がある。索引の表に1行足す:\n" + "\n".join(sorted(missing))
+
+
+def _all_links(path: Path) -> list[str]:
+    """コードブロックの外にあるリンクを、URL も含めてすべて返す。"""
+    return _LINK.findall(_CODE_BLOCK.sub("", path.read_text(encoding="utf-8")))
+
+
+def test_readme_links_are_absolute_and_resolve():
+    """README は PyPI のページにも載り、そこでは相対リンクとページ内リンクが切れる。"""
+    problems = []
+    for p in READMES:
+        for t in _all_links(p):
+            if t.startswith(REPO_FILES):
+                if not (ROOT / t[len(REPO_FILES):].split("#", 1)[0]).exists():
+                    problems.append(f"{_rel(p)} -> {t}（リポジトリにこのファイルがない）")
+            elif not re.match(r"[a-z]+:", t):
+                problems.append(f"{_rel(p)} -> {t}（{REPO_FILES}<パス> の形の絶対 URL にする）")
+    assert not problems, "README のリンクを直す:\n" + "\n".join(problems)
+
+
+def _readme_outline(path: Path) -> tuple[list[int], int, set[str]]:
+    """見出しのレベルの並び、コードブロックの数、リポジトリ内のリンク先（言語の切り替えを除く）。"""
+    text = path.read_text(encoding="utf-8")
+    headings = [len(h) for h in re.findall(r"^(#+) ", _CODE_BLOCK.sub("", text), re.M)]
+    targets = {t for t in _all_links(path) if t.startswith(REPO_FILES) and not t.startswith(REPO_FILES + "README")}
+    return headings, len(_CODE_BLOCK.findall(text)), targets
+
+
+def test_readmes_have_same_structure():
+    (en_h, en_c, en_t), (ja_h, ja_c, ja_t) = (_readme_outline(p) for p in READMES)
+    problems = []
+    if en_h != ja_h:
+        problems.append(f"見出しのレベルの並びが違う: README.md {en_h} / README.ja.md {ja_h}")
+    if en_c != ja_c:
+        problems.append(f"コードブロックの数が違う: README.md {en_c} / README.ja.md {ja_c}")
+    if en_t != ja_t:
+        problems.append(f"リンク先が違う: README.md だけ {sorted(en_t - ja_t)} / README.ja.md だけ {sorted(ja_t - en_t)}")
+    assert not problems, "英語版と日本語版の README がずれている。片方だけ直していないか確かめる:\n" + "\n".join(problems)
 
 
 def test_entry_stays_short():

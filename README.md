@@ -1,96 +1,102 @@
 # switchllm
 
-OpenAI / Anthropic / Gemini / OpenAI互換サーバー（Ollama・LM Studio・vLLM など）を、**同じコードで呼べる**軽量なクライアントライブラリ。
+English | [日本語](https://github.com/Syuma-gg/switchllm/blob/main/README.ja.md)
+
+A lightweight client library that lets you call OpenAI, Anthropic, Gemini, and OpenAI-compatible servers (Ollama, LM Studio, vLLM, and more) **with the same code**.
 
 ```python
 from switchllm import Client
 
-client = Client("anthropic:claude-sonnet-5-5")   # ← ここだけ変えればプロバイダーが変わる
-print(client.chat("こんにちは").text)
+client = Client("anthropic:claude-sonnet-5-5")   # ← change only this string to switch providers
+print(client.chat("Hello").text)
 ```
 
-- 依存は `httpx` だけ。各社の SDK は使わず、HTTP リクエストの形式差をアダプターで吸収する
-- ツール呼び出しの往復に必要な署名・推論情報（Gemini の thoughtSignature、Anthropic の thinking、OpenAI の reasoning）を落とさない
-- エージェントフレームワークではなく、その下で使う薄い層（[やること・やらないこと](docs/product-specs/scope.md)）
-- プロバイダーは文字列で選ぶ。失敗したときに別のプロバイダーへ自動で切り替える機能（フォールバック、ルーティング）はない。必要なら `RateLimitError` などを捕まえて `client.with_model()` で切り替える
+- The only dependency is `httpx`. No vendor SDKs: adapters absorb the differences between each provider's HTTP formats
+- Keeps the signatures and reasoning data that tool-call round trips need (Gemini's thoughtSignature, Anthropic's thinking, OpenAI's reasoning)
+- Not an agent framework, but a thin layer underneath one ([what it does and does not do](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/scope.md), in Japanese)
+- You choose the provider with a string. There is no automatic switching to another provider on failure (fallback or routing). If you need it, catch `RateLimitError` and similar errors, and switch with `client.with_model()`
 
 ---
 
-## インストール
+## Installation
 
-```powershell
-cd switchllm
-pip install -e ".[dev]"
-python -m pytest          # モック API に対するテスト（APIキー不要）
+```shell
+pip install switchllm
 ```
 
-APIキーは環境変数で渡す（`api_key=` 引数でも可）。
+Requires Python 3.10 or later. The only runtime dependency is `httpx`.
 
-| プロバイダー | モデル文字列の例 | 環境変数 |
+Pass API keys through environment variables (or the `api_key=` argument).
+
+| Provider | Example model string | Environment variable |
 |---|---|---|
-| OpenAI（Responses API） | `openai:gpt-5.5` | `OPENAI_API_KEY` |
+| OpenAI (Responses API) | `openai:gpt-5.5` | `OPENAI_API_KEY` |
 | Anthropic | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
-| Google Gemini | `gemini:gemini-flash-latest` | `GEMINI_API_KEY`（または `GOOGLE_API_KEY`） |
-| OpenAI（Chat Completions） | `openai-chat:<model>` | `OPENAI_API_KEY` |
-| Ollama / LM Studio（ローカル） | `ollama:llama3.2` / `lmstudio:<model>` | 不要 |
-| その他の OpenAI 互換 API | `register_provider()` で登録する（[後述](#その他の-openai-互換-api)） | 登録時に指定 |
+| Google Gemini | `gemini:gemini-flash-latest` | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) |
+| OpenAI (Chat Completions) | `openai-chat:<model>` | `OPENAI_API_KEY` |
+| Ollama / LM Studio (local) | `ollama:llama3.2` / `lmstudio:<model>` | Not needed |
+| Other OpenAI-compatible APIs | Register with `register_provider()` (see "Other OpenAI-compatible APIs" below) | Set when registering |
 
-モデル ID は頻繁に変わるので、各社のモデル一覧で確認してから指定する。
+Model IDs change often, so check each provider's model list before you use one.
 
-## 切り替え方は2通り
+## Two ways to switch
 
-1. **コードの1か所**: `Client("openai:gpt-5.5")` の文字列を変える
-2. **コードを変えない**: `Client()` と書いておき、環境変数 `SWITCHLLM_MODEL` で指定する
+1. **One place in your code**: change the string in `Client("openai:gpt-5.5")`
+2. **No code changes**: write `Client()` and set the `SWITCHLLM_MODEL` environment variable
 
-```powershell
+```shell
+# macOS / Linux
+export SWITCHLLM_MODEL="gemini:gemini-flash-latest"
+# Windows (PowerShell)
 $env:SWITCHLLM_MODEL = "gemini:gemini-flash-latest"
+
 python examples/agent_loop.py
 ```
 
-モデル文字列は最初の `:` で区切るので、`ollama:llama3.2:3b` のようにモデル名にコロンを含んでもよい。
+The model string is split at the first `:`, so model names may contain colons, as in `ollama:llama3.2:3b`.
 
-## 使い方
+## Usage
 
-### テキスト・ストリーミング
+### Text and streaming
 
 ```python
-res = client.chat("日本の首都は？", system="一言で答える", max_tokens=100, temperature=0)
-res.text          # 本文
+res = client.chat("What is the capital of Japan?", system="Answer in one word.", max_tokens=100, temperature=0)
+res.text          # the reply
 res.stop_reason   # "end" | "tool_use" | "max_tokens" | "content_filter" | "other"
-res.usage         # input_tokens / output_tokens / total_tokens / details（生の内訳）
-res.thinking      # 推論テキスト（返すプロバイダーのみ）
+res.usage         # input_tokens / output_tokens / total_tokens / details (the raw breakdown)
+res.thinking      # reasoning text (only from providers that return it)
 
-for ev in client.stream("俳句を詠んで"):
+for ev in client.stream("Write a haiku"):
     if ev.type == "text":
         print(ev.text, end="")
     elif ev.type == "done":
-        final = ev.response   # ツール呼び出しも組み立て済みの Response
+        final = ev.response   # the complete Response, tool calls included
 ```
 
-### ツール呼び出し（エージェントループ）
+### Tool calling (agent loop)
 
 ```python
 from typing import Annotated, Literal
 from switchllm import Client, Message, run_tool_calls, tool
 
 @tool
-def get_weather(city: Annotated[str, "都市名"], unit: Literal["c", "f"] = "c") -> dict:
-    """都市の現在の天気を返す。"""
-    return {"city": city, "weather": "晴れ"}
+def get_weather(city: Annotated[str, "City name"], unit: Literal["c", "f"] = "c") -> dict:
+    """Return the current weather for a city."""
+    return {"city": city, "weather": "sunny"}
 
-messages = [Message.user("東京と大阪の天気は？")]
+messages = [Message.user("What's the weather in Tokyo and Osaka?")]
 while True:
     res = client.chat(messages, tools=[get_weather])
-    messages.append(res.message)          # 加工せずそのまま積む（署名などの生データが入っている）
+    messages.append(res.message)          # append it unchanged (it carries raw data such as signatures)
     if res.stop_reason != "tool_use":
         break
     messages.extend(run_tool_calls([get_weather], res.tool_calls))
 print(res.text)
 ```
 
-- `@tool` は型ヒントと docstring（最初の段落）から、ツール定義の JSON Schema を作る
-- 自動で変換できる型は `str` / `int` / `float` / `bool` / `list[T]`（`tuple`・`set` も可）/ `dict` / `Literal` / `Enum` / `Optional`・`Union` / `Annotated[T, "説明"]`。型ヒントのない引数は文字列として扱う
-- それ以外の型（dataclass、Pydantic モデルなど）を使うと、デコレートした時点で `TypeError` になる。その場合は `parameters=` で JSON Schema を直接渡す
+- `@tool` builds the tool's JSON Schema from the type hints and the docstring (its first paragraph)
+- Supported types: `str` / `int` / `float` / `bool` / `list[T]` (also `tuple` and `set`) / `dict` / `Literal` / `Enum` / `Optional` and `Union` / `Annotated[T, "description"]`. Parameters without a type hint are treated as strings
+- Any other type (dataclasses, Pydantic models, and so on) raises `TypeError` when the function is decorated. In that case, pass a JSON Schema directly with `parameters=`
 
 ```python
 @tool(parameters={
@@ -99,87 +105,96 @@ print(res.text)
     "required": ["order"],
 })
 def place_order(order: dict) -> str:
-    """注文を確定する。"""
-    return f"{order['item']} を {order['qty']} 個注文しました"
+    """Place an order."""
+    return f"Ordered {order['qty']} x {order['item']}"
 ```
 
-- ツール定義は dict（`{"name", "description", "parameters"}`）でも渡せる
-- `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`
-- 並列ツール呼び出しにも対応（Anthropic・Gemini では結果を1メッセージにまとめて送る）
-- `run_tool_calls` は、モデルが決めた引数で関数を実行する。危険な操作をする関数では引数を検証すること（[SECURITY.md](docs/SECURITY.md)）
+- Tool definitions can also be dicts (`{"name", "description", "parameters"}`)
+- `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`
+- Parallel tool calls are supported (for Anthropic and Gemini, the results are sent together in one message)
+- `run_tool_calls` runs your functions with arguments chosen by the model. Validate the arguments in functions that do anything dangerous ([SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md), in Japanese)
 
-### プロバイダー固有の機能
+### Provider-specific features
 
-共通化できないパラメータは `extra=` でリクエスト本体にそのままマージする。ここだけはプロバイダー依存のコードになる。
+Parameters that cannot be unified are passed with `extra=` and merged into the request body as is. This is the only place where your code depends on the provider.
 
 ```python
 client.chat("...", extra={"metadata": {"user_id": "u-1"}})          # Anthropic
 client.chat("...", extra={"reasoning": {"effort": "high"}})          # OpenAI Responses
 ```
 
-### 例外
+### Errors
 
-どのプロバイダーでも同じ例外クラスになる: `AuthenticationError`(401/403) / `RateLimitError`(429) / `BadRequestError`(400系) / `NotFoundError`(404) / `ServerError`(5xx) / `StreamError` / `APIConnectionError` / `ConfigurationError` / `UnsupportedFeatureError`。
+Every provider raises the same exception classes: `AuthenticationError` (401/403) / `RateLimitError` (429) / `BadRequestError` (4xx) / `NotFoundError` (404) / `ServerError` (5xx) / `StreamError` / `APIConnectionError` / `ConfigurationError` / `UnsupportedFeatureError`.
 
-429・5xx・接続エラーは指数バックオフで自動リトライする（`max_retries=2`、`Retry-After` ヘッダーを尊重）。ストリーミングは最初のイベントを受け取る前だけリトライする。詳しくは [RELIABILITY.md](docs/RELIABILITY.md)。
+429s, 5xx errors, and connection errors are retried automatically with exponential backoff (`max_retries=2`, honoring the `Retry-After` header). Streams are retried only before the first event arrives. See [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md) (in Japanese) for details.
 
-### その他の OpenAI 互換 API
+### Other OpenAI-compatible APIs
 
-プリセットにないサーバー（クラウドの互換 API、自前の vLLM、社内ゲートウェイなど）は、名前を付けて登録する。base_url は各サービスの公式ドキュメントで確認すること。
+Servers without a preset (OpenAI-compatible cloud APIs, your own vLLM, an internal gateway, and so on) can be registered under a name. Check the base_url in each service's official documentation.
 
 ```python
 from switchllm import Client, register_provider
 
 register_provider("mycloud", base_url="https://api.example.com/v1", api_key_env="MYCLOUD_API_KEY")
-register_provider("myvllm", base_url="http://gpu-box:8000/v1", api_key_env=())   # キー不要
+register_provider("myvllm", base_url="http://gpu-box:8000/v1", api_key_env=())   # no key needed
 client = Client("myvllm:Qwen/Qwen3-8B")
 ```
 
-登録せずに `Client("openai-chat:<model>", base_url="...", api_key="...")` と直接指定してもよい。
+You can also skip registration and write `Client("openai-chat:<model>", base_url="...", api_key="...")`.
 
 ---
 
-## 設計の要点
+## Design notes
 
-詳しい理由は [設計判断の一覧](docs/design-docs/index.md) にある。
+The reasons are explained in the [design documents](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/index.md) (in Japanese).
 
-- **OpenAI 本家は Responses API、互換サーバーは Chat Completions。** GPT-5.4 以降、Chat Completions では推論とツール呼び出しを両立できないため（[詳細](docs/design-docs/openai-responses-api.md)）
-- **生データを `provider_state` に退避し、同じモデルへはそのまま返す。** 署名や推論アイテムを落とすと、ツールの往復がエラーになるため。別のモデルへは共通型から変換し直す（[詳細](docs/design-docs/provider-state-resend.md)）
-- **主要3社はネイティブ API を使う。** 各社の OpenAI 互換エンドポイントは、キャッシュや thinking などの機能が制限されるため（[詳細](docs/design-docs/native-apis.md)）
-- **`usage` の意味を揃える。** `input_tokens` はキャッシュを含む入力の総数、`output_tokens` は推論を含む出力の総数（[詳細](docs/design-docs/usage-normalization.md)）
-- **SDK を使わず HTTP を直接呼ぶ。** 依存を httpx だけにし、形式の差をコード上で見えるようにするため（[詳細](docs/design-docs/http-without-sdk.md)）
+- **OpenAI itself is called through the Responses API; compatible servers through Chat Completions.** From GPT-5.4 on, Chat Completions cannot combine reasoning with tool calls ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/openai-responses-api.md))
+- **Raw data is kept in `provider_state` and sent back unchanged to the same model.** Dropping signatures or reasoning items makes tool round trips fail. For a different model, the history is converted again from the common types ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/provider-state-resend.md))
+- **The three major providers are called through their native APIs.** Their OpenAI-compatible endpoints limit features such as caching and thinking ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/native-apis.md))
+- **`usage` means the same thing for every provider.** `input_tokens` is the total input including the cache, and `output_tokens` is the total output including reasoning ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/usage-normalization.md))
+- **HTTP is called directly, without SDKs.** This keeps httpx as the only dependency and makes the format differences visible in the code ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/http-without-sdk.md))
 
-## 既知の制限
+## Known limitations
 
-- **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する）
-- 非同期（`async`）は未対応
-- 画像入力は対応、音声・PDF・ファイル入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
-- 構造化出力と推論の強さは共通化していない（`extra` で各社の指定を渡す）
-- OpenAI Responses には `stop` シーケンスが存在しないため、指定すると `UnsupportedFeatureError`
-- Responses API は既定でレスポンスを保存する。`extra={"store": False}` にする場合、reasoning アイテムの再送には `include: ["reasoning.encrypted_content"]` も必要
-- Gemini の関数スキーマは `parameters`（OpenAPI のサブセット）で送る。複雑な JSON Schema を使うなら `Client(..., schema_field="parametersJsonSchema")`
-- Google は generateContent を「レガシー」とし、新規開発には Interactions API を勧めている。本ライブラリは広く文書化された generateContent を使う
+- **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` (this costs a small amount)
+- No async support yet
+- Image input is supported; audio, PDF, and file input are not. Image URLs are not supported for Gemini (pass base64 instead)
+- Structured output and reasoning effort are not unified (pass each provider's settings with `extra`)
+- The OpenAI Responses API has no `stop` sequences, so specifying one raises `UnsupportedFeatureError`
+- The Responses API stores responses by default. If you set `extra={"store": False}`, resending reasoning items also requires `include: ["reasoning.encrypted_content"]`
+- Gemini function schemas are sent as `parameters` (a subset of OpenAPI). For complex JSON Schemas, use `Client(..., schema_field="parametersJsonSchema")`
+- Google calls generateContent "legacy" and recommends the Interactions API for new projects. This library uses generateContent, which is widely documented
 
-## 既存ライブラリとの比較
+## Comparison with existing libraries
 
-同じ目的の OSS はすでにある。用途によってはそちらが適切。
+Other open-source libraries have the same goal. Depending on your use case, one of them may be a better fit.
 
-| | switchllm（これ） | LiteLLM | any-llm (mozilla-ai) |
+| | switchllm (this one) | LiteLLM | any-llm (mozilla-ai) |
 |---|---|---|---|
-| 対応数 | 主要3社 + OpenAI 互換 | 100以上 | 主要どころ多数 |
-| 出力形式 | 独自の共通型 | OpenAI Chat Completions 形式 | OpenAI 形式 |
-| 実装 | HTTP 直叩き、依存 httpx のみ | 独自変換 + Proxy/Gateway | 公式 SDK を利用 |
-| 向いている用途 | 中身を理解したい・依存を減らしたい・エージェント自作 | 本番運用、コスト管理、フォールバック | SDK ベースで軽く使いたい |
+| Providers | 3 major + OpenAI-compatible | 100+ | Many major ones |
+| Output format | Its own common types | OpenAI Chat Completions format | OpenAI format |
+| Implementation | Direct HTTP, depends only on httpx | Own conversion + Proxy/Gateway | Official SDKs |
+| Best for | Understanding what happens inside, fewer dependencies, building your own agent | Production use, cost management, fallback | Light use on top of the SDKs |
 
 - LiteLLM — https://docs.litellm.ai/docs/
 - any-llm — https://github.com/mozilla-ai/any-llm
 
-## 開発者向け
+## Development
 
-- 構造: [ARCHITECTURE.md](ARCHITECTURE.md)
-- ドキュメントの索引: [docs/index.md](docs/index.md)（設計判断、スコープ、公開 API、各社 API の仕様メモと出典、計画）
-- 変更履歴: [CHANGELOG.md](CHANGELOG.md)
+```shell
+git clone https://github.com/Syuma-gg/switchllm.git
+cd switchllm
+pip install -e ".[dev]"
+python -m pytest          # tests against mocked APIs (no API keys needed)
+```
 
-## ライセンス
+The documents below are written in Japanese.
 
-MIT（[LICENSE](LICENSE)）
+- Architecture: [ARCHITECTURE.md](https://github.com/Syuma-gg/switchllm/blob/main/ARCHITECTURE.md)
+- Documentation index: [docs/index.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/index.md) (design decisions, scope, public API, notes and sources on each provider's API, plans)
+- Changelog: [CHANGELOG.md](https://github.com/Syuma-gg/switchllm/blob/main/CHANGELOG.md)
+
+## License
+
+MIT ([LICENSE](https://github.com/Syuma-gg/switchllm/blob/main/LICENSE))

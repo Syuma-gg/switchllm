@@ -15,4 +15,4 @@ OpenAI / Anthropic / Gemini / OpenAI 互換サーバーを同じコードで呼�
 - ゲートウェイやプロキシではない（サーバーを立てない）
 - ランタイム依存は httpx だけ
 
-なぜ作るのかは [基本方針](../design-docs/core-beliefs.md)、既存ライブラリとの比較は [README](../../README.md) にある。
+なぜ作るのかは [基本方針](../design-docs/core-beliefs.md)、既存ライブラリとの比較は [README](../../README.ja.md) にある。

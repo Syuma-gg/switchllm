@@ -49,7 +49,7 @@ ruff check src tests --select F,E9,B --ignore B006   # ruff は任意
 ## コード規約
 
 - Python 3.10 以上。各ファイル先頭で `from __future__ import annotations`
-- コメント・docstring・ドキュメントは日本語。例外メッセージは英語
+- コメント・docstring・ドキュメントは日本語。例外メッセージは英語。例外は `README.md`（英語。PyPI に載る）で、日本語版は `README.ja.md`
 - ランタイム依存は `httpx` だけ（`tests/test_architecture.py` が検査）。増やすなら先に design-docs に判断を残す
 - 公開 API を増減したら `src/switchllm/__init__.py` の `__all__` と [public-api.md](docs/product-specs/public-api.md) を同じ変更で直す（`tests/test_docs.py` が照合）
 
@@ -57,5 +57,6 @@ ruff check src tests --select F,E9,B --ignore B006   # ruff は任意
 
 - 新しい文書は、そのディレクトリの `index.md`（計画は [docs/PLANS.md](docs/PLANS.md)）からリンクする。どこからも辿れない文書があると `tests/test_docs.py` が失敗する
 - コードの挙動を変えたら、同じ変更で関係する文書も直す。古い記述を見つけたらその場で直すか、tech-debt-tracker に書く
+- README は英語版と日本語版を同じ変更で直す。リンクは `https://github.com/Syuma-gg/switchllm/blob/main/...` の絶対 URL にする（`tests/test_docs.py` が検査）
 - 複数ステップの作業は `docs/exec-plans/active/` に計画を置き、終わったら `completed/` に移す
 - 会話で決めたことは、docs に書くまで残らないものとして扱う
