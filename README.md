@@ -178,3 +178,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 
 - 構造: [ARCHITECTURE.md](ARCHITECTURE.md)
 - ドキュメントの索引: [docs/index.md](docs/index.md)（設計判断、スコープ、公開 API、各社 API の仕様メモと出典、計画）
+
+## ライセンス
+
+MIT（[LICENSE](LICENSE)）
