@@ -1,4 +1,9 @@
-"""ツール定義。Python 関数から JSON Schema を自動生成する ``@tool`` デコレーター付き。"""
+"""ツール定義。Python 関数から JSON Schema を自動生成する ``@tool`` デコレーター付き。
+
+自動生成で扱う型は ``SUPPORTED_TYPES`` に固定し、これ以上は広げない
+（docs/design-docs/tool-schema-scope.md）。対応外の型はデコレート時に TypeError にして、
+``@tool(parameters={...})`` で JSON Schema を直接渡してもらう。
+"""
 
 from __future__ import annotations
 
@@ -70,10 +75,17 @@ def run_tool_calls(tools: Iterable[ToolLike], calls: Iterable[ToolCall]) -> list
 # 型ヒント → JSON Schema
 # --------------------------------------------------------------------------- #
 _PRIMITIVES: dict[Any, str] = {str: "string", int: "integer", float: "number", bool: "boolean"}
+_SEQUENCES = (list, tuple, set, frozenset)
+
+#: 自動生成で扱う型の一覧（エラーメッセージと README に出す。増やさない方針）
+SUPPORTED_TYPES = "str, int, float, bool, list[T] (tuple/set too), dict, Literal, Enum, Optional/Union, Annotated[T, 'description']"
 
 
 def _schema_for(tp: Any) -> tuple[dict[str, Any], bool]:
-    """(schema, optional) を返す。Annotated[T, "説明"] の文字列メタデータは description に使う。"""
+    """(schema, optional) を返す。Annotated[T, "説明"] の文字列メタデータは description に使う。
+
+    対応外の型は TypeError（呼び出し側で引数名を添えて投げ直す）。黙って string にはしない。
+    """
     origin = typing.get_origin(tp)
 
     if origin is typing.Annotated:
@@ -100,7 +112,7 @@ def _schema_for(tp: Any) -> tuple[dict[str, Any], bool]:
             schema["type"] = t
         return schema, False
 
-    if origin in (list, tuple, set, frozenset):
+    if origin in _SEQUENCES:
         args = typing.get_args(tp)
         items = _schema_for(args[0])[0] if args else {}
         return ({"type": "array", "items": items} if items else {"type": "array"}), False
@@ -118,37 +130,62 @@ def _schema_for(tp: Any) -> tuple[dict[str, Any], bool]:
 
     if tp in _PRIMITIVES:
         return {"type": _PRIMITIVES[tp]}, False
-    if tp is list:
+    if tp in _SEQUENCES:
         return {"type": "array"}, False
-    return {"type": "string"}, False
+    raise TypeError(f"unsupported type {tp!r}")
+
+
+def _parameters_for(f: Callable[..., Any]) -> dict[str, Any]:
+    hints = typing.get_type_hints(f, include_extras=True)
+    props: dict[str, Any] = {}
+    required: list[str] = []
+    for pname, param in inspect.signature(f).parameters.items():
+        if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+            continue
+        try:
+            schema, optional = _schema_for(hints.get(pname, str))  # 型ヒントなしは文字列として扱う
+        except TypeError as e:
+            raise TypeError(
+                f"@tool cannot build a JSON Schema for parameter {pname!r} of {f.__name__}(): {e}. "
+                f"Supported types: {SUPPORTED_TYPES}. "
+                "For anything else, pass the schema yourself: @tool(parameters={...})"
+            ) from None
+        props[pname] = schema
+        if param.default is inspect.Parameter.empty and not optional:
+            required.append(pname)
+    params: dict[str, Any] = {"type": "object", "properties": props}
+    if required:
+        params["required"] = required
+    return params
 
 
 def tool(
-    fn: Callable[..., Any] | None = None, *, name: str | None = None, description: str | None = None
+    fn: Callable[..., Any] | None = None,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    parameters: dict[str, Any] | None = None,
 ) -> Any:
     """関数をツールにする。
 
-    >>> @tool
-    ... def get_weather(city: Annotated[str, "都市名"], unit: Literal["c", "f"] = "c") -> dict:
-    ...     '''指定した都市の現在の天気を返す。'''
+    型ヒントと docstring（最初の段落）からツール定義を作る::
+
+        @tool
+        def get_weather(city: Annotated[str, "都市名"], unit: Literal["c", "f"] = "c") -> dict:
+            '''指定した都市の現在の天気を返す。'''
+
+    ``SUPPORTED_TYPES`` 以外の型（dataclass、Pydantic モデルなど）を使う関数は、
+    ``parameters=`` で JSON Schema を直接渡す。型ヒントからの推論は行わない::
+
+        @tool(parameters={"type": "object", "properties": {"order": {...}}, "required": ["order"]})
+        def place_order(order: dict) -> str:
+            '''注文を確定する。'''
     """
 
     def wrap(f: Callable[..., Any]) -> Tool:
-        hints = typing.get_type_hints(f, include_extras=True)
-        props: dict[str, Any] = {}
-        required: list[str] = []
-        for pname, param in inspect.signature(f).parameters.items():
-            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
-                continue
-            schema, optional = _schema_for(hints.get(pname, str))
-            props[pname] = schema
-            if param.default is inspect.Parameter.empty and not optional:
-                required.append(pname)
-        params: dict[str, Any] = {"type": "object", "properties": props}
-        if required:
-            params["required"] = required
         doc = inspect.getdoc(f) or ""
         desc = description or doc.split("\n\n")[0].strip() or f.__name__
+        params = parameters if parameters is not None else _parameters_for(f)
         return Tool(name=name or f.__name__, description=desc, parameters=params, fn=f)
 
     return wrap(fn) if fn is not None else wrap

@@ -1,59 +1,60 @@
-# unillm — Claude Code 向けガイド
+# unillm — Claude Code 向けの地図
 
-OpenAI / Anthropic / Gemini / OpenAI互換サーバーを同じコードで呼べる Python ライブラリ。
+OpenAI / Anthropic / Gemini / OpenAI互換サーバーを同じコードで呼べる、軽量な Python ライブラリ。
 `Client("provider:model")` の文字列（または環境変数 `UNILLM_MODEL`）だけでプロバイダーを切り替える。
-経緯・未検証事項・TODO は `docs/HANDOFF.md`、利用者向け説明と設計根拠は `README.md` を参照。
+
+このファイルは**地図**なので詳細は書かない。知識の正本は `docs/` にある。
+作業の前に、下の「どこを読むか」から該当する文書だけを開くこと。
 
 ## コマンド（Windows / PowerShell）
 
 ```powershell
 pip install -e ".[dev]"
-python -m pytest                     # 全テスト（ネットワーク不要・数秒）
+python -m pytest                     # 全テスト（ネットワーク不要・数秒）。docs と層構造の検査を含む
 python -m pytest tests/test_gemini.py -q
 ruff check src tests --select F,E9,B --ignore B006   # ruff は任意
 ```
 
 - **`scripts/smoke_test.py` は実 API を叩き、料金が発生する。実行前に必ずユーザーに確認すること。**
-  例: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest`
-- APIキーは環境変数（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` など）。コードやファイルに書かない。
+- APIキーは環境変数で渡す。コードやファイルに書かない（[docs/SECURITY.md](docs/SECURITY.md)）。
 
-## アーキテクチャ
+## どこを読むか
 
-```
-Client.chat()/stream()            src/unillm/client.py
-  → ChatRequest（共通型）          providers/base.py
-  → Provider.build_request()      providers/<adapter>.py  共通型 → 各社 HTTP リクエスト
-  → _http.request_json / stream_sse   送信・リトライ・SSE 分解
-  → Provider.parse_response() / parse_stream()  各社 JSON → Response / StreamEvent
-```
-
-- アダプターは4つ: `openai`（Responses API）/ `openai_chat`（Chat Completions 互換）/ `anthropic` / `gemini`
-- モデル文字列の `provider:` 部分は `providers/__init__.py` の `PRESETS` で「アダプター + base_url + APIキー環境変数」に解決される
-- 共通型は `types.py`（Message / ToolCall / Response / Usage / StreamEvent / ProviderState）
+| やりたいこと | 読む文書 |
+|---|---|
+| 全体の構造、どのファイルが何をするか、よくある変更の手順 | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| docs 全体の索引 | [docs/index.md](docs/index.md) |
+| なぜこの設計なのか | [docs/design-docs/index.md](docs/design-docs/index.md)（基本方針は [core-beliefs.md](docs/design-docs/core-beliefs.md)） |
+| 機能を足してよいか（やること / やらないこと） | [docs/product-specs/scope.md](docs/product-specs/scope.md) |
+| 公開 API、正規化した値の定義、プリセット | [docs/product-specs/public-api.md](docs/product-specs/public-api.md) |
+| 各社 API の形式と出典 | [docs/references/index.md](docs/references/index.md) |
+| 進行中の作業、次にやること | [docs/PLANS.md](docs/PLANS.md) |
+| 既知の負債 | [docs/exec-plans/tech-debt-tracker.md](docs/exec-plans/tech-debt-tracker.md) |
+| テストと検証の状況 | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md) |
+| リトライ、タイムアウト、例外 | [docs/RELIABILITY.md](docs/RELIABILITY.md) |
 
 ## 壊してはいけない不変条件
 
-1. **生データ再送**: `parse_response` が返す assistant メッセージには必ず `ProviderState(self.key, self.model, raw)` を付ける。`build_request` は assistant メッセージに対して最初に `self.native_raw(m)` を確認し、あればそれを無加工で送る。これがないと Gemini の thoughtSignature、Anthropic の thinking 署名、OpenAI の reasoning アイテムが落ちてツール往復が 4xx になる。
-   - 再送は「同じプロバイダーキー かつ 同じモデル」のときだけ。別モデルへは共通型から変換し直す。
-   - 関連テスト: `*roundtrip*`, `test_parallel_calls_keep_signature_and_order`, `tests/test_cross_provider.py`
-2. **parse_stream は最後に `done` を1回だけ yield** し、その Response は非ストリーミングと同じ内容にする。可能な限り「非ストリーミングと同じ形の dict を組み立てて `parse_response` を再利用」する（既存4アダプターはすべてこの方式）。
-3. **未知の SSE イベントは無視する**（例外にしない）。プロバイダーは新イベントを追加する。
-4. **共通パラメータを増やしたら4アダプターすべてで対応する**か、対応できないアダプターでは `UnsupportedFeatureError` を明示的に投げる。黙って無視しない。
-5. **正規化した値の意味を変えない**:
-   - `stop_reason`: `end` / `tool_use` / `max_tokens` / `content_filter` / `other`（ツール呼び出しがあれば常に `tool_use`）
-   - `Usage.input_tokens` = キャッシュ読み書きを含む入力総数、`output_tokens` = 推論トークンを含む出力総数。生の内訳は `details`
-   - `ToolCall.arguments` は常に dict。JSON として壊れていたら `{}` にして `raw_arguments` に原文を残す
-6. **テストはネットワークを使わない**。`tests/conftest.py` の `FakeAPI`（httpx.MockTransport）で応答を積み、送られたリクエスト本体を検証する。
-7. **API 仕様に関わる変更は一次情報（各社公式ドキュメント）で確認してから行う**。確認したら `docs/HANDOFF.md` の「未検証の前提」表を更新し、出典 URL を README の参考資料に足す。
+ここには規則だけを書く。理由はリンク先にある。
+
+1. **生データ再送**: 推論情報を持つアダプター（openai / anthropic / gemini）の `parse_response` は、assistant メッセージに必ず `ProviderState(self.key, self.model, raw)` を付ける。`build_request` は assistant メッセージでまず `self.native_raw(m)` を見て、あれば無加工で送る。再送は同じプロバイダーキーかつ同じモデルのときだけ（[理由](docs/design-docs/provider-state-resend.md)）
+2. **`parse_stream` は最後に `done` を1回だけ yield** し、非ストリーミングと同じ Response にする。非ストリーミングと同じ形の dict を組み立てて `parse_response` を再利用する
+3. **未知の SSE イベントは無視する**（例外にしない）。プロバイダーは新しいイベントを追加する
+4. **共通パラメータを増やしたら4アダプターすべてで対応する**か、`UnsupportedFeatureError` を明示的に投げる。黙って無視しない。増やす前に [scope.md](docs/product-specs/scope.md) を確認する
+5. **正規化した値の意味を変えない**（`stop_reason` / `Usage` / `ToolCall.arguments`。定義は [public-api.md](docs/product-specs/public-api.md)）
+6. **テストはネットワークを使わない**。`tests/conftest.py` の `FakeAPI` で応答を積み、送られたリクエスト本体を検証する
+7. **API 仕様に関わる変更は一次情報（各社の公式ドキュメント）で確認してから行う**。確認したら `docs/references/` の該当文書に出典を足し、[実 API 検証](docs/exec-plans/active/real-api-verification.md) の表を更新する
 
 ## コード規約
 
 - Python 3.10 以上。各ファイル先頭で `from __future__ import annotations`
-- コメント・docstring・ドキュメントは日本語
-- ランタイム依存は `httpx` のみの方針。増やす場合は理由を `docs/HANDOFF.md` に書く
-- 公開 API を増やしたら `src/unillm/__init__.py` の import と `__all__` に追加
+- コメント・docstring・ドキュメントは日本語。例外メッセージは英語
+- ランタイム依存は `httpx` だけ（`tests/test_architecture.py` が検査）。増やすなら先に design-docs に判断を残す
+- 公開 API を増減したら `src/unillm/__init__.py` の `__all__` と [public-api.md](docs/product-specs/public-api.md) を同じ変更で直す（`tests/test_docs.py` が照合）
 
-## よくある作業
+## ドキュメントの保守
 
-- **OpenAI互換サーバーを足す**: `providers/__init__.py` の `PRESETS` に1行追加（base_url は公式ドキュメントで確認）
-- **新しい形式の API を足す**: `providers/base.py` の `Provider` を継承し `build_request` / `parse_response` / `parse_stream` を実装 → `ADAPTERS` と `PRESETS` に登録 → `tests/test_<name>.py` を既存テストに倣って追加（リクエスト形状 / ツール往復 / ストリーミング / エラー）
+- 新しい文書は、そのディレクトリの `index.md`（計画は [docs/PLANS.md](docs/PLANS.md)）からリンクする。どこからも辿れない文書があると `tests/test_docs.py` が失敗する
+- コードの挙動を変えたら、同じ変更で関係する文書も直す。古い記述を見つけたらその場で直すか、tech-debt-tracker に書く
+- 複数ステップの作業は `docs/exec-plans/active/` に計画を置き、終わったら `completed/` に移す
+- 会話で決めたことは、docs に書くまで残らないものとして扱う

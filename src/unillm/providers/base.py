@@ -77,7 +77,7 @@ class Provider(ABC):
         api_key_env: tuple[str, ...] | None = None,
         options: dict[str, Any] | None = None,
     ) -> None:
-        self.key = key  # モデル文字列の "provider:" 部分（例: "groq"）
+        self.key = key  # モデル文字列の "provider:" 部分（例: "ollama"）
         self.model = model
         self.base_url = (base_url or self.default_base_url).rstrip("/")
         self.options = dict(options or {})

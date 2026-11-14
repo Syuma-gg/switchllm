@@ -1,7 +1,10 @@
-"""プロバイダーの登録表。
+"""プロバイダーの登録表（内部実装。公開 API は ``unillm`` 直下の ``__all__`` だけ）。
 
 モデル文字列 ``"<provider>:<model>"`` の ``<provider>`` 部分をここで引いて、
 どのアダプター（リクエスト形式）・どの URL・どの環境変数を使うかを決める。
+
+プリセットは「この名前で動く」という約束なので、base_url を公式ドキュメントで確認したものだけを置く
+（docs/design-docs/verified-presets.md）。それ以外は利用者が ``register_provider()`` で足す。
 """
 
 from __future__ import annotations
@@ -38,15 +41,9 @@ PRESETS: dict[str, ProviderPreset] = {
     "anthropic": ProviderPreset("anthropic"),
     "gemini": ProviderPreset("gemini"),
     "google": ProviderPreset("gemini"),
-    # OpenAI Chat Completions 互換
+    # OpenAI Chat Completions 形式（base_url= を渡せば任意の互換サーバーにも使える）
     "openai-chat": ProviderPreset("openai_chat", "https://api.openai.com/v1", ("OPENAI_API_KEY",)),
-    "openrouter": ProviderPreset("openai_chat", "https://openrouter.ai/api/v1", ("OPENROUTER_API_KEY",)),
-    "groq": ProviderPreset("openai_chat", "https://api.groq.com/openai/v1", ("GROQ_API_KEY",)),
-    "deepseek": ProviderPreset("openai_chat", "https://api.deepseek.com", ("DEEPSEEK_API_KEY",)),
-    "xai": ProviderPreset("openai_chat", "https://api.x.ai/v1", ("XAI_API_KEY",)),
-    "mistral": ProviderPreset("openai_chat", "https://api.mistral.ai/v1", ("MISTRAL_API_KEY",)),
-    "together": ProviderPreset("openai_chat", "https://api.together.ai/v1", ("TOGETHER_API_KEY",)),
-    # ローカル実行（APIキー不要）
+    # ローカル実行（APIキー不要）。base_url は docs/references/openai-chat-compatible.md の出典で確認済み
     "ollama": ProviderPreset("openai_chat", "http://localhost:11434/v1", ()),
     "lmstudio": ProviderPreset("openai_chat", "http://localhost:1234/v1", ()),
 }
@@ -60,8 +57,9 @@ def register_provider(
     api_key_env: tuple[str, ...] | str | None = None,
     **options: Any,
 ) -> None:
-    """自前の vLLM サーバーや社内ゲートウェイなどを名前付きで登録する。
+    """OpenAI 互換のクラウド API、自前の vLLM サーバー、社内ゲートウェイなどを名前付きで登録する。
 
+    >>> register_provider("mycloud", base_url="https://api.example.com/v1", api_key_env="MYCLOUD_API_KEY")
     >>> register_provider("myvllm", base_url="http://gpu-box:8000/v1", api_key_env=())
     >>> Client("myvllm:Qwen/Qwen3-8B")
     """
@@ -70,12 +68,6 @@ def register_provider(
     if isinstance(api_key_env, str):
         api_key_env = (api_key_env,)
     PRESETS[name] = ProviderPreset(adapter, base_url, api_key_env, options)
-
-
-def register_adapter(name: str, cls: type[Provider]) -> None:
-    """まったく新しいリクエスト形式を話すプロバイダー用のアダプタークラスを登録する。"""
-    ADAPTERS[name] = cls
-    PRESETS.setdefault(name, ProviderPreset(name))
 
 
 def create_provider(
@@ -109,6 +101,5 @@ __all__ = [
     "Provider",
     "ProviderPreset",
     "create_provider",
-    "register_adapter",
     "register_provider",
 ]

@@ -1,0 +1,37 @@
+# docs 索引
+
+このディレクトリがプロジェクトの知識の正本。会話で決めたことも、ここに書くまでは残らない。
+
+構成は OpenAI の [Harness engineering](https://openai.com/ja-JP/index/harness-engineering/) で紹介された構造化 docs に倣っている。入口の `CLAUDE.md` は短い地図にとどめ、詳しい情報は必要になったときにリンクを辿って読む（段階的開示）。
+
+| 文書 | 内容 |
+|---|---|
+| [ARCHITECTURE.md](../ARCHITECTURE.md) | 処理の流れ、モジュールと層、テストの配置、よくある変更 |
+| [design-docs/index.md](design-docs/index.md) | 設計判断の一覧と検証状況。基本方針は [core-beliefs.md](design-docs/core-beliefs.md) |
+| [product-specs/index.md](product-specs/index.md) | 何を作るか（位置づけ、スコープ、公開 API） |
+| [references/index.md](references/index.md) | 各社 API の仕様メモと出典 |
+| [PLANS.md](PLANS.md) | 実行計画の書き方と一覧（進行中 / 完了） |
+| [exec-plans/tech-debt-tracker.md](exec-plans/tech-debt-tracker.md) | 既知の負債 |
+| [QUALITY_SCORE.md](QUALITY_SCORE.md) | 領域ごとの品質評価 |
+| [RELIABILITY.md](RELIABILITY.md) | タイムアウト、リトライ、ストリーミングが失敗したときの扱い |
+| [SECURITY.md](SECURITY.md) | APIキーの扱い、ツール実行の注意 |
+
+## 文書の種類と更新のきっかけ
+
+| 種類 | 置き場所 | いつ更新するか |
+|---|---|---|
+| 設計判断 | `design-docs/` | 方針を決めた・変えたとき。古い判断は消さず、状態を「廃止」にして新しい判断へリンクする |
+| 製品仕様 | `product-specs/` | 公開 API、スコープ、プリセットが変わったとき |
+| 仕様メモ | `references/` | 各社 API の形式を一次情報で確認したとき |
+| 実行計画 | `exec-plans/` | 複数ステップの作業を始める・進める・終えるとき |
+| 品質・信頼性・セキュリティ | このディレクトリ直下 | テストや検証の状況、失敗時の挙動が変わったとき |
+
+## 機械的な検査
+
+`python -m pytest` に含まれる `tests/test_docs.py` が次を検査する。失敗メッセージに直し方が書いてある。
+
+- 相対リンクの先が存在する
+- `CLAUDE.md` からリンクを辿って到達できない文書がない
+- 各 `index.md`（計画は `PLANS.md`）が、同じディレクトリの文書をすべて載せている
+- `CLAUDE.md` が 100 行以内（地図を短く保つ）
+- [public-api.md](product-specs/public-api.md) の一覧が `unillm.__all__` と、プリセット表が `PRESETS` と一致する

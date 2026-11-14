@@ -19,7 +19,7 @@ from .errors import (
     UniLLMError,
     UnsupportedFeatureError,
 )
-from .providers import register_adapter, register_provider
+from .providers import register_provider
 from .tools import Tool, run_tool_calls, tool
 from .types import ImagePart, Message, Response, StreamEvent, TextPart, ToolCall, Usage
 
@@ -48,7 +48,6 @@ __all__ = [
     "UnsupportedFeatureError",
     "Usage",
     "parse_model",
-    "register_adapter",
     "register_provider",
     "run_tool_calls",
     "tool",
