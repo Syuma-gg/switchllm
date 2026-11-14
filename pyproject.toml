@@ -9,8 +9,33 @@ description = "One client for OpenAI, Anthropic, Gemini and OpenAI-compatible LL
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{ name = "Syuma-gg" }]
+keywords = ["llm", "openai", "anthropic", "claude", "gemini", "ollama", "tool-calling", "streaming"]
+# Python の版は .github/workflows/test.yml の matrix と合わせる。license を SPDX 式で書いたので License :: は付けない
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://github.com/Syuma-gg/switchllm"
+Repository = "https://github.com/Syuma-gg/switchllm"
+Issues = "https://github.com/Syuma-gg/switchllm/issues"
+Changelog = "https://github.com/Syuma-gg/switchllm/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

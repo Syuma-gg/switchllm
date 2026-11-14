@@ -15,7 +15,7 @@ python -m pytest tests/test_gemini.py -q
 ruff check src tests --select F,E9,B --ignore B006   # ruff は任意
 ```
 
-- CI（`.github/workflows/test.yml`）は同じ `python -m pytest` を Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す。対応する Python の版を変えたら、ここと `pyproject.toml` の `requires-python` を合わせる
+- CI（`.github/workflows/test.yml`）は同じ `python -m pytest` を Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す。対応する Python の版を変えたら、ここと `pyproject.toml` の `requires-python`・`classifiers` を合わせる
 - **`scripts/smoke_test.py` は実 API を叩き、料金が発生する。実行前に必ずユーザーに確認すること。**
 - APIキーは環境変数で渡す。コードやファイルに書かない（[docs/SECURITY.md](docs/SECURITY.md)）。
 
