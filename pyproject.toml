@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "switchllm"
-version = "0.1.0"
+dynamic = ["version"]  # 版の正本は src/switchllm/__init__.py の __version__
 description = "One client for OpenAI, Anthropic, Gemini and OpenAI-compatible LLM APIs. Change one string to switch providers."
 readme = "README.md"
 license = "MIT"
@@ -17,6 +17,9 @@ dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "switchllm.__version__" }
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

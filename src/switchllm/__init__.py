@@ -23,7 +23,7 @@ from .providers import register_provider
 from .tools import Tool, run_tool_calls, tool
 from .types import ImagePart, Message, Response, StreamEvent, TextPart, ToolCall, Usage
 
-__version__ = "0.1.0"
+__version__ = "0.1.0"  # 版の正本。pyproject.toml はここを読む
 
 __all__ = [
     "APIConnectionError",
@@ -41,10 +41,10 @@ __all__ = [
     "ServerError",
     "StreamError",
     "StreamEvent",
+    "SwitchLLMError",
     "TextPart",
     "Tool",
     "ToolCall",
-    "SwitchLLMError",
     "UnsupportedFeatureError",
     "Usage",
     "parse_model",
