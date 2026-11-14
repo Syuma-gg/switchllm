@@ -23,10 +23,23 @@ _STOP = {
 }
 
 
+def _tool_input(buf: str) -> dict[str, Any] | None:
+    """ストリーミングで届いた input_json_delta をつないだ文字列を dict にする。
+    JSON のオブジェクトとして読めなければ None（max_tokens で途中で切れたときなど）。"""
+    if not buf:
+        return {}
+    try:
+        value = json.loads(buf)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
 class AnthropicProvider(Provider):
     adapter = "anthropic"
     default_base_url = "https://api.anthropic.com"
     api_key_env = ("ANTHROPIC_API_KEY",)
+    option_names = frozenset({"default_max_tokens", "anthropic_version", "beta"})
 
     def _user_blocks(self, m: Message) -> list[dict[str, Any]]:
         blocks: list[dict[str, Any]] = []
@@ -88,13 +101,14 @@ class AnthropicProvider(Provider):
             body["stop_sequences"] = req.stop
         if req.tools:
             body["tools"] = [{"name": t.name, "description": t.description, "input_schema": t.parameters} for t in req.tools]
-            mode, name = normalize_tool_choice(req.tool_choice)
-            body["tool_choice"] = {
-                "auto": {"type": "auto"},
-                "none": {"type": "none"},
-                "required": {"type": "any"},
-                "tool": {"type": "tool", "name": name},
-            }[mode]
+            if req.tool_choice is not None:  # 省略時の既定は auto（docs/references/anthropic-messages.md）
+                mode, name = normalize_tool_choice(req.tool_choice)
+                body["tool_choice"] = {
+                    "auto": {"type": "auto"},
+                    "none": {"type": "none"},
+                    "required": {"type": "any"},
+                    "tool": {"type": "tool", "name": name},
+                }[mode]
         if stream:
             body["stream"] = True
         body = deep_merge(body, req.extra)
@@ -140,6 +154,8 @@ class AnthropicProvider(Provider):
         message: dict[str, Any] = {"content": [], "usage": {}}
         blocks: dict[int, dict[str, Any]] = {}
         json_buf: dict[int, str] = {}
+        broken: dict[str, str] = {}  # tool_use の id → JSON として読めなかった引数の原文
+        stopped = False
         for _event, data in events:
             obj = json.loads(data)
             typ = obj.get("type")
@@ -171,15 +187,27 @@ class AnthropicProvider(Provider):
                 idx = obj["index"]
                 if idx in json_buf:
                     buf = json_buf.pop(idx)
-                    blocks[idx]["input"] = json.loads(buf) if buf else {}
+                    args = _tool_input(buf)
+                    if args is None:
+                        # 他のアダプターと同じく arguments は {} にし、原文を raw_arguments に残す（public-api.md）
+                        broken[blocks[idx].get("id", "")] = buf
+                    blocks[idx]["input"] = args or {}
             elif typ == "message_delta":
                 message.update({k: v for k, v in (obj.get("delta") or {}).items() if v is not None})
                 message["usage"].update(obj.get("usage") or {})
             elif typ == "message_stop":
+                stopped = True
                 break
             elif typ == "error":
                 err = obj.get("error") or {}
                 raise StreamError(err.get("message", "stream error"), provider=self.key, body=obj)
             # ping や未知のイベントは無視する（Anthropic は新イベント追加の可能性を明言している）
+        if not stopped:
+            # 最後に必ず message_stop が届く（docs/references/anthropic-messages.md）。届かなければ途中で切れている
+            raise StreamError("stream ended before message_stop", provider=self.key)
         message["content"] = [blocks[i] for i in sorted(blocks)]
-        yield StreamEvent("done", response=self.parse_response(message))
+        res = self.parse_response(message)
+        for call in res.tool_calls:
+            if call.id in broken:
+                call.raw_arguments = broken[call.id]
+        yield StreamEvent("done", response=res)

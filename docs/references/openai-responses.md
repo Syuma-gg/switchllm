@@ -16,7 +16,7 @@
 | max_tokens | `max_output_tokens` |
 | stop | **存在しない**ので `UnsupportedFeatureError` |
 | ツール定義 | `{"type": "function", "name", "description", "parameters", "strict": false}` |
-| tool_choice | `"auto"` / `"none"` / `"required"` / `{"type": "function", "name"}` |
+| tool_choice | `"auto"` / `"none"` / `"required"` / `{"type": "function", "name"}`。指定がなければ送らない（既定は `auto`） |
 | 画像 | `{"type": "input_image", "image_url": URL か data URL}` |
 
 ## レスポンス
@@ -45,6 +45,7 @@
 ## 出典
 
 - [Migrate to the Responses API](https://developers.openai.com/api/docs/guides/migrate-to-responses)
+- [Function calling](https://developers.openai.com/api/docs/guides/function-calling)（2026-11-15 確認: `tool_choice` は「Auto (Default)」。API リファレンスのページは自動取得を拒否したため、ガイドで確認した）
 
 ## 関連する未検証の前提
 

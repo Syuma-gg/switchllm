@@ -88,8 +88,9 @@ class OpenAIResponsesProvider(Provider):
                 }
                 for t in req.tools
             ]
-            mode, name = normalize_tool_choice(req.tool_choice)
-            body["tool_choice"] = {"type": "function", "name": name} if mode == "tool" else mode
+            if req.tool_choice is not None:  # 省略時の既定は auto（docs/references/openai-responses.md）
+                mode, name = normalize_tool_choice(req.tool_choice)
+                body["tool_choice"] = {"type": "function", "name": name} if mode == "tool" else mode
         if stream:
             body["stream"] = True
         body = deep_merge(body, req.extra)

@@ -66,6 +66,20 @@ class Provider(ABC):
     default_base_url: str = ""
     api_key_env: tuple[str, ...] = ()
     requires_api_key: bool = True
+    #: ``Client(..., **options)`` で受け付けるオプション名。読むオプションを足したらここにも足す
+    #: （``tests/test_client.py`` がソースと照合する）
+    option_names: frozenset[str] = frozenset()
+
+    @classmethod
+    def check_options(cls, key: str, options: dict[str, Any]) -> None:
+        """知らないオプション名を ConfigurationError にする。打ち間違いや、
+        別のアダプター用のオプションを黙って無視しないため。"""
+        unknown = sorted(set(options) - cls.option_names)
+        if unknown:
+            allowed = ", ".join(sorted(cls.option_names)) or "(none)"
+            raise ConfigurationError(
+                f"unknown option(s) for {key!r}: {', '.join(unknown)}. Options for this provider: {allowed}"
+            )
 
     def __init__(
         self,
@@ -77,6 +91,7 @@ class Provider(ABC):
         api_key_env: tuple[str, ...] | None = None,
         options: dict[str, Any] | None = None,
     ) -> None:
+        self.check_options(key, options or {})
         self.key = key  # モデル文字列の "provider:" 部分（例: "ollama"）
         self.model = model
         self.base_url = (base_url or self.default_base_url).rstrip("/")

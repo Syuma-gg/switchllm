@@ -135,3 +135,73 @@ def test_stream_error_event(api):
     )
     with pytest.raises(StreamError, match="Overloaded"):
         list(api.client("anthropic:claude-sonnet-5-5").stream("hi"))
+
+
+def test_stream_with_truncated_tool_json_keeps_raw_arguments(api):
+    # max_tokens で tool_use の途中で切れると、JSON が閉じないまま content_block_stop が来る。
+    # 以前は JSONDecodeError で落ちていた。他のアダプターと同じく {} と原文にする
+    api.reply_sse([
+        ("message_start", {"type": "message_start", "message": {"content": [], "usage": {"input_tokens": 5}}}),
+        ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "get_weather", "input": {}}}),
+        ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": '{"city": "札'}}),
+        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "max_tokens"}, "usage": {"output_tokens": 10}}),
+        ("message_stop", {"type": "message_stop"}),
+    ])
+    res = list(api.client("anthropic:claude-sonnet-5-5").stream("札幌", tools=[WEATHER_TOOL]))[-1].response
+    call = res.tool_calls[0]
+    assert (call.arguments, call.raw_arguments) == ({}, '{"city": "札')
+    assert res.stop_reason == "tool_use"  # ツール呼び出しがあれば常に tool_use（public-api.md）
+    # 同じモデルへ送り返すときの生データは、API が受け付ける形（input はオブジェクト）
+    assert res.message.provider_state.raw[0]["input"] == {}
+
+
+def test_options_change_headers_and_default_max_tokens(api):
+    api.reply_json({"content": [], "stop_reason": "end_turn", "usage": {}})
+    client = api.client("anthropic:claude-sonnet-5-5", default_max_tokens=32000, anthropic_version="2099-01-01", beta=["a", "b"])
+    client.chat("hi")
+    req = api.requests[0]
+    assert req.headers["anthropic-version"] == "2099-01-01" and req.headers["anthropic-beta"] == "a,b"
+    assert api.body()["max_tokens"] == 32000
+
+
+@pytest.mark.parametrize(
+    ("tool_choice", "expected"),
+    [("auto", {"type": "auto"}), ("none", {"type": "none"}), ({"name": "get_weather"}, {"type": "tool", "name": "get_weather"})],
+)
+def test_tool_choice_mapping(api, tool_choice, expected):
+    api.reply_json({"content": [], "stop_reason": "end_turn", "usage": {}})
+    api.client("anthropic:claude-sonnet-5-5").chat("hi", tools=[WEATHER_TOOL], tool_choice=tool_choice)
+    assert api.body()["tool_choice"] == expected
+
+
+@pytest.mark.parametrize(
+    ("reason", "stop"),
+    [("stop_sequence", "end"), ("model_context_window_exceeded", "max_tokens"), ("refusal", "content_filter"), ("pause_turn", "other")],
+)
+def test_stop_reason_mapping(api, reason, stop):
+    api.reply_json({"content": [{"type": "text", "text": "x"}], "stop_reason": reason, "usage": {}})
+    assert api.client("anthropic:claude-sonnet-5-5").chat("hi").stop_reason == stop
+
+
+def test_stream_tool_call_without_arguments(api):
+    # 引数のないツールは input_json_delta が来ない（来ても空）。arguments は {} になる
+    api.reply_sse([
+        ("message_start", {"type": "message_start", "message": {"content": [], "usage": {}}}),
+        ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "now", "input": {}}}),
+        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {}}),
+        ("message_stop", {"type": "message_stop"}),
+    ])
+    call = list(api.client("anthropic:claude-sonnet-5-5").stream("今何時", tools=[{"name": "now"}]))[-1].response.tool_calls[0]
+    assert (call.name, call.arguments, call.raw_arguments) == ("now", {}, None)
+
+
+def test_empty_assistant_message_from_another_provider_is_not_sent(api):
+    # 別のプロバイダーが空の応答を返した履歴でも、Anthropic が拒否する空の content を送らない。
+    # 前後の user は1つのメッセージにまとまる
+    api.reply_json({"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": {}})
+    api.client("anthropic:claude-sonnet-5-5").chat([Message.user("1つ目"), Message.assistant(""), Message.user("2つ目")])
+    assert api.body()["messages"] == [
+        {"role": "user", "content": [{"type": "text", "text": "1つ目"}, {"type": "text", "text": "2つ目"}]}
+    ]

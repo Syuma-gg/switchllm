@@ -1,5 +1,7 @@
+import pytest
+
 from conftest import WEATHER_TOOL
-from switchllm import ImagePart, Message, TextPart, register_provider
+from switchllm import ImagePart, Message, TextPart, ToolCall, register_provider
 from switchllm.providers import PRESETS
 
 
@@ -88,3 +90,75 @@ def test_stream_assembles_split_tool_calls(api):
     assert res.text == "了解" and res.thinking == "うーん"
     assert res.tool_calls[0].id == "call_a" and res.tool_calls[0].arguments == {"city": "那覇"}
     assert res.usage.output_tokens == 11
+
+
+def _ok(content="ok", finish="stop"):
+    return {"choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": finish}]}
+
+
+@pytest.mark.parametrize(
+    ("model", "kw", "field"),
+    [
+        # OpenAI 本家は max_tokens を非推奨とし、o-series とは互換性がないと記載している
+        ("openai-chat:gpt-5.5", {}, "max_completion_tokens"),
+        # 互換サーバー（Ollama の文書には max_tokens しかない）は max_tokens のまま
+        ("openai-chat:llama", {"base_url": "http://gpu:8000/v1"}, "max_tokens"),
+        ("ollama:llama3.2", {"api_key": None}, "max_tokens"),
+        # 明示すればそれに従う
+        ("openai-chat:gpt-5.5", {"max_tokens_field": "max_tokens"}, "max_tokens"),
+    ],
+)
+def test_max_tokens_field_depends_on_the_server(api, model, kw, field):
+    api.reply_json(_ok())
+    api.client(model, **kw).chat("hi", max_tokens=64)
+    body = api.body()
+    assert body[field] == 64
+    assert not ({"max_tokens", "max_completion_tokens"} - {field}) & body.keys()  # もう一方は送らない
+
+
+def test_stream_usage_can_be_disabled_and_headers_added(api):
+    api.reply_sse([(None, {"choices": [{"delta": {"content": "x"}, "finish_reason": "stop"}]}), (None, "[DONE]")])
+    events = list(api.client("openai-chat:gpt-x", stream_usage=False, headers={"X-Org": "team-a"}).stream("hi"))
+    assert "stream_options" not in api.body() and api.body()["stream"] is True
+    assert api.requests[0].headers["x-org"] == "team-a"
+    assert events[-1].response.text == "x"
+
+
+@pytest.mark.parametrize(
+    ("finish", "stop"),
+    [("stop", "end"), (None, "end"), ("length", "max_tokens"), ("content_filter", "content_filter"), ("something_new", "other")],
+)
+def test_finish_reason_mapping(api, finish, stop):
+    api.reply_json(_ok(finish=finish))
+    assert api.client("openai-chat:gpt-x").chat("hi").stop_reason == stop
+
+
+def test_list_content_and_openrouter_reasoning(api):
+    # 一部の互換サーバーは content を配列で返し、OpenRouter は reasoning に推論テキストを入れる
+    api.reply_json({"choices": [{"message": {"content": [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}], "reasoning": "考えた"}, "finish_reason": "stop"}]})
+    res = api.client("openai-chat:gpt-x").chat("hi")
+    assert res.text == "ab" and res.thinking == "考えた"
+
+
+def test_missing_tool_call_ids_get_positional_ids(api):
+    api.reply_json({"choices": [{"message": {"tool_calls": [
+        {"type": "function", "function": {"name": "get_weather", "arguments": '{"city": "a"}'}},
+        {"type": "function", "function": {"name": "get_weather", "arguments": '{"city": "b"}'}}]}, "finish_reason": "tool_calls"}]})
+    res = api.client("ollama:llama3.2", api_key=None).chat("hi", tools=[WEATHER_TOOL])
+    assert [c.id for c in res.tool_calls] == ["call_0", "call_1"]
+
+
+def test_tool_error_result_is_prefixed(api):
+    api.reply_json(_ok())
+    history = [Message.user("hi"), Message.assistant(tool_calls=[ToolCall("c1", "get_weather", {"city": "a"})]),
+               Message.tool_result("c1", "timeout", is_error=True)]
+    api.client("openai-chat:gpt-x").chat(history, tools=[WEATHER_TOOL])
+    assert api.body()["messages"][-1] == {"role": "tool", "tool_call_id": "c1", "content": "Error: timeout"}
+
+
+def test_tool_call_with_empty_arguments_string(api):
+    # 引数のないツールで arguments を "" にして返すサーバーがある。壊れた JSON ではなく引数なしとして扱う
+    api.reply_json({"choices": [{"message": {"tool_calls": [
+        {"id": "c1", "type": "function", "function": {"name": "now", "arguments": ""}}]}, "finish_reason": "tool_calls"}]})
+    call = api.client("ollama:llama3.2", api_key=None).chat("今何時", tools=[{"name": "now"}]).tool_calls[0]
+    assert (call.arguments, call.arguments_json()) == ({}, "{}")

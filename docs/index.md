@@ -35,7 +35,7 @@
 - `CLAUDE.md` からリンクを辿って到達できない文書がない
 - 各 `index.md`（計画は `PLANS.md`）が、同じディレクトリの文書をすべて載せている
 - `CLAUDE.md` が 100 行以内（地図を短く保つ）
-- [public-api.md](product-specs/public-api.md) の一覧が `switchllm.__all__` と、プリセット表が `PRESETS` と一致する
+- [public-api.md](product-specs/public-api.md) の一覧が `switchllm.__all__` と、プリセット表が `PRESETS` と、オプション表が各アダプターの `option_names` と一致する
 - 2つの README（英語の `README.md` と日本語の `README.ja.md`）のリンクが、すべて GitHub の絶対 URL で、指すファイルがリポジトリにある（PyPI のページでは相対リンクとページ内リンクが切れるため）
 - 2つの README の見出しの並び、コードブロックの数、リンク先がそろっている
 

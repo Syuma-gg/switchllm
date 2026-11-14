@@ -10,7 +10,7 @@
 - 画像入力
 - 共通の例外と自動リトライ
 - `@tool`（決めた範囲の型から JSON Schema を作る）と `run_tool_calls`
-- `extra=` による各社固有パラメータの受け渡し
+- `extra=` による各社固有パラメータの受け渡しと、`extra_by_provider=` でプロバイダーごとに並べて書くこと（モデルを切り替えても、呼び出し側のコードを直さずに済む）
 - `register_provider()` による OpenAI 互換サーバーの追加
 
 ## 今後足す候補
@@ -23,8 +23,8 @@
 
 | やらないこと | 代わりの手段 |
 |---|---|
-| 推論の強さの共通パラメータ | `extra=` で各社の形式を渡す（OpenAI `reasoning` / Anthropic `thinking` / Gemini `generationConfig.thinkingConfig`）。指定方法がモデルの世代ごとに変わり、4アダプターで追い続けるのは重い |
-| 構造化出力の共通化 | `extra=` で各社の形式を渡す（OpenAI `text.format` / Gemini `generationConfig.responseSchema` など） |
+| 推論の強さの共通パラメータ | `extra_by_provider=` で各社の形式を並べて渡す（OpenAI `reasoning` / Anthropic `thinking` / Gemini `generationConfig.thinkingConfig`）。指定方法がモデルの世代ごとに変わり、4アダプターで追い続けるのは重い |
+| 構造化出力の共通化 | `extra_by_provider=` で各社の形式を並べて渡す（OpenAI `text.format` / Gemini `generationConfig.responseSchema` など） |
 | 複数モデル間のフォールバック | `RateLimitError` などを捕まえて、`client.with_model()` で別モデルに切り替える |
 | 料金計算 | `Usage.details` の生の内訳を使う |
 | プロンプトキャッシュの制御 | なし（必要になったら再検討） |

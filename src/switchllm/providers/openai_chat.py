@@ -15,6 +15,8 @@ from ..types import ImagePart, Message, Response, StreamEvent, TextPart, ToolCal
 from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice
 from .openai_responses import _parse_args
 
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+
 _FINISH = {
     "stop": "end",
     "tool_calls": "tool_use",
@@ -26,8 +28,17 @@ _FINISH = {
 
 class OpenAIChatProvider(Provider):
     adapter = "openai_chat"
-    default_base_url = "https://api.openai.com/v1"
+    default_base_url = OPENAI_BASE_URL
     api_key_env = ("OPENAI_API_KEY",)
+    option_names = frozenset({"max_tokens_field", "stream_usage", "headers"})
+
+    def _max_tokens_field(self) -> str:
+        """OpenAI 本家は ``max_tokens`` を非推奨とし、o-series とは互換性がないと記載している。
+        互換サーバー（Ollama など）の文書には ``max_tokens`` しかないので、本家に送るときだけ変える
+        （docs/references/openai-chat-compatible.md）。``max_tokens_field=`` を渡せばそれに従う。"""
+        if "max_tokens_field" in self.options:
+            return str(self.options["max_tokens_field"])
+        return "max_completion_tokens" if self.base_url == OPENAI_BASE_URL else "max_tokens"
 
     def _user_content(self, m: Message) -> str | list[dict[str, Any]]:
         if isinstance(m.content, str):
@@ -61,8 +72,7 @@ class OpenAIChatProvider(Provider):
 
         body: dict[str, Any] = {"model": self.model, "messages": msgs}
         if req.max_tokens is not None:
-            # 互換サーバーの多くは max_tokens を受け付ける。必要なら options で max_completion_tokens に変更可
-            body[self.options.get("max_tokens_field", "max_tokens")] = req.max_tokens
+            body[self._max_tokens_field()] = req.max_tokens
         if req.temperature is not None:
             body["temperature"] = req.temperature
         if req.stop:
@@ -72,8 +82,10 @@ class OpenAIChatProvider(Provider):
                 {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
                 for t in req.tools
             ]
-            mode, name = normalize_tool_choice(req.tool_choice)
-            body["tool_choice"] = {"type": "function", "function": {"name": name}} if mode == "tool" else mode
+            # 省略時の既定は auto。Ollama は tool_choice 自体に対応していないので、指定がなければ送らない
+            if req.tool_choice is not None:
+                mode, name = normalize_tool_choice(req.tool_choice)
+                body["tool_choice"] = {"type": "function", "function": {"name": name}} if mode == "tool" else mode
         if stream:
             body["stream"] = True
             if self.options.get("stream_usage", True):
@@ -118,8 +130,10 @@ class OpenAIChatProvider(Provider):
         finish: str | None = None
         usage: dict[str, Any] | None = None
         model: str | None = None
+        got_done = False
         for _event, data in events:
             if data.strip() == "[DONE]":
+                got_done = True
                 break
             obj = json.loads(data)
             if obj.get("error"):
@@ -148,6 +162,10 @@ class OpenAIChatProvider(Provider):
                         slot["arguments"] += fn["arguments"]
                 if choice.get("finish_reason"):
                     finish = choice["finish_reason"]
+
+        if not got_done and finish is None:
+            # 完了の合図なしに閉じた。途中までを正常終了として返すと、切れたことに気づけない
+            raise StreamError("stream ended before finish_reason or [DONE]", provider=self.key)
 
         # 非ストリーミングと同じ形に組み直して parse_response を再利用する
         message: dict[str, Any] = {"role": "assistant", "content": "".join(text)}

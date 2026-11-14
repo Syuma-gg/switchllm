@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import math
 import random
 import time
 from dataclasses import dataclass, field
@@ -13,6 +13,7 @@ import httpx
 from .errors import APIConnectionError, APIError, error_for_status
 
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
+MAX_RETRY_AFTER = 60.0  # 秒。Retry-After がこれより長くても、ここで打ち切って再送する
 
 
 @dataclass
@@ -30,16 +31,30 @@ class RetryPolicy:
     sleep: Callable[[float], None] = field(default=time.sleep)
 
     def delay(self, attempt: int, response: httpx.Response | None) -> float:
-        if response is not None:
-            retry_after = response.headers.get("retry-after")
-            if retry_after:
-                try:
-                    return min(float(retry_after), 60.0)
-                except ValueError:
-                    pass
+        retry_after = _retry_after(response) if response is not None else None
+        if retry_after is not None:
+            return retry_after
         if self.backoff <= 0:
             return 0.0
         return min(self.backoff * (2**attempt), 8.0) * (0.75 + random.random() * 0.5)
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    """``Retry-After`` の秒数を 0〜``MAX_RETRY_AFTER`` に収めて返す。
+
+    秒数として読めないもの（HTTP-date 形式、``nan`` など）は None にして、通常のバックオフに任せる。
+    負の値をそのまま ``time.sleep`` に渡すと ValueError になるので 0 にする。
+    """
+    value = response.headers.get("retry-after")
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        return None
+    if not math.isfinite(seconds):
+        return None
+    return min(max(seconds, 0.0), MAX_RETRY_AFTER)
 
 
 def _error_message(body: Any, fallback: str) -> str:
@@ -71,6 +86,23 @@ def make_api_error(provider: str, response: httpx.Response) -> APIError:
     )
 
 
+def _success_json(provider: str, response: httpx.Response) -> dict[str, Any]:
+    """2xx の本文を dict として返す。JSON のオブジェクトでなければ APIError にする
+    （プロキシが HTML を返したときなど。JSONDecodeError のまま利用者に届けない）。"""
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        return body
+    raise APIError(
+        f"expected a JSON object in the response body, got {response.text[:200]!r}",
+        provider=provider,
+        status_code=response.status_code,
+        body=response.text,
+    )
+
+
 def request_json(
     client: httpx.Client, req: HTTPRequest, *, provider: str, retry: RetryPolicy
 ) -> dict[str, Any]:
@@ -86,7 +118,7 @@ def request_json(
             raise APIConnectionError(f"[{provider}] {e!r}") from e
 
         if resp.status_code < 400:
-            return resp.json()
+            return _success_json(provider, resp)
         if resp.status_code in RETRYABLE_STATUS and attempt < retry.max_retries:
             retry.sleep(retry.delay(attempt, resp))
             attempt += 1
@@ -148,7 +180,3 @@ def stream_sse(
                 attempt += 1
                 continue
             raise APIConnectionError(f"[{provider}] {e!r}") from e
-
-
-def loads(data: str) -> dict[str, Any]:
-    return json.loads(data)

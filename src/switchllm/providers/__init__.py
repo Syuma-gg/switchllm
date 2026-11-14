@@ -63,11 +63,16 @@ def register_provider(
     >>> register_provider("myvllm", base_url="http://gpu-box:8000/v1", api_key_env=())
     >>> Client("myvllm:Qwen/Qwen3-8B")
     """
+    # モデル文字列の provider 部分は parse_model() が小文字にしてから引くので、登録する名前もそろえる
+    key = name.strip().lower()
+    if not key or ":" in key:
+        raise ConfigurationError(f"provider name must be non-empty and must not contain ':', got {name!r}")
     if adapter not in ADAPTERS:
         raise ConfigurationError(f"unknown adapter {adapter!r}; available: {sorted(ADAPTERS)}")
+    ADAPTERS[adapter].check_options(key, options)
     if isinstance(api_key_env, str):
         api_key_env = (api_key_env,)
-    PRESETS[name] = ProviderPreset(adapter, base_url, api_key_env, options)
+    PRESETS[key] = ProviderPreset(adapter, base_url, api_key_env, options)
 
 
 def create_provider(

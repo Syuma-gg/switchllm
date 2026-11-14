@@ -34,12 +34,14 @@ ID はほかの文書から参照しているので変えない。
 | U12 | プリセット | `ollama` / `lmstudio` の base_url | 公式ドキュメントでは確認した。実際の疎通は未確認 | 文書で確認済み（2026-11-09） |
 | U13 | サンプル | モデル ID `gpt-5.5` / `claude-sonnet-5-5` / `gemini-flash-latest` | モデル ID は頻繁に変わる。`gemini-flash-latest` は公式の latest エイリアス | |
 | U14 | usage | Anthropic の `input_tokens` はキャッシュ分を含まない、Gemini の `candidatesTokenCount` は `thoughtsTokenCount` を含まない、という前提で合算している | 調査したときの出典が記録されていない | |
-| U15 | Ollama | ツールを渡すと常に `tool_choice` を送る | Ollama の公式ドキュメントは `tool_choice` を非対応と記載している。無視されるのか拒否されるのかは未確認 | |
+| U15 | Ollama | `tool_choice` は明示したときだけ送る | Ollama の公式ドキュメントは `tool_choice` を非対応と記載している。明示したときに無視されるのか拒否されるのかは未確認 | 2026-11-15: 指定がなければ送らないように変えた（[切り替えの精査](../completed/2026-11-15-switching-review.md) の S10）。明示したときの挙動は未確認 |
+| U16 | ストリーミング（Chat Completions 互換・Gemini） | 終わりの合図（Chat Completions は `finish_reason` か `[DONE]`、Gemini は最後のチャンクの `finishReason`）が来ないまま閉じたら `StreamError` にする | OpenAI の文書は「`[DONE]` の前に usage のチャンクが来る」と書くだけで、常に `[DONE]` で終わるとは明記していない。Gemini と互換サーバーで、最後のチャンクに必ず合図が入るかは未確認。Anthropic の `message_stop` は文書で確認済み | |
 
 ## 進捗ログ
 
 - 2026-11-09: 旧 `docs/HANDOFF.md`（2026-11-08 時点）の「次にやること」と「未検証の前提」から作成
 - 2026-11-09: プリセットの整理にあわせて U12 を `ollama` / `lmstudio` に絞り、公式ドキュメントで base_url を確認した。U14・U15 を追加した
+- 2026-11-15: [切り替えの精査](../completed/2026-11-15-switching-review.md) で、U15 の実装を変え（指定がなければ `tool_choice` を送らない）、U16 を足した
 
 ## 判断ログ
 

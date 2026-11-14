@@ -28,6 +28,7 @@ class GeminiProvider(Provider):
     adapter = "gemini"
     default_base_url = "https://generativelanguage.googleapis.com/v1beta"
     api_key_env = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+    option_names = frozenset({"schema_field", "inject_dummy_signatures"})
 
     def _user_parts(self, m: Message) -> list[dict[str, Any]]:
         parts: list[dict[str, Any]] = []
@@ -119,11 +120,12 @@ class GeminiProvider(Provider):
             body["tools"] = [
                 {"functionDeclarations": [{"name": t.name, "description": t.description, field_name: t.parameters} for t in req.tools]}
             ]
-            mode, name = normalize_tool_choice(req.tool_choice)
-            cfg: dict[str, Any] = {"mode": {"auto": "AUTO", "none": "NONE", "required": "ANY", "tool": "ANY"}[mode]}
-            if name:
-                cfg["allowedFunctionNames"] = [name]
-            body["toolConfig"] = {"functionCallingConfig": cfg}
+            if req.tool_choice is not None:  # 省略時の既定は AUTO（docs/references/gemini-generate-content.md）
+                mode, name = normalize_tool_choice(req.tool_choice)
+                cfg: dict[str, Any] = {"mode": {"auto": "AUTO", "none": "NONE", "required": "ANY", "tool": "ANY"}[mode]}
+                if name:
+                    cfg["allowedFunctionNames"] = [name]
+                body["toolConfig"] = {"functionCallingConfig": cfg}
         body = deep_merge(body, req.extra)
 
         method = "streamGenerateContent?alt=sse" if stream else "generateContent"
@@ -228,11 +230,15 @@ class GeminiProvider(Provider):
                             prev["text"] += p["text"]
                             continue
                     parts.append(dict(p))
+        blocked = bool((last.get("promptFeedback") or {}).get("blockReason"))
+        if finish is None and not blocked:
+            # 最後のチャンクに finishReason が入る（U16）。なければ途中で切れている
+            raise StreamError("stream ended before finishReason", provider=self.key)
         final = {
             "candidates": [{"content": {"role": "model", "parts": parts}, "finishReason": finish}],
             "usageMetadata": usage,
             "modelVersion": last.get("modelVersion"),
         }
-        if not parts and (last.get("promptFeedback") or {}).get("blockReason"):
+        if not parts and blocked:
             final = {"candidates": [], "promptFeedback": last["promptFeedback"], "usageMetadata": usage}
         yield StreamEvent("done", response=self.parse_response(final))

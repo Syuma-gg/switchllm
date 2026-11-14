@@ -18,9 +18,12 @@
 | エンドポイント | `POST /v1/responses` | `POST {base}/chat/completions` | `POST /v1/messages` | `POST /v1beta/models/{model}:generateContent` |
 | 認証ヘッダー | `Authorization: Bearer` | `Authorization: Bearer`（ローカルは不要） | `x-api-key` + `anthropic-version` | `x-goog-api-key` |
 | system | トップレベル `instructions` | `role: system` | トップレベル `system` | `systemInstruction.parts` |
-| max_tokens | `max_output_tokens` | `max_tokens` | `max_tokens`（**必須**） | `generationConfig.maxOutputTokens` |
+| max_tokens | `max_output_tokens` | `max_tokens`（OpenAI 本家は `max_completion_tokens`） | `max_tokens`（**必須**） | `generationConfig.maxOutputTokens` |
 | stop | **非対応**（例外） | `stop` | `stop_sequences` | `generationConfig.stopSequences` |
+| tool_choice を指定しないとき | 送らない（既定は `auto`） | 送らない（既定は `auto`。Ollama は非対応） | 送らない（既定は `auto`） | 送らない（既定は `AUTO`） |
 | モデルのツール呼び出し | `function_call` アイテム（arguments は JSON 文字列） | `tool_calls[].function.arguments`（JSON 文字列） | `tool_use` ブロック（`input` はオブジェクト） | `functionCall` パート（`args` はオブジェクト） |
 | ツール結果 | `function_call_output` | `role: tool` | user メッセージ内の `tool_result` | user の `functionResponse` |
 | 保持が必要な推論情報 | `reasoning` アイテム | なし | `thinking` ブロック + `signature` | `thoughtSignature` |
-| ストリームの終わり | `response.completed` | `data: [DONE]` | `message_stop` | 接続の終了 |
+| ストリームの終わり | `response.completed` | `finish_reason` か `data: [DONE]` | `message_stop` | `finishReason` の入ったチャンク |
+
+ストリームの終わりの合図が来ないまま接続が閉じたら、どのアダプターも `StreamError` にする（途中までを正常終了として返さない）。

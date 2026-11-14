@@ -65,6 +65,6 @@ branch = true
 source_pkgs = ["switchllm"]
 
 [tool.coverage.report]
-fail_under = 87  # 実測値（2026-11-14 に 87.68%）の小数を切り捨てた値。上がったら引き上げる。下げない
+fail_under = 98  # 実測値（2026-11-15 に 98.55%）の小数を切り捨てた値。上がったら引き上げる。下げない
 show_missing = true
 skip_covered = true

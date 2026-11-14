@@ -27,3 +27,4 @@
 | 計画 | 完了日 |
 |---|---|
 | [軽量化とドキュメントの構造化](exec-plans/completed/2026-11-09-lightweight-and-docs.md) | 2026-11-09 |
+| [切り替えの精査とテストの追加](exec-plans/completed/2026-11-15-switching-review.md) | 2026-11-15 |

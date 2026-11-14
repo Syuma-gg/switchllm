@@ -32,13 +32,32 @@ class Tool:
 
     def execute(self, call: ToolCall) -> Message:
         """ツール呼び出しを実行し、履歴にそのまま追加できる tool メッセージを返す。
-        例外は握りつぶさず ``is_error=True`` の結果としてモデルに返す。"""
+        例外は握りつぶさず ``is_error=True`` の結果としてモデルに返す。
+
+        引数が JSON として壊れていたとき（``arguments`` が空で ``raw_arguments`` だけある）は、
+        関数を呼ばずにそのことを返す。空の引数で呼ぶと「引数が足りない」という分かりにくい
+        エラーになり、モデルが直して呼び直せないため。"""
+        if not call.arguments and call.raw_arguments and not _is_json(call.raw_arguments):
+            return Message.tool_result(
+                call.id,
+                f"invalid arguments: not valid JSON: {call.raw_arguments[:500]}",
+                name=call.name,
+                is_error=True,
+            )
         try:
             result = self(**call.arguments)
         except Exception as e:  # noqa: BLE001 - モデルにエラー内容を伝えるため
             return Message.tool_result(call.id, f"{type(e).__name__}: {e}", name=call.name, is_error=True)
         text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
         return Message.tool_result(call.id, text, name=call.name)
+
+
+def _is_json(s: str) -> bool:
+    try:
+        json.loads(s)
+    except json.JSONDecodeError:
+        return False
+    return True
 
 
 ToolLike = typing.Union[Tool, Callable[..., Any], dict]

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Iterable
 
 import switchllm
-from switchllm.providers import PRESETS
+from switchllm.providers import ADAPTERS, PRESETS
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
@@ -138,6 +138,18 @@ def test_public_api_doc_matches_all():
     assert documented == actual, (
         f"{_rel(PUBLIC_API)} の一覧と switchllm.__all__ が一致しない。同じ変更で両方を直す。\n"
         f"  文書にだけある: {sorted(documented - actual)}\n  __all__ にだけある: {sorted(actual - documented)}"
+    )
+
+
+def test_options_doc_matches_option_names():
+    text = PUBLIC_API.read_text(encoding="utf-8")
+    m = re.search(r"<!-- options:start -->(.*?)<!-- options:end -->", text, re.S)
+    assert m, f"{_rel(PUBLIC_API)} に <!-- options:start --> と <!-- options:end --> で囲んだ表がない"
+    documented = set(re.findall(r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`", m.group(1), re.M))
+    actual = {(name, cls.adapter) for cls in ADAPTERS.values() for name in cls.option_names}
+    assert documented == actual, (
+        f"{_rel(PUBLIC_API)} のオプション表と、各アダプターの option_names が一致しない。同じ変更で両方を直す。\n"
+        f"  文書にだけある: {sorted(documented - actual)}\n  option_names にだけある: {sorted(actual - documented)}"
     )
 
 

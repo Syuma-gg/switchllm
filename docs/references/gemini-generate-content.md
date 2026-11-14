@@ -15,7 +15,7 @@
 | 連続する同じ role | 1つの content にまとめる（並列呼び出しは FC1, FC2, FR1, FR2 の順） |
 | max_tokens / temperature / stop | `generationConfig` の `maxOutputTokens` / `temperature` / `stopSequences` |
 | ツール定義 | `tools[].functionDeclarations[]`。スキーマは `parameters` に入れる（`schema_field="parametersJsonSchema"` で変更できる、U4） |
-| tool_choice | `toolConfig.functionCallingConfig.mode` の `AUTO` / `NONE` / `ANY`（特定のツールは `ANY` と `allowedFunctionNames`） |
+| tool_choice | `toolConfig.functionCallingConfig.mode` の `AUTO` / `NONE` / `ANY`（特定のツールは `ANY` と `allowedFunctionNames`）。指定がなければ `toolConfig` を送らない（既定は `AUTO`） |
 
 ## レスポンス
 
@@ -26,7 +26,7 @@
 
 ## ストリーミング
 
-- SSE の各イベントは部分的なレスポンス。接続の終了がストリームの終わり
+- SSE の各イベントは部分的なレスポンス。最後のチャンクに `finishReason` が入る。`finishReason` も `promptFeedback.blockReason` もないまま閉じたら `StreamError`（U16）
 - 連続するテキストは結合するが、**署名付きのパート同士は結合しない**（公式ドキュメントの注意）
 - 最後に非ストリーミングと同じ形の dict を組み立てて `parse_response` を再利用する
 
@@ -41,7 +41,8 @@
 - [Thought signatures](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures)
 - [Function calling](https://ai.google.dev/gemini-api/docs/generate-content/function-calling)
 - [OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
+- [API reference: FunctionCallingConfig](https://ai.google.dev/api/caching#FunctionCallingConfig)（2026-11-15 確認: mode は「If unspecified, the default value will be set to AUTO」）
 
 ## 関連する未検証の前提
 
-U4〜U7、U14（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U4〜U7、U14、U16（[実 API 検証](../exec-plans/active/real-api-verification.md)）

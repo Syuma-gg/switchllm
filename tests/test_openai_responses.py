@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import WEATHER_TOOL
-from switchllm import ImagePart, Message, TextPart, UnsupportedFeatureError
+from switchllm import ImagePart, Message, StreamError, TextPart, UnsupportedFeatureError
 
 
 def _text_response(text="こんにちは"):
@@ -113,3 +113,59 @@ def test_stream(api):
     assert done.type == "done"
     assert done.response.tool_calls[0].arguments == {"city": "大阪"}
     assert done.response.usage.output_tokens == 7
+
+
+def test_refusal_maps_to_content_filter(api):
+    api.reply_json({
+        "status": "completed",
+        "output": [{"type": "message", "content": [{"type": "refusal", "refusal": "お答えできません"}]}],
+        "usage": {},
+    })
+    res = api.client("openai:gpt-5.5").chat("...")
+    assert res.stop_reason == "content_filter" and res.text == "お答えできません"
+
+
+def test_unfinished_status_maps_to_other(api):
+    api.reply_json({"status": "in_progress", "output": [], "usage": {}})
+    assert api.client("openai:gpt-5.5").chat("hi").stop_reason == "other"
+
+
+def test_tool_error_result_and_call_id_fallback(api):
+    # call_id がなければ id を使う。エラーの結果は先頭に Error: を付けて伝える
+    api.reply_json({"status": "completed", "output": [{"type": "function_call", "id": "fc_1", "name": "get_weather", "arguments": "{}"}], "usage": {}})
+    api.reply_json(_text_response())
+    client = api.client("openai:gpt-5.5")
+    res = client.chat("hi", tools=[WEATHER_TOOL])
+    assert res.tool_calls[0].id == "fc_1"
+    client.chat([Message.user("hi"), res.message, Message.tool_result("fc_1", "timeout", is_error=True)], tools=[WEATHER_TOOL])
+    assert api.body(1)["input"][-1] == {"type": "function_call_output", "call_id": "fc_1", "output": "Error: timeout"}
+
+
+def test_stream_error_event(api):
+    api.reply_sse([("error", {"type": "error", "code": "server_error", "message": "upstream failed"})])
+    with pytest.raises(StreamError, match="upstream failed"):
+        list(api.client("openai:gpt-5.5").stream("hi"))
+
+
+def test_stream_incomplete_is_done_with_max_tokens(api):
+    data = _text_response("途中まで")
+    data.update(status="incomplete", incomplete_details={"reason": "max_output_tokens"})
+    api.reply_sse([("response.incomplete", {"type": "response.incomplete", "response": data})])
+    events = list(api.client("openai:gpt-5.5").stream("hi"))
+    assert events[-1].response.stop_reason == "max_tokens" and events[-1].response.text == "途中まで"
+
+
+def test_stream_reasoning_summary_is_thinking(api):
+    api.reply_sse([
+        ("response.reasoning_summary_text.delta", {"type": "response.reasoning_summary_text.delta", "delta": "考える"}),
+        ("response.completed", {"type": "response.completed", "response": _text_response()}),
+    ])
+    events = list(api.client("openai:gpt-5.5").stream("hi"))
+    assert [(e.type, e.text) for e in events[:-1]] == [("thinking", "考える")]
+
+
+def test_stream_done_marker_before_completed_is_stream_error(api):
+    # Responses API は [DONE] を送らないが、間に入るプロキシが送ることがある。JSON として読まずに打ち切る
+    api.reply_sse([(None, "[DONE]")])
+    with pytest.raises(StreamError, match="before response.completed"):
+        list(api.client("openai:gpt-5.5").stream("hi"))

@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import WEATHER_TOOL
-from switchllm import ImagePart, Message, TextPart, UnsupportedFeatureError
+from switchllm import ConfigurationError, ImagePart, Message, TextPart, ToolCall, UnsupportedFeatureError
 from switchllm.providers.gemini import SYNTHETIC_ID_PREFIX
 
 
@@ -111,3 +111,66 @@ def test_blocked_prompt(api):
     api.reply_json({"promptFeedback": {"blockReason": "SAFETY"}, "usageMetadata": {"promptTokenCount": 4}})
     res = api.client("gemini:gemini-flash-latest").chat("...")
     assert res.stop_reason == "content_filter" and res.text == ""
+
+
+def test_tool_result_without_name_is_rejected_when_history_has_no_call(api):
+    # Gemini は functionResponse に関数名が要る。履歴から補えないときは送る前に知らせる
+    with pytest.raises(ConfigurationError, match="name="):
+        api.client("gemini:gemini-flash-latest").chat([Message.user("hi"), Message.tool_result("fc_9", "雨")])
+    assert api.requests == []
+
+
+def test_options_disable_dummy_signature_and_switch_schema_field(api):
+    api.reply_json(_resp([{"text": "ok"}]))
+    history = [Message.user("hi"), Message.assistant(tool_calls=[ToolCall("toolu_1", "get_weather", {"city": "a"})]),
+               Message.tool_result("toolu_1", "雨", name="get_weather")]
+    client = api.client("gemini:gemini-flash-latest", inject_dummy_signatures=False, schema_field="parametersJsonSchema")
+    client.chat(history, tools=[WEATHER_TOOL])
+    body = api.body()
+    assert body["contents"][1]["parts"] == [{"functionCall": {"name": "get_weather", "args": {"city": "a"}, "id": "toolu_1"}}]
+    decl = body["tools"][0]["functionDeclarations"][0]
+    assert decl["parametersJsonSchema"] == WEATHER_TOOL["parameters"] and "parameters" not in decl
+
+
+def test_stop_and_specific_tool_choice(api):
+    api.reply_json(_resp([{"text": "ok"}]))
+    api.client("gemini:gemini-flash-latest").chat("hi", stop=["END"], tools=[WEATHER_TOOL], tool_choice={"name": "get_weather"})
+    body = api.body()
+    assert body["generationConfig"] == {"stopSequences": ["END"]}
+    assert body["toolConfig"] == {"functionCallingConfig": {"mode": "ANY", "allowedFunctionNames": ["get_weather"]}}
+
+
+@pytest.mark.parametrize(
+    ("finish", "stop"),
+    [("MAX_TOKENS", "max_tokens"), ("SAFETY", "content_filter"), ("PROHIBITED_CONTENT", "content_filter"), ("MALFORMED_FUNCTION_CALL", "other")],
+)
+def test_finish_reason_mapping(api, finish, stop):
+    api.reply_json(_resp([{"text": "x"}], finish=finish))
+    assert api.client("gemini:gemini-flash-latest").chat("hi").stop_reason == stop
+
+
+def test_thought_parts_are_thinking(api):
+    api.reply_json(_resp([{"text": "考える", "thought": True}, {"text": "答え"}]))
+    res = api.client("gemini:gemini-flash-latest").chat("hi")
+    assert (res.text, res.thinking) == ("答え", "考える")
+
+
+def test_error_tool_result_is_sent_as_error_object(api):
+    api.reply_json(_resp([{"text": "ok"}]))
+    history = [Message.user("hi"), Message.assistant(tool_calls=[ToolCall("fc_1", "get_weather", {})]),
+               Message.tool_result("fc_1", '{"detail": "timeout"}', is_error=True)]
+    api.client("gemini:gemini-flash-latest").chat(history, tools=[WEATHER_TOOL])
+    fr = api.body()["contents"][2]["parts"][0]["functionResponse"]
+    assert fr["response"] == {"error": '{"detail": "timeout"}'}  # JSON でも、エラーは error に入れる
+
+
+def test_stream_blocked_prompt_is_done_with_content_filter(api):
+    api.reply_sse([(None, {"promptFeedback": {"blockReason": "SAFETY"}, "usageMetadata": {"promptTokenCount": 4}})])
+    res = list(api.client("gemini:gemini-flash-latest").stream("..."))[-1].response
+    assert res.stop_reason == "content_filter" and res.text == "" and res.usage.input_tokens == 4
+
+
+def test_empty_assistant_message_from_another_provider_is_not_sent(api):
+    api.reply_json(_resp([{"text": "ok"}]))
+    api.client("gemini:gemini-flash-latest").chat([Message.user("1つ目"), Message.assistant(""), Message.user("2つ目")])
+    assert api.body()["contents"] == [{"role": "user", "parts": [{"text": "1つ目"}, {"text": "2つ目"}]}]

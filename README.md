@@ -110,18 +110,24 @@ def place_order(order: dict) -> str:
 ```
 
 - Tool definitions can also be dicts (`{"name", "description", "parameters"}`)
-- `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`
+- `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`. It is not sent unless you give it (every provider defaults to auto). Naming a tool that is not in `tools` raises `ConfigurationError` before sending
 - Parallel tool calls are supported (for Anthropic and Gemini, the results are sent together in one message)
 - `run_tool_calls` runs your functions with arguments chosen by the model. Validate the arguments in functions that do anything dangerous ([SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md), in Japanese)
 
 ### Provider-specific features
 
-Parameters that cannot be unified are passed with `extra=` and merged into the request body as is. This is the only place where your code depends on the provider.
+Parameters that cannot be unified are written in each provider's own format, side by side, in `extra_by_provider=`. Only the part for the provider chosen by the model string is sent, so switching models does not change the calling code. Providers you leave out get nothing extra. The keys are the `provider:` part of the model string (use `"google"` if you write `google:`).
 
 ```python
-client.chat("...", extra={"metadata": {"user_id": "u-1"}})          # Anthropic
-client.chat("...", extra={"reasoning": {"effort": "high"}})          # OpenAI Responses
+client.chat("...", extra_by_provider={
+    "openai": {"reasoning": {"effort": "high"}},       # OpenAI Responses
+    "anthropic": {"metadata": {"user_id": "u-1"}},     # Anthropic
+})
 ```
+
+`extra=` merges the same thing into the request body for every provider. If you give both, the `extra_by_provider` part wins.
+
+`client.with_model("anthropic:claude-haiku-5-5")` creates a client for another model that shares the connection (useful for fallbacks and comparisons). For the same provider it keeps `api_key` / `base_url` / options; for a different provider it does not, so keys and auth headers are never sent to another server.
 
 ### Errors
 
@@ -141,7 +147,7 @@ register_provider("myvllm", base_url="http://gpu-box:8000/v1", api_key_env=())  
 client = Client("myvllm:Qwen/Qwen3-8B")
 ```
 
-You can also skip registration and write `Client("openai-chat:<model>", base_url="...", api_key="...")`.
+You can also skip registration and write `Client("openai-chat:<model>", base_url="...", api_key="...")`. `openai-chat` sends max_tokens as `max_completion_tokens` only when the server is OpenAI itself (OpenAI has deprecated `max_tokens`), and as `max_tokens` to any other server.
 
 ---
 
@@ -160,7 +166,8 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` (this costs a small amount)
 - No async support yet
 - Image input is supported; audio, PDF, and file input are not. Image URLs are not supported for Gemini (pass base64 instead)
-- Structured output and reasoning effort are not unified (pass each provider's settings with `extra`)
+- Structured output and reasoning effort are not unified (list each provider's settings in `extra_by_provider`)
+- Anthropic requires max_tokens, so it is sent as 4096 when you do not give one (change it with `Client(..., default_max_tokens=...)`). The other providers send no limit unless you give one, so a long answer may stop with `stop_reason="max_tokens"` on Anthropic only
 - The OpenAI Responses API has no `stop` sequences, so specifying one raises `UnsupportedFeatureError`
 - The Responses API stores responses by default. If you set `extra={"store": False}`, resending reasoning items also requires `include: ["reasoning.encrypted_content"]`
 - Gemini function schemas are sent as `parameters` (a subset of OpenAPI). For complex JSON Schemas, use `Client(..., schema_field="parametersJsonSchema")`

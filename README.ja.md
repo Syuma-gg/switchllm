@@ -110,18 +110,24 @@ def place_order(order: dict) -> str:
 ```
 
 - ツール定義は dict（`{"name", "description", "parameters"}`）でも渡せる
-- `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`
+- `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`。指定しなければ送らない（各社とも既定は auto）。`tools` にない名前を指定すると、送る前に `ConfigurationError`
 - 並列ツール呼び出しにも対応（Anthropic・Gemini では結果を1メッセージにまとめて送る）
 - `run_tool_calls` は、モデルが決めた引数で関数を実行する。危険な操作をする関数では引数を検証すること（[SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md)）
 
 ### プロバイダー固有の機能
 
-共通化できないパラメータは `extra=` でリクエスト本体にそのままマージする。ここだけはプロバイダー依存のコードになる。
+共通化できないパラメータは、各社の形式のまま `extra_by_provider=` に並べて書く。送るのはモデル文字列で選んだプロバイダーの分だけなので、モデルを切り替えても呼び出し側のコードは変わらない。書いていないプロバイダーには何も足さない。キーはモデル文字列の `provider:` 部分（`google:` で指定するなら `"google"`）。
 
 ```python
-client.chat("...", extra={"metadata": {"user_id": "u-1"}})          # Anthropic
-client.chat("...", extra={"reasoning": {"effort": "high"}})          # OpenAI Responses
+client.chat("...", extra_by_provider={
+    "openai": {"reasoning": {"effort": "high"}},       # OpenAI Responses
+    "anthropic": {"metadata": {"user_id": "u-1"}},     # Anthropic
+})
 ```
+
+`extra=` は、どのプロバイダーにも同じものをリクエスト本体にそのままマージする。両方を指定すると、`extra_by_provider` の分が優先される。
+
+`client.with_model("anthropic:claude-haiku-5-5")` で、接続を共有したまま別のモデルのクライアントを作れる（フォールバックや比較に使う）。同じプロバイダーなら `api_key` / `base_url` / オプションを引き継ぎ、別のプロバイダーへは引き継がない（キーや認証ヘッダーを別のサーバーへ送らないため）。
 
 ### 例外
 
@@ -141,7 +147,7 @@ register_provider("myvllm", base_url="http://gpu-box:8000/v1", api_key_env=())  
 client = Client("myvllm:Qwen/Qwen3-8B")
 ```
 
-登録せずに `Client("openai-chat:<model>", base_url="...", api_key="...")` と直接指定してもよい。
+登録せずに `Client("openai-chat:<model>", base_url="...", api_key="...")` と直接指定してもよい。`openai-chat` は、接続先が OpenAI 本家のときだけ max_tokens を `max_completion_tokens` として送り（OpenAI は `max_tokens` を非推奨にしている）、それ以外のサーバーには `max_tokens` で送る。
 
 ---
 
@@ -160,7 +166,8 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する）
 - 非同期（`async`）は未対応
 - 画像入力は対応、音声・PDF・ファイル入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
-- 構造化出力と推論の強さは共通化していない（`extra` で各社の指定を渡す）
+- 構造化出力と推論の強さは共通化していない（`extra_by_provider` で各社の指定を並べて渡す）
+- Anthropic は max_tokens が必須なので、指定しないと 4096 で送る（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないため、長い出力では Anthropic だけ `stop_reason="max_tokens"` で切れることがある
 - OpenAI Responses には `stop` シーケンスが存在しないため、指定すると `UnsupportedFeatureError`
 - Responses API は既定でレスポンスを保存する。`extra={"store": False}` にする場合、reasoning アイテムの再送には `include: ["reasoning.encrypted_content"]` も必要
 - Gemini の関数スキーマは `parameters`（OpenAPI のサブセット）で送る。複雑な JSON Schema を使うなら `Client(..., schema_field="parametersJsonSchema")`

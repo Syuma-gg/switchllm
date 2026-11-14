@@ -16,7 +16,7 @@
 | max_tokens | `max_tokens`（**必須**。指定がなければ 4096。`default_max_tokens=` で変更できる） |
 | stop | `stop_sequences` |
 | ツール定義 | `{"name", "description", "input_schema"}` |
-| tool_choice | `{"type": "auto"}` / `{"type": "none"}` / `{"type": "any"}` / `{"type": "tool", "name"}` |
+| tool_choice | `{"type": "auto"}` / `{"type": "none"}` / `{"type": "any"}` / `{"type": "tool", "name"}`。指定がなければ送らない（ツールがあれば既定は `auto`） |
 | 画像 | `{"type": "image", "source": {"type": "base64", ...}}` か `{"type": "url", "url"}` |
 
 ## レスポンス
@@ -30,9 +30,9 @@
 | イベント | 扱い |
 |---|---|
 | `message_start` | メッセージの骨組み |
-| `content_block_start` / `content_block_delta` / `content_block_stop` | ブロックを組み立てる。`text_delta` は `text`、`thinking_delta` は `thinking`、`input_json_delta` は連結して最後にパース、`signature_delta` は連結 |
+| `content_block_start` / `content_block_delta` / `content_block_stop` | ブロックを組み立てる。`text_delta` は `text`、`thinking_delta` は `thinking`、`input_json_delta` は連結して最後にパース（JSON として読めなければ `arguments={}` にして原文を `raw_arguments` に残す。max_tokens で途中で切れたときなど）、`signature_delta` は連結 |
 | `message_delta` | `stop_reason` と usage を更新 |
-| `message_stop` | 終了して `done` |
+| `message_stop` | 終了して `done`。届かないまま閉じたら `StreamError` |
 | `error` | `StreamError` |
 | `ping`・その他 | 無視（Anthropic は新しいイベントを追加することがあると明言している） |
 
@@ -46,6 +46,8 @@
 - [Streaming Messages](https://docs.anthropic.com/en/api/messages-streaming)
 - [Extended thinking](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking)
 - [OpenAI SDK compatibility](https://docs.anthropic.com/en/api/openai-sdk)
+- [Implement tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use)（2026-11-15 確認: `tool_choice` の `auto` は「This is the default value when `tools` are provided」）
+- [Streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)（2026-11-15 確認: イベントの流れの最後は「A final `message_stop` event」）
 
 ## 関連する未検証の前提
 
