@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import WEATHER_TOOL
-from unillm import Message, StreamError
+from switchllm import Message, StreamError
 
 
 def test_request_shape(api):

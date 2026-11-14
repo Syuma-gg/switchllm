@@ -1,8 +1,8 @@
 """会話の途中でプロバイダー（またはモデル）を変えたときの履歴変換。"""
 
 from conftest import WEATHER_TOOL
-from unillm import Message
-from unillm.providers.gemini import DUMMY_THOUGHT_SIGNATURE
+from switchllm import Message
+from switchllm.providers.gemini import DUMMY_THOUGHT_SIGNATURE
 
 
 def _claude_history(api):

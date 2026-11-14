@@ -9,8 +9,8 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-import unillm
-from unillm.providers import PRESETS
+import switchllm
+from switchllm.providers import PRESETS
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
@@ -94,9 +94,9 @@ def _table_names(marker: str) -> set[str]:
 
 
 def test_public_api_doc_matches_all():
-    documented, actual = _table_names("public-api"), set(unillm.__all__)
+    documented, actual = _table_names("public-api"), set(switchllm.__all__)
     assert documented == actual, (
-        f"{_rel(PUBLIC_API)} の一覧と unillm.__all__ が一致しない。同じ変更で両方を直す。\n"
+        f"{_rel(PUBLIC_API)} の一覧と switchllm.__all__ が一致しない。同じ変更で両方を直す。\n"
         f"  文書にだけある: {sorted(documented - actual)}\n  __all__ にだけある: {sorted(actual - documented)}"
     )
 

@@ -1,8 +1,8 @@
 # 公開 API
 
-`unillm` 直下の `__all__` にある名前だけが公開 API。サブモジュール（`unillm.providers`、`unillm._http` など）は内部実装で、予告なく変わる（[判断](../design-docs/minimal-public-api.md)）。
+`switchllm` 直下の `__all__` にある名前だけが公開 API。サブモジュール（`switchllm.providers`、`switchllm._http` など）は内部実装で、予告なく変わる（[判断](../design-docs/minimal-public-api.md)）。
 
-下の一覧と `unillm.__all__`、プリセット表と `PRESETS` が一致することを `tests/test_docs.py` が検査する。
+下の一覧と `switchllm.__all__`、プリセット表と `PRESETS` が一致することを `tests/test_docs.py` が検査する。
 
 ## 一覧
 
@@ -11,7 +11,7 @@
 |---|---|---|
 | `Client` | クラス | 唯一の入口。`chat()` / `stream()` / `with_model()` / `close()` |
 | `parse_model` | 関数 | `"provider:model"` を最初の `:` で分解する |
-| `MODEL_ENV` | 定数 | モデル文字列を読む環境変数の名前（`"UNILLM_MODEL"`） |
+| `MODEL_ENV` | 定数 | モデル文字列を読む環境変数の名前（`"SWITCHLLM_MODEL"`） |
 | `register_provider` | 関数 | OpenAI 互換サーバーなどを名前付きで登録する |
 | `Message` | クラス | 会話の1メッセージ。`Message.user()` / `system()` / `assistant()` / `tool_result()` |
 | `TextPart` | クラス | テキストのパーツ |
@@ -23,7 +23,7 @@
 | `Tool` | クラス | ツール定義（名前・説明・JSON Schema・関数） |
 | `tool` | デコレーター | 関数から `Tool` を作る。対応外の型には `parameters=` |
 | `run_tool_calls` | 関数 | ツール呼び出しをまとめて実行し、結果のメッセージを返す |
-| `UniLLMError` | 例外 | このライブラリの例外の基底クラス |
+| `SwitchLLMError` | 例外 | このライブラリの例外の基底クラス |
 | `ConfigurationError` | 例外 | 設定の誤り（モデル文字列、APIキー未設定など） |
 | `UnsupportedFeatureError` | 例外 | 選んだプロバイダーが対応していない指定 |
 | `APIConnectionError` | 例外 | ネットワーク到達不可、タイムアウト |

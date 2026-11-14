@@ -1,7 +1,7 @@
 """最小のエージェントループ。モデル文字列を変えるだけで、どのプロバイダーでも同じコードで動く。
 
     # PowerShell
-    $env:UNILLM_MODEL = "gemini:gemini-flash-latest"
+    $env:SWITCHLLM_MODEL = "gemini:gemini-flash-latest"
     python examples/agent_loop.py
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from typing import Annotated
 
-from unillm import Client, Message, run_tool_calls, tool
+from switchllm import Client, Message, run_tool_calls, tool
 
 
 @tool
@@ -46,7 +46,7 @@ def run(client: Client, question: str, max_steps: int = 8) -> str:
 
 
 if __name__ == "__main__":
-    model = os.environ.get("UNILLM_MODEL", "anthropic:claude-sonnet-5-5")
+    model = os.environ.get("SWITCHLLM_MODEL", "anthropic:claude-sonnet-5-5")
     with Client(model) as client:
         print(f"[{client.model}]")
         print(run(client, "東京と大阪の天気を調べて、2都市の気温の合計も教えて"))

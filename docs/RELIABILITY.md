@@ -1,6 +1,6 @@
 # 信頼性
 
-失敗したときにどう振る舞うか。実装は `src/unillm/_http.py` と `src/unillm/errors.py` にある。
+失敗したときにどう振る舞うか。実装は `src/switchllm/_http.py` と `src/switchllm/errors.py` にある。
 
 ## タイムアウト
 
@@ -35,7 +35,7 @@
 | 5xx | `ServerError` |
 | その他の 4xx | `BadRequestError` |
 
-どれも `APIError`（`provider` / `status_code` / `body` を持つ）のサブクラスで、基底は `UniLLMError`。リクエスト前に分かる設定ミスは `ConfigurationError`、プロバイダーが対応していない指定は `UnsupportedFeatureError` になる。
+どれも `APIError`（`provider` / `status_code` / `body` を持つ）のサブクラスで、基底は `SwitchLLMError`。リクエスト前に分かる設定ミスは `ConfigurationError`、プロバイダーが対応していない指定は `UnsupportedFeatureError` になる。
 
 ## 検証状況
 

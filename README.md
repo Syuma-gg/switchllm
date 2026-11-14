@@ -1,9 +1,9 @@
-# unillm
+# switchllm
 
 OpenAI / Anthropic / Gemini / OpenAI互換サーバー（Ollama・LM Studio・vLLM など）を、**同じコードで呼べる**軽量なクライアントライブラリ。
 
 ```python
-from unillm import Client
+from switchllm import Client
 
 client = Client("anthropic:claude-sonnet-5-5")   # ← ここだけ変えればプロバイダーが変わる
 print(client.chat("こんにちは").text)
@@ -12,13 +12,14 @@ print(client.chat("こんにちは").text)
 - 依存は `httpx` だけ。各社の SDK は使わず、HTTP リクエストの形式差をアダプターで吸収する
 - ツール呼び出しの往復に必要な署名・推論情報（Gemini の thoughtSignature、Anthropic の thinking、OpenAI の reasoning）を落とさない
 - エージェントフレームワークではなく、その下で使う薄い層（[やること・やらないこと](docs/product-specs/scope.md)）
+- プロバイダーは文字列で選ぶ。失敗したときに別のプロバイダーへ自動で切り替える機能（フォールバック、ルーティング）はない。必要なら `RateLimitError` などを捕まえて `client.with_model()` で切り替える
 
 ---
 
 ## インストール
 
 ```powershell
-cd unillm
+cd switchllm
 pip install -e ".[dev]"
 python -m pytest          # モック API に対するテスト（APIキー不要）
 ```
@@ -39,10 +40,10 @@ APIキーは環境変数で渡す（`api_key=` 引数でも可）。
 ## 切り替え方は2通り
 
 1. **コードの1か所**: `Client("openai:gpt-5.5")` の文字列を変える
-2. **コードを変えない**: `Client()` と書いておき、環境変数 `UNILLM_MODEL` で指定する
+2. **コードを変えない**: `Client()` と書いておき、環境変数 `SWITCHLLM_MODEL` で指定する
 
 ```powershell
-$env:UNILLM_MODEL = "gemini:gemini-flash-latest"
+$env:SWITCHLLM_MODEL = "gemini:gemini-flash-latest"
 python examples/agent_loop.py
 ```
 
@@ -70,7 +71,7 @@ for ev in client.stream("俳句を詠んで"):
 
 ```python
 from typing import Annotated, Literal
-from unillm import Client, Message, run_tool_calls, tool
+from switchllm import Client, Message, run_tool_calls, tool
 
 @tool
 def get_weather(city: Annotated[str, "都市名"], unit: Literal["c", "f"] = "c") -> dict:
@@ -127,7 +128,7 @@ client.chat("...", extra={"reasoning": {"effort": "high"}})          # OpenAI Re
 プリセットにないサーバー（クラウドの互換 API、自前の vLLM、社内ゲートウェイなど）は、名前を付けて登録する。base_url は各サービスの公式ドキュメントで確認すること。
 
 ```python
-from unillm import Client, register_provider
+from switchllm import Client, register_provider
 
 register_provider("mycloud", base_url="https://api.example.com/v1", api_key_env="MYCLOUD_API_KEY")
 register_provider("myvllm", base_url="http://gpu-box:8000/v1", api_key_env=())   # キー不要
@@ -163,7 +164,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 
 同じ目的の OSS はすでにある。用途によってはそちらが適切。
 
-| | unillm（これ） | LiteLLM | any-llm (mozilla-ai) |
+| | switchllm（これ） | LiteLLM | any-llm (mozilla-ai) |
 |---|---|---|---|
 | 対応数 | 主要3社 + OpenAI 互換 | 100以上 | 主要どころ多数 |
 | 出力形式 | 独自の共通型 | OpenAI Chat Completions 形式 | OpenAI 形式 |

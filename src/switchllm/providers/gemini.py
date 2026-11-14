@@ -18,7 +18,7 @@ from ..errors import ConfigurationError, StreamError, UnsupportedFeatureError
 from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice
 
-SYNTHETIC_ID_PREFIX = "unillm_"  # Gemini が id を返さなかった呼び出しに付ける仮 ID
+SYNTHETIC_ID_PREFIX = "switchllm_"  # Gemini が id を返さなかった呼び出しに付ける仮 ID
 DUMMY_THOUGHT_SIGNATURE = "skip_thought_signature_validator"
 
 _FILTERED = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY", "LANGUAGE"}

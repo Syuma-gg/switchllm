@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 import pytest
 
-from unillm import Client
+from switchllm import Client
 
 
 class FakeAPI:

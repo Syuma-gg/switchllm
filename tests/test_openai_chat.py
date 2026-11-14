@@ -1,6 +1,6 @@
 from conftest import WEATHER_TOOL
-from unillm import Message, register_provider
-from unillm.providers import PRESETS
+from switchllm import Message, register_provider
+from switchllm.providers import PRESETS
 
 
 def test_ollama_preset_without_key(api):

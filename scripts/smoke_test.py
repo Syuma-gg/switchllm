@@ -12,7 +12,7 @@ import sys
 import traceback
 from typing import Annotated
 
-from unillm import Client, Message, run_tool_calls, tool
+from switchllm import Client, Message, run_tool_calls, tool
 
 
 @tool

@@ -1,6 +1,6 @@
 from conftest import WEATHER_TOOL
-from unillm import Message
-from unillm.providers.gemini import SYNTHETIC_ID_PREFIX
+from switchllm import Message
+from switchllm.providers.gemini import SYNTHETIC_ID_PREFIX
 
 
 def _resp(parts, finish="STOP", usage=None):

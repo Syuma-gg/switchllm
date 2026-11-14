@@ -1,6 +1,6 @@
 # アーキテクチャ
 
-unillm の構造の地図。設計の理由は [docs/design-docs/index.md](docs/design-docs/index.md) にある。
+switchllm の構造の地図。設計の理由は [docs/design-docs/index.md](docs/design-docs/index.md) にある。
 
 ## 処理の流れ
 
@@ -33,7 +33,7 @@ providers/     Provider   parse_response() / parse_stream(): 各社の JSON → 
 | 3 | `client.py` | 利用者の入口 `Client` | 層0〜2、httpx |
 | 4 | `__init__.py` | 公開 API の再エクスポート | すべて |
 
-公開 API は `unillm` 直下の `__all__` だけで、`providers/` 以下を含むサブモジュールは内部実装（[public-api.md](docs/product-specs/public-api.md)）。
+公開 API は `switchllm` 直下の `__all__` だけで、`providers/` 以下を含むサブモジュールは内部実装（[public-api.md](docs/product-specs/public-api.md)）。
 
 ## アダプター
 

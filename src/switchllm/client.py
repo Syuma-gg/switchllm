@@ -3,7 +3,7 @@
     client = Client("anthropic:claude-sonnet-5-5")   # ← ここだけ変えればプロバイダーが変わる
     res = client.chat("こんにちは")
 
-モデル文字列を省略すると環境変数 ``UNILLM_MODEL`` を読むので、
+モデル文字列を省略すると環境変数 ``SWITCHLLM_MODEL`` を読むので、
 コードを一切変えずに設定だけで切り替えることもできる。
 """
 
@@ -21,7 +21,7 @@ from .providers.base import ChatRequest, Provider
 from .tools import Tool, ToolLike, as_tool
 from .types import Message, Response, StreamEvent
 
-MODEL_ENV = "UNILLM_MODEL"
+MODEL_ENV = "SWITCHLLM_MODEL"
 
 MessagesLike = Union[str, Message, dict, Sequence[Union[Message, dict]]]
 

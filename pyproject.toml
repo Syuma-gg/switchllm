@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "unillm"
+name = "switchllm"
 version = "0.1.0"
 description = "One client for OpenAI, Anthropic, Gemini and OpenAI-compatible LLM APIs. Change one string to switch providers."
 readme = "README.md"

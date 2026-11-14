@@ -9,7 +9,7 @@ import ast
 import sys
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "unillm"
+SRC = Path(__file__).resolve().parents[1] / "src" / "switchllm"
 
 #: モジュール → 層。import してよいのは自分より下の層だけ（providers の中どうしは可）
 LAYERS = {
@@ -33,17 +33,17 @@ def _module_key(path: Path) -> str:
 def _imports(path: Path) -> list[tuple[int, str, bool]]:
     """(行番号, 名前, パッケージ内か) の一覧。パッケージ内なら名前は LAYERS のキー。"""
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    pkg = ["unillm", *path.relative_to(SRC).parent.parts]
+    pkg = ["switchllm", *path.relative_to(SRC).parent.parts]
     out: list[tuple[int, str, bool]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 parts = alias.name.split(".")
-                out.append((node.lineno, parts[1], True) if parts[0] == "unillm" and len(parts) > 1 else (node.lineno, parts[0], False))
+                out.append((node.lineno, parts[1], True) if parts[0] == "switchllm" and len(parts) > 1 else (node.lineno, parts[0], False))
         elif isinstance(node, ast.ImportFrom):
             if node.level == 0:
                 parts = (node.module or "").split(".")
-                if parts[0] != "unillm":
+                if parts[0] != "switchllm":
                     out.append((node.lineno, parts[0], False))
                     continue
             else:

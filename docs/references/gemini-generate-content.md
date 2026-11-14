@@ -20,7 +20,7 @@
 ## レスポンス
 
 - `candidates[0].content.parts` の `text`（`thought: true` は推論）と `functionCall` を読む。再送用に `parts` 全体を `ProviderState` に入れる（`thoughtSignature` を含む）
-- `functionCall` に id がなければ仮 ID `unillm_...` を振り、送り返すときは id を付けない（U6）
+- `functionCall` に id がなければ仮 ID `switchllm_...` を振り、送り返すときは id を付けない（U6）
 - stop_reason: `STOP` は `end`、`MAX_TOKENS` は `max_tokens`、`SAFETY` などフィルタ系は `content_filter`。プロンプト自体がブロックされると `candidates` が空で `promptFeedback.blockReason` が入るので `content_filter`
 - usage: `promptTokenCount` と、`candidatesTokenCount + thoughtsTokenCount`（U14）
 

@@ -2,7 +2,7 @@
 
 - 状態: 採用（2026-11-09）
 - 一覧: [公開 API](../product-specs/public-api.md)
-- 検査: `tests/test_docs.py`（一覧と `unillm.__all__` の一致）
+- 検査: `tests/test_docs.py`（一覧と `switchllm.__all__` の一致）
 
 ## 背景
 
@@ -10,7 +10,7 @@
 
 ## 決定
 
-- 公開 API は `unillm` 直下の `__all__` にある名前だけ。`unillm.providers` などのサブモジュールは内部実装
+- 公開 API は `switchllm` 直下の `__all__` にある名前だけ。`switchllm.providers` などのサブモジュールは内部実装
 - 独自のアダプターを外から登録する `register_adapter()` は削除した。新しい形式の API は、このリポジトリにアダプターとして足す
 - OpenAI 互換サーバーの追加は、公開 API の `register_provider()` で引き続きできる
 

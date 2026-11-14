@@ -2,7 +2,7 @@
 
 ここで定義する型だけをアプリ側コードで扱えば、プロバイダーを切り替えても
 アプリ側のコードは変わらない。各プロバイダー固有の形式への変換は
-``unillm.providers`` 配下のアダプターが担当する。
+``switchllm.providers`` 配下のアダプターが担当する。
 """
 
 from __future__ import annotations

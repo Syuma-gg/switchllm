@@ -8,23 +8,23 @@ from __future__ import annotations
 from typing import Any
 
 
-class UniLLMError(Exception):
+class SwitchLLMError(Exception):
     """このライブラリが投げる例外の基底クラス。"""
 
 
-class ConfigurationError(UniLLMError):
+class ConfigurationError(SwitchLLMError):
     """モデル指定の誤り、APIキー未設定など、リクエスト前に分かる設定ミス。"""
 
 
-class UnsupportedFeatureError(UniLLMError):
+class UnsupportedFeatureError(SwitchLLMError):
     """選んだプロバイダーが対応していない機能を指定した。"""
 
 
-class APIConnectionError(UniLLMError):
+class APIConnectionError(SwitchLLMError):
     """ネットワーク到達不可・タイムアウトなど。"""
 
 
-class APIError(UniLLMError):
+class APIError(SwitchLLMError):
     """プロバイダーがエラーを返した。"""
 
     def __init__(

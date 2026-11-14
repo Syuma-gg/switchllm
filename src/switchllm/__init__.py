@@ -1,6 +1,6 @@
-"""unillm — どの LLM プロバイダーでも同じコードで呼べる薄いクライアント。
+"""switchllm — どの LLM プロバイダーでも同じコードで呼べる薄いクライアント。
 
-    from unillm import Client
+    from switchllm import Client
     client = Client("anthropic:claude-sonnet-5-5")   # ← ここだけ変える
     print(client.chat("こんにちは").text)
 """
@@ -16,7 +16,7 @@ from .errors import (
     RateLimitError,
     ServerError,
     StreamError,
-    UniLLMError,
+    SwitchLLMError,
     UnsupportedFeatureError,
 )
 from .providers import register_provider
@@ -44,7 +44,7 @@ __all__ = [
     "TextPart",
     "Tool",
     "ToolCall",
-    "UniLLMError",
+    "SwitchLLMError",
     "UnsupportedFeatureError",
     "Usage",
     "parse_model",

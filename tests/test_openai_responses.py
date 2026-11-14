@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import WEATHER_TOOL
-from unillm import Message, UnsupportedFeatureError
+from switchllm import Message, UnsupportedFeatureError
 
 
 def _text_response(text="こんにちは"):

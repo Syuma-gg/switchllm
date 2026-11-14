@@ -34,4 +34,4 @@
 - `CLAUDE.md` からリンクを辿って到達できない文書がない
 - 各 `index.md`（計画は `PLANS.md`）が、同じディレクトリの文書をすべて載せている
 - `CLAUDE.md` が 100 行以内（地図を短く保つ）
-- [public-api.md](product-specs/public-api.md) の一覧が `unillm.__all__` と、プリセット表が `PRESETS` と一致する
+- [public-api.md](product-specs/public-api.md) の一覧が `switchllm.__all__` と、プリセット表が `PRESETS` と一致する

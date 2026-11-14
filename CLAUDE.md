@@ -1,7 +1,7 @@
-# unillm — Claude Code 向けの地図
+# switchllm — Claude Code 向けの地図
 
 OpenAI / Anthropic / Gemini / OpenAI互換サーバーを同じコードで呼べる、軽量な Python ライブラリ。
-`Client("provider:model")` の文字列（または環境変数 `UNILLM_MODEL`）だけでプロバイダーを切り替える。
+`Client("provider:model")` の文字列（または環境変数 `SWITCHLLM_MODEL`）だけでプロバイダーを切り替える。
 
 このファイルは**地図**なので詳細は書かない。知識の正本は `docs/` にある。
 作業の前に、下の「どこを読むか」から該当する文書だけを開くこと。
@@ -50,7 +50,7 @@ ruff check src tests --select F,E9,B --ignore B006   # ruff は任意
 - Python 3.10 以上。各ファイル先頭で `from __future__ import annotations`
 - コメント・docstring・ドキュメントは日本語。例外メッセージは英語
 - ランタイム依存は `httpx` だけ（`tests/test_architecture.py` が検査）。増やすなら先に design-docs に判断を残す
-- 公開 API を増減したら `src/unillm/__init__.py` の `__all__` と [public-api.md](docs/product-specs/public-api.md) を同じ変更で直す（`tests/test_docs.py` が照合）
+- 公開 API を増減したら `src/switchllm/__init__.py` の `__all__` と [public-api.md](docs/product-specs/public-api.md) を同じ変更で直す（`tests/test_docs.py` が照合）
 
 ## ドキュメントの保守
 

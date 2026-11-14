@@ -1,6 +1,6 @@
 """基本の使い方。MODEL の1行だけ変えればプロバイダーが切り替わる。"""
 
-from unillm import Client, RateLimitError
+from switchllm import Client, RateLimitError
 
 MODEL = "anthropic:claude-sonnet-5-5"
 # MODEL = "openai:gpt-5.5"

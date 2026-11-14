@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal, Optional
 
 import pytest
 
-from unillm import ToolCall, run_tool_calls, tool
+from switchllm import ToolCall, run_tool_calls, tool
 
 
 @dataclass

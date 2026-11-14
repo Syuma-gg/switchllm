@@ -25,7 +25,7 @@ ID はほかの文書から参照しているので変えない。
 | U3 | OpenAI Responses | function ツールに `strict: false` を明示する | strict の既定値に依存しないための措置。`true` にする場合は全プロパティ required と `additionalProperties: false` が必要 | |
 | U4 | Gemini | 関数スキーマを `parameters`（OpenAPI のサブセット）で送る | `parametersJsonSchema` の方が JSON Schema をそのまま扱えるが、REST での挙動を一次情報で確認できなかった。`schema_field` で切り替えられる | |
 | U5 | Gemini | 他プロバイダーの履歴を送るとき、最初の functionCall にダミー署名 `skip_thought_signature_validator` を付ける | 公式は「最終手段で、性能が落ちる」と記載。Gemini 2.5 など Gemini 3 系以外に付けて害がないかは未確認。`inject_dummy_signatures=False` で無効化できる | |
-| U6 | Gemini | functionCall に id がなければ仮 ID `unillm_...` を振り、functionResponse には id を付けない | Gemini 3 では id が常に返るという二次情報がある。古いモデルでの挙動は未確認 | |
+| U6 | Gemini | functionCall に id がなければ仮 ID `switchllm_...` を振り、functionResponse には id を付けない | Gemini 3 では id が常に返るという二次情報がある。古いモデルでの挙動は未確認 | |
 | U7 | Gemini | generateContent を使う | Google は generateContent を「レガシー」と表記し、新規開発には Interactions API を勧めている。当面は動くはずだが、将来の移行候補 | |
 | U8 | Anthropic | 別のモデルへ切り替えると thinking ブロックを捨てる | thinking を有効にしたままツール往復の途中でモデルを変えると 400 になる可能性がある（同じモデルの中なら問題ない） | |
 | U9 | Anthropic | `tool_choice: "none"` を `{"type": "none"}` にする | 対応済みと理解しているが未確認 | |

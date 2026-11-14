@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from unillm import (
+from switchllm import (
     AuthenticationError,
     Client,
     ConfigurationError,
@@ -10,8 +10,8 @@ from unillm import (
     parse_model,
     register_provider,
 )
-from unillm._http import iter_sse
-from unillm.providers import PRESETS
+from switchllm._http import iter_sse
+from switchllm.providers import PRESETS
 
 OK = {"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": {}}
 
@@ -24,7 +24,7 @@ def test_parse_model():
 
 
 def test_model_from_env(monkeypatch, api):
-    monkeypatch.setenv("UNILLM_MODEL", "anthropic:claude-sonnet-5-5")
+    monkeypatch.setenv("SWITCHLLM_MODEL", "anthropic:claude-sonnet-5-5")
     api.reply_json(OK)
     client = Client(api_key="k", http_client=httpx.Client(transport=httpx.MockTransport(api.handler)))
     assert client.model == "anthropic:claude-sonnet-5-5"
