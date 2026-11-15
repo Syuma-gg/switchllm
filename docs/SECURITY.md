@@ -23,4 +23,8 @@
 
 ## 脆弱性の報告
 
-公開するときに窓口を決めて、ここに書く（[v0.1 公開](exec-plans/active/v0.1-release.md)）。
+脆弱性は公開の Issue に書かず、GitHub の Private vulnerability reporting で知らせる。
+
+- リポジトリの「Security」タブの「Report a vulnerability」から送る（https://github.com/Syuma-gg/switchllm/security/advisories/new ）。報告は作者にしか見えない
+- 書いてほしいこと: 影響を受ける版、再現の手順、想定される影響
+- 修正するのは最新の版だけ。0.x の間は、古い版にさかのぼって修正しない

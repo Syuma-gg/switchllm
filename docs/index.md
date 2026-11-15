@@ -15,7 +15,7 @@
 | [QUALITY_SCORE.md](QUALITY_SCORE.md) | 領域ごとの品質評価 |
 | [quality-gates.md](quality-gates.md) | 品質検査の方針（原則、仕組み、落ちたときの直し方）。テンプレートの写しで、switchllm 用には書き換えない |
 | [RELIABILITY.md](RELIABILITY.md) | タイムアウト、リトライ、ストリーミングが失敗したときの扱い |
-| [SECURITY.md](SECURITY.md) | APIキーの扱い、ツール実行の注意 |
+| [SECURITY.md](SECURITY.md) | APIキーの扱い、ツール実行の注意、脆弱性の報告窓口 |
 
 ## 文書の種類と更新のきっかけ
 
