@@ -110,7 +110,7 @@ def place_order(order: dict) -> str:
 ```
 
 - ツール定義は dict（`{"name", "description", "parameters"}`）でも渡せる
-- `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`。指定しなければ送らない（各社とも既定は auto）。`tools` にない名前を指定すると、送る前に `ConfigurationError`
+- `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`。指定しなければ送らない（各社とも既定は auto）。`tools` にない名前を指定すると、送る前に `ConfigurationError`。`"required"` と名前の指定を受け付けないモデルもある（Anthropic の Opus 5.5・Sonnet 5.5 など）。そのときは API のエラーをそのまま `BadRequestError` で返し、黙って `"auto"` に替えることはしない
 - 並列ツール呼び出しにも対応（Anthropic・Gemini では結果を1メッセージにまとめて送る）
 - `run_tool_calls` は、モデルが決めた引数で関数を実行する。危険な操作をする関数では引数を検証すること（[SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md)）
 
@@ -132,6 +132,19 @@ client.chat("...", extra_by_provider={
 ### 例外
 
 どのプロバイダーでも同じ例外クラスになる: `AuthenticationError`(401/403) / `RateLimitError`(429) / `BadRequestError`(400系) / `NotFoundError`(404) / `ServerError`(5xx) / `StreamError` / `APIConnectionError` / `ConfigurationError` / `UnsupportedFeatureError`。
+
+プロバイダーが返したエラーは、手を加えずに渡す。`e.message` は API が返した文言そのもの、`e.body` は本文の全体。
+
+```python
+from switchllm import APIError
+
+try:
+    client.chat("...", tools=[get_weather], tool_choice="required")
+except APIError as e:
+    print(e)          # [anthropic] tool_choice: type "tool" and "any" are not supported for this model. (HTTP 400)
+    print(e.message)  # API の文言だけ
+    print(e.body)     # {"type": "error", "error": {...}, "request_id": "req_..."}
+```
 
 429・5xx・接続エラーは指数バックオフで自動リトライする（`max_retries=2`、`Retry-After` ヘッダーを尊重）。ストリーミングは最初のイベントを受け取る前だけリトライする。詳しくは [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md)。
 

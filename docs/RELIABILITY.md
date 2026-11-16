@@ -36,7 +36,20 @@
 | その他の 4xx | `BadRequestError` |
 | 2xx だが、本文が JSON のオブジェクトでない（間に入るプロキシが HTML を返したときなど） | `APIError` |
 
-どれも `APIError`（`provider` / `status_code` / `body` を持つ）のサブクラスで、基底は `SwitchLLMError`。リクエスト前に分かる設定ミスは `ConfigurationError`、プロバイダーが対応していない指定は `UnsupportedFeatureError` になる。
+どれも `APIError` のサブクラスで、基底は `SwitchLLMError`。リクエスト前に分かる設定ミスは `ConfigurationError`、プロバイダーが対応していない指定は `UnsupportedFeatureError` になる。
+
+## API が返したエラーを見せる
+
+プロバイダーが返したエラーは、手を加えずに利用者へ渡す。ライブラリの側で言い換えたり、別の指定に替えて送り直したりはしない（モデルごとの制限は増え続けるので、先回りして弾くと古くなる）。
+
+| 属性 | 中身 |
+|---|---|
+| `message` | API が返したエラーメッセージそのもの。`{"error": {"message": ...}}` 系の形から取り出し、知らない形なら本文の先頭 500 文字をそのまま使う。本文が空なら HTTP の理由句 |
+| `body` | エラーの本文の全体（JSON なら解釈したもの、そうでなければ文字列）。Anthropic の `error.type` や `request_id` もここに残る |
+| `status_code` | HTTP ステータス（ストリーミング途中のエラーイベントでは `None`） |
+| `provider` | モデル文字列の `provider:` 部分 |
+
+`str(e)` は `[anthropic] <message> (HTTP 400)` の形で、前後にプロバイダー名と HTTP ステータスを付ける。ストリーミングの途中で届いたエラーイベント（`StreamError`）も、イベントの中の文言を `message` に、イベント全体を `body` に入れる。
 
 ## 検証状況
 

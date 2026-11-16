@@ -15,7 +15,7 @@
 - ツールを往復させるときに、署名や推論情報（Gemini の thoughtSignature、Anthropic の thinking、OpenAI の reasoning）を落とさない
 - 会話の途中でのプロバイダーの切り替え（履歴の変換）
 - 画像入力（`ImagePart`）
-- 共通の例外（基底は `SwitchLLMError`）と自動リトライ
+- 共通の例外（基底は `SwitchLLMError`）と自動リトライ。プロバイダーが返したエラーは、文言（`message`）と本文の全体（`body`）をそのまま持つ
 - `extra=` による、各社固有のパラメータの受け渡し
 - `extra_by_provider=` で、各社固有のパラメータをプロバイダーごとに並べて書ける。選んだプロバイダーの分だけを送るので、モデルを切り替えても呼び出し側のコードは変わらない
 - `with_model()` で、接続を共有したまま別のモデルに切り替える。同じプロバイダーなら APIキー・base_url・オプションを引き継ぐ

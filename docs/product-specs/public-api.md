@@ -27,7 +27,7 @@
 | `ConfigurationError` | 例外 | 設定の誤り（モデル文字列、APIキー未設定など） |
 | `UnsupportedFeatureError` | 例外 | 選んだプロバイダーが対応していない指定 |
 | `APIConnectionError` | 例外 | ネットワーク到達不可、タイムアウト |
-| `APIError` | 例外 | プロバイダーがエラーを返した（`provider` / `status_code` / `body`） |
+| `APIError` | 例外 | プロバイダーがエラーを返した（`message` / `provider` / `status_code` / `body`） |
 | `BadRequestError` | 例外 | 400 系 |
 | `AuthenticationError` | 例外 | 401 / 403 |
 | `NotFoundError` | 例外 | 404 |

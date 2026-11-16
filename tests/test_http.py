@@ -97,19 +97,49 @@ def test_status_maps_to_exception_and_retry(api, status, cls, retried):
     assert len(api.requests) == (2 if retried else 1)
 
 
+def test_api_error_message_is_passed_through_unchanged(api):
+    # Anthropic が強制ツール呼び出しを拒否したときの応答（docs/references/anthropic-messages.md の出典の形）
+    body = {
+        "type": "error",
+        "error": {
+            "type": "invalid_request_error",
+            "message": 'tool_choice: type "tool" and "any" are not supported for this model.',
+        },
+        "request_id": "req_011CSHoEeqs5C35K2UUqR7Fy",
+    }
+    api.reply_json(body, status=400)
+    client, _ = _client(api)
+    with pytest.raises(BadRequestError) as e:
+        client.chat("hi")
+    assert e.value.message == 'tool_choice: type "tool" and "any" are not supported for this model.'
+    assert str(e.value) == f"[anthropic] {e.value.message} (HTTP 400)"
+    assert e.value.body == body  # エラーの種類や request_id も含めて、本文の全体が残る
+
+
 @pytest.mark.parametrize(
     ("body", "message"),
     [
         ({"error": "plain string"}, "plain string"),  # error が文字列
         ({"message": "top level"}, "top level"),  # message が直下
-        ([{"error": {"message": "in a list"}}], "Bad Request"),  # 解釈できない形は HTTP の理由句
+        ([{"error": {"message": "in a list"}}], "in a list"),  # 配列で包まれている
     ],
 )
 def test_error_message_is_taken_from_body(api, body, message):
     api.reply_json(body, status=400)
     client, _ = _client(api)
-    with pytest.raises(BadRequestError, match=message):
+    with pytest.raises(BadRequestError) as e:
         client.chat("hi")
+    assert e.value.message == message and e.value.body == body
+
+
+@pytest.mark.parametrize("content", [b'{"detail": "not here"}', b"[]"])
+def test_unknown_error_shape_uses_body_text_as_is(api, content):
+    # 理由句（Bad Request）だけにせず、API が返した本文を見せる。JSON の書き方は httpx の版で変わるので、本文はバイト列で積む
+    api.reply_raw(content, status=400, headers={"content-type": "application/json"})
+    client, _ = _client(api)
+    with pytest.raises(BadRequestError) as e:
+        client.chat("hi")
+    assert e.value.message == content.decode()
 
 
 def test_error_message_from_text_body_is_truncated(api):

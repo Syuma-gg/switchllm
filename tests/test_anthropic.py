@@ -133,8 +133,10 @@ def test_stream_error_event(api):
             ("error", {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}),
         ]
     )
-    with pytest.raises(StreamError, match="Overloaded"):
+    with pytest.raises(StreamError) as e:
         list(api.client("anthropic:claude-sonnet-5-5").stream("hi"))
+    assert e.value.message == "Overloaded"  # API の文言をそのまま
+    assert e.value.body["error"]["type"] == "overloaded_error"
 
 
 def test_stream_with_truncated_tool_json_keeps_raw_arguments(api):

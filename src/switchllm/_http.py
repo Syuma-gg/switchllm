@@ -57,19 +57,30 @@ def _retry_after(response: httpx.Response) -> float | None:
     return min(max(seconds, 0.0), MAX_RETRY_AFTER)
 
 
-def _error_message(body: Any, fallback: str) -> str:
-    """OpenAI / Anthropic / Gemini いずれも ``{"error": {"message": ...}}`` 系の形。"""
+def _message_in(body: Any) -> str | None:
+    """OpenAI / Anthropic / Gemini いずれも ``{"error": {"message": ...}}`` 系の形。配列で包まれていれば先頭を見る。"""
+    if isinstance(body, list) and body:
+        body = body[0]
     if isinstance(body, dict):
         err = body.get("error")
         if isinstance(err, dict) and err.get("message"):
             return str(err["message"])
-        if isinstance(err, str):
+        if isinstance(err, str) and err:
             return err
         if body.get("message"):
             return str(body["message"])
-    if isinstance(body, str) and body:
-        return body[:500]
-    return fallback
+    return None
+
+
+def _error_message(body: Any, text: str, reason: str) -> str:
+    """API が返した文言を、手を加えずに取り出す。知らない形なら本文の先頭をそのまま使う
+    （HTTP の理由句だけにすると、API が何と言ったのかが分からなくなる）。"""
+    message = _message_in(body)
+    if message:
+        return message
+    if text.strip():
+        return text[:500]
+    return reason or "error"
 
 
 def make_api_error(provider: str, response: httpx.Response) -> APIError:
@@ -79,7 +90,7 @@ def make_api_error(provider: str, response: httpx.Response) -> APIError:
         body = response.text
     cls = error_for_status(response.status_code)
     return cls(
-        _error_message(body, response.reason_phrase or "error"),
+        _error_message(body, response.text, response.reason_phrase),
         provider=provider,
         status_code=response.status_code,
         body=body,

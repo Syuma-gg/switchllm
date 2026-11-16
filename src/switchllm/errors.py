@@ -25,7 +25,11 @@ class APIConnectionError(SwitchLLMError):
 
 
 class APIError(SwitchLLMError):
-    """プロバイダーがエラーを返した。"""
+    """プロバイダーがエラーを返した。
+
+    - ``message``: プロバイダーが返したエラーメッセージそのもの（``str(e)`` は前後にプロバイダー名と HTTP ステータスを付ける）
+    - ``body``: エラーの本文の全体（JSON なら解釈したもの、そうでなければ文字列）
+    """
 
     def __init__(
         self,
@@ -36,6 +40,7 @@ class APIError(SwitchLLMError):
         body: Any = None,
     ) -> None:
         super().__init__(f"[{provider}] {message}" + (f" (HTTP {status_code})" if status_code else ""))
+        self.message = message
         self.provider = provider
         self.status_code = status_code
         self.body = body

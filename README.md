@@ -110,7 +110,7 @@ def place_order(order: dict) -> str:
 ```
 
 - Tool definitions can also be dicts (`{"name", "description", "parameters"}`)
-- `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`. It is not sent unless you give it (every provider defaults to auto). Naming a tool that is not in `tools` raises `ConfigurationError` before sending
+- `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`. It is not sent unless you give it (every provider defaults to auto). Naming a tool that is not in `tools` raises `ConfigurationError` before sending. Some models reject `"required"` and a named tool (for example Anthropic's Opus 5.5 and Sonnet 5.5). The API's error is then raised as is as `BadRequestError`; switchllm never quietly changes it to `"auto"`
 - Parallel tool calls are supported (for Anthropic and Gemini, the results are sent together in one message)
 - `run_tool_calls` runs your functions with arguments chosen by the model. Validate the arguments in functions that do anything dangerous ([SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md), in Japanese)
 
@@ -132,6 +132,19 @@ client.chat("...", extra_by_provider={
 ### Errors
 
 Every provider raises the same exception classes: `AuthenticationError` (401/403) / `RateLimitError` (429) / `BadRequestError` (4xx) / `NotFoundError` (404) / `ServerError` (5xx) / `StreamError` / `APIConnectionError` / `ConfigurationError` / `UnsupportedFeatureError`.
+
+Errors returned by the provider are passed through unchanged. `e.message` is the API's own message, and `e.body` is the whole error body.
+
+```python
+from switchllm import APIError
+
+try:
+    client.chat("...", tools=[get_weather], tool_choice="required")
+except APIError as e:
+    print(e)          # [anthropic] tool_choice: type "tool" and "any" are not supported for this model. (HTTP 400)
+    print(e.message)  # only the API's message
+    print(e.body)     # {"type": "error", "error": {...}, "request_id": "req_..."}
+```
 
 429s, 5xx errors, and connection errors are retried automatically with exponential backoff (`max_retries=2`, honoring the `Retry-After` header). Streams are retried only before the first event arrives. See [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md) (in Japanese) for details.
 
