@@ -13,18 +13,23 @@
 - `extra=` による各社固有パラメータの受け渡しと、`extra_by_provider=` でプロバイダーごとに並べて書くこと（モデルを切り替えても、呼び出し側のコードを直さずに済む）
 - `register_provider()` による OpenAI 互換サーバーの追加
 
-## 今後足す候補
+## 足すと決めたもの
 
-| 候補 | 理由 |
+2026-11-18 に作者が決めた。選んだ基準は [基本方針](../design-docs/core-beliefs.md) の「機能を足すか絞るかの基準」で、進め方は [計画](../exec-plans/active/model-layer-features.md) にある。できたものから「やること」に移す。
+
+| 機能 | 理由 |
 |---|---|
-| 非同期クライアント（`AsyncClient`） | FastAPI などで使うのに必要。アダプターは同期版と共有でき、`_http.py` に async 版の送信関数を足すだけで済む設計になっている |
+| 履歴の JSON 保存・復元（推論情報を含む） | 今は復元すると推論情報が消え、DeepSeek ではツールを使う会話が 400 になる。保存の形式は公開後に変えにくい |
+| 構造化出力の共通パラメータ | コードで LLM を呼ぶときによく使うのに、今はモデルを変えるたびに書き方が変わる |
+| 推論の強さの共通パラメータ | 同上。指定の方法が各社で違い、世代でも変わるので、対応づけはモデルの一覧を持たずに済む形にする |
+| 非同期クライアント（`AsyncClient`） | エージェントフレームワークの多くや FastAPI は非同期で動く。アダプターは同期版と共有でき、`_http.py` に async 版の送信関数を足すだけで済む設計になっている |
+| すべてのアダプターに `headers=` | 今は Chat Completions 互換だけにあり、ゲートウェイを経由するとほかのアダプターへ切り替えられない |
+| PDF・ファイルの入力 | 文書を読ませる用途は多い。対応しない接続先には、送る前に `UnsupportedFeatureError` |
 
 ## やらないこと
 
 | やらないこと | 代わりの手段 |
 |---|---|
-| 推論の強さの共通パラメータ | `extra_by_provider=` で各社の形式を並べて渡す（OpenAI `reasoning` / Anthropic `thinking` / Gemini `generationConfig.thinkingConfig`）。指定方法がモデルの世代ごとに変わり、4アダプターで追い続けるのは重い |
-| 構造化出力の共通化 | `extra_by_provider=` で各社の形式を並べて渡す（OpenAI `text.format` / Gemini `generationConfig.responseSchema` など） |
 | 複数モデル間のフォールバック | `RateLimitError` などを捕まえて、`client.with_model()` で別モデルに切り替える |
 | 料金計算 | `Usage.details` の生の内訳を使う |
 | プロンプトキャッシュの制御 | なし（必要になったら再検討） |
@@ -37,5 +42,5 @@
 
 ## 未定（要望があれば検討）
 
-- PDF・ファイル入力、音声入力
+- 音声入力
 - Gemini の Interactions API への移行（[負債](../exec-plans/tech-debt-tracker.md)）
