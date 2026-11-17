@@ -12,7 +12,7 @@
 | [主要3社はネイティブ API を使う](native-apis.md) | 採用 | 一次情報で確認 |
 | [出力は OpenAI 形式ではなく独自の共通型](common-types.md) | 採用 | — |
 | [SDK を使わず httpx で直接呼ぶ](http-without-sdk.md) | 採用 | — |
-| [usage の意味を揃える](usage-normalization.md) | 採用 | 調査済み（出典は未記録）、実 API 未検証 |
+| [usage の意味を揃える](usage-normalization.md) | 採用 | 一次情報で確認、実 API 未検証 |
 | [@tool の自動変換は対応する型を固定する](tool-schema-scope.md) | 採用（2026-11-09） | — |
 | [プリセットは base_url を確認したものだけ](verified-presets.md) | 採用（2026-11-09） | 公式ドキュメントで確認 |
 | [公開 API を最小にする](minimal-public-api.md) | 採用（2026-11-09） | — |

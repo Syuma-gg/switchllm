@@ -22,7 +22,7 @@
 - `candidates[0].content.parts` の `text`（`thought: true` は推論）と `functionCall` を読む。再送用に `parts` 全体を `ProviderState` に入れる（`thoughtSignature` を含む）
 - `functionCall` に id がなければ仮 ID `switchllm_...` を振り、送り返すときは id を付けない（U6）
 - stop_reason: `STOP` は `end`、`MAX_TOKENS` は `max_tokens`、`SAFETY` などフィルタ系は `content_filter`。プロンプト自体がブロックされると `candidates` が空で `promptFeedback.blockReason` が入るので `content_filter`
-- usage: `promptTokenCount` と、`candidatesTokenCount + thoughtsTokenCount`（U14）
+- usage: `promptTokenCount` と、`candidatesTokenCount + thoughtsTokenCount`（U14）。`promptTokenCount` はキャッシュした内容を含む。`totalTokenCount` は「prompt + tool-use prompt + thoughts + response candidates」なので、candidates と thoughts は別に数えている（candidates が thoughts を含まないとは明記していないので、smoke test で total と内訳の和を比べる）
 
 ## ストリーミング
 
@@ -42,6 +42,8 @@
 - [Function calling](https://ai.google.dev/gemini-api/docs/generate-content/function-calling)
 - [OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
 - [API reference: FunctionCallingConfig](https://ai.google.dev/api/caching#FunctionCallingConfig)（2026-11-15 確認: mode は「If unspecified, the default value will be set to AUTO」）
+- [API reference: generateContent](https://ai.google.dev/api/generate-content) の UsageMetadata（2026-11-17 確認。aistudio.google.com/api-reference/generate-content へ転送される: `thoughtsTokenCount` は「Number of tokens of thoughts for thinking models」、`totalTokenCount` は「prompt + tool-use prompt + thoughts + response candidates」。U14）
+- [Models](https://ai.google.dev/gemini-api/docs/models) の「Latest」（2026-11-17 確認。aistudio.google.com/docs/models へ転送される: `gemini-flash-latest` のようなエイリアスは「Points to the latest release for a specific model variation」で、指す先を変える前に「A 2-week notice will be provided through email」。今どのモデルを指すかは書かれていない。U13）
 
 ## 関連する未検証の前提
 
