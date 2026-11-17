@@ -64,6 +64,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | `test_parallel_tool_calls` | 2つの都市を調べさせる。並列の呼び出しと、まとめて返す結果を受け付ける | ○ | 3 | |
 | `test_tool_error_result` | ツールの例外を `is_error` の結果として返しても受け付ける | ○ | 2 | |
 | `test_unicode_arguments` | 引用符・バックスラッシュ・日本語・絵文字を含む引数が JSON として読め、結果として送り返せる | ○ | 2 | |
+| `test_restored_history_continues` | ツールを呼んだ会話を `to_dict()` → JSON → 復元して続けても受け付ける（推論情報を送り返す。DeepSeek は送らないと 400） | | 2 | U11 |
 | `test_store_false`（OpenAI だけ） | `store: false` でツールを往復できる | | 2 | U1 |
 | `test_parameters_json_schema`（Gemini だけ） | `schema_field="parametersJsonSchema"` でツールを往復できる | | 2 | U4 |
 

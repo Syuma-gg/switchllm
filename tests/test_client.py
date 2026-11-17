@@ -137,7 +137,8 @@ def test_single_message_and_single_dict_are_accepted(api):
 @pytest.mark.parametrize(
     "messages",
     [
-        [{"role": "user", "content": [{"type": "text", "text": "OpenAI 形式の dict"}]}],
+        # OpenAI の Chat Completions の画像の形。Message.to_dict() の形ではないので読めない
+        [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "https://example.com/a.png"}}]}],
         [Message.user(["str はそのまま入れられない", ImagePart(data="AAAA")])],
         [Message.tool_result("call_1", {"not": "a string"})],
     ],
@@ -148,6 +149,15 @@ def test_content_that_adapters_cannot_read_is_rejected_before_sending(api, messa
     with pytest.raises(TypeError, match="TextPart / ImagePart"):
         api.client("openai:gpt-5.5").chat(messages)
     assert api.requests == []
+
+
+def test_text_part_dicts_are_read_and_sent(api):
+    # Message.to_dict() が書く形のパーツ（{"type": "text"} / {"type": "image"}）は読める
+    api.reply_json({"status": "completed", "output": [], "usage": {}})
+    api.client("openai:gpt-5.5").chat([{"role": "user", "content": [
+        {"type": "text", "text": "比べて"}, {"type": "image", "url": "https://example.com/a.png", "media_type": "image/png"}]}])
+    assert api.body()["input"][0]["content"] == [
+        {"type": "input_text", "text": "比べて"}, {"type": "input_image", "image_url": "https://example.com/a.png"}]
 
 
 def test_close_only_closes_own_http_client():

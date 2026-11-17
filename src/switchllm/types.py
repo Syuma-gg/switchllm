@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import mimetypes
 from dataclasses import dataclass, field
@@ -143,20 +144,56 @@ class Message:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Message":
-        """``{"role": "user", "content": "..."}`` 形式の dict を受け付ける。"""
+        """dict からメッセージを作る。``to_dict()`` の結果を、推論情報（``provider_state``）ごと元に戻せる。
+
+        ``{"role": "user", "content": "..."}`` のような簡単な形も受け付ける。
+        ``content`` が ``None``（OpenAI の形で、ツールだけを呼んだ assistant）なら空にする。
+        知らない種類のパーツは変換せずに残し、送る前の検査で ``TypeError`` にする（黙って落とさない）。
+        """
         role = d["role"]
+        content = d.get("content")
         if role == "tool":
             return cls.tool_result(
                 d.get("tool_call_id") or d.get("id") or "",
-                str(d.get("content", "")),
+                "" if content is None else str(content),
                 name=d.get("name"),
                 is_error=bool(d.get("is_error", False)),
             )
         calls = [
-            c if isinstance(c, ToolCall) else ToolCall(id=c["id"], name=c["name"], arguments=c.get("arguments", {}))
-            for c in d.get("tool_calls", [])
+            c if isinstance(c, ToolCall) else ToolCall(
+                id=c["id"], name=c["name"], arguments=c.get("arguments") or {}, raw_arguments=c.get("raw_arguments"),
+            )
+            for c in d.get("tool_calls") or []
         ]
-        return cls(role=role, content=d.get("content", ""), tool_calls=calls)
+        if content is None:
+            content = ""
+        elif isinstance(content, list):
+            content = [_part_from_dict(p) for p in content]
+        state = d.get("provider_state")
+        if isinstance(state, dict):
+            state = ProviderState(state["provider"], state["model"], state["raw"])
+        return cls(role=role, content=content, tool_calls=calls, name=d.get("name"), provider_state=state)
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON にそのまま書ける dict にする。``from_dict()`` で元に戻せる。
+
+        推論情報（``provider_state``）も含むので、保存した会話を復元しても、署名や推論を落とさずに
+        送り返せる。``Client.chat()`` は、この dict のリストをそのまま受け取る。既定値の項目は省く。
+        """
+        d: dict[str, Any] = {"role": self.role}
+        d["content"] = self.content if isinstance(self.content, str) else [_part_to_dict(p) for p in self.content]
+        if self.tool_calls:
+            d["tool_calls"] = [_call_to_dict(tc) for tc in self.tool_calls]
+        if self.tool_call_id is not None:
+            d["tool_call_id"] = self.tool_call_id
+        if self.name is not None:
+            d["name"] = self.name
+        if self.is_error:
+            d["is_error"] = True
+        if self.provider_state is not None:
+            st = self.provider_state
+            d["provider_state"] = {"provider": st.provider, "model": st.model, "raw": copy.deepcopy(st.raw)}
+        return d
 
     # ---- 便利プロパティ ---- #
     def parts(self) -> list[Part]:
@@ -169,6 +206,34 @@ class Message:
         if isinstance(self.content, str):
             return self.content
         return "".join(p.text for p in self.content if isinstance(p, TextPart))
+
+
+def _part_to_dict(p: Any) -> Any:
+    if isinstance(p, TextPart):
+        return {"type": "text", "text": p.text}
+    if isinstance(p, ImagePart):
+        out: dict[str, Any] = {"type": "image", "media_type": p.media_type}
+        if p.data is not None:
+            out["data"] = p.data
+        if p.url is not None:
+            out["url"] = p.url
+        return out
+    return p  # 知らないものは変えずに残す（送る前の検査が TypeError にする）
+
+
+def _part_from_dict(p: Any) -> Any:
+    if isinstance(p, dict) and p.get("type") == "text":
+        return TextPart(p.get("text", ""))
+    if isinstance(p, dict) and p.get("type") == "image":
+        return ImagePart(data=p.get("data"), url=p.get("url"), media_type=p.get("media_type", "image/png"))
+    return p
+
+
+def _call_to_dict(tc: ToolCall) -> dict[str, Any]:
+    out: dict[str, Any] = {"id": tc.id, "name": tc.name, "arguments": copy.deepcopy(tc.arguments)}
+    if tc.raw_arguments is not None:
+        out["raw_arguments"] = tc.raw_arguments
+    return out
 
 
 # --------------------------------------------------------------------------- #

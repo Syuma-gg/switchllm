@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
+import json
+
 import pytest
 from e2e_support import ASK_AGAIN, MAX_TOKENS, TOOLS, answered, ask_tool_call, describe_reasoning, tool_roundtrip
 
@@ -159,6 +161,17 @@ def test_unicode_arguments(client, note):
     msgs += [res.message, *run_tool_calls([echo], res.tool_calls)]
     answered(client.chat(msgs, tools=[echo], max_tokens=MAX_TOKENS), " after unicode result")
     note(f"一字一句同じ: {call.arguments['text'] == target}（{call.arguments['text']!r}）")
+
+
+@pytest.mark.premise("U11")
+@pytest.mark.calls(2)
+def test_restored_history_continues(client, note):
+    # 保存した会話（to_dict → JSON）を復元して続ける。推論情報を落とすと、DeepSeek は 400 を返す
+    msgs, first = ask_tool_call(client)
+    msgs += [first.message, *run_tool_calls(TOOLS, first.tool_calls)]
+    restored = json.loads(json.dumps([m.to_dict() for m in msgs]))
+    answered(client.chat(restored, tools=TOOLS, max_tokens=MAX_TOKENS), " after restoring the history")
+    note(describe_reasoning(first))
 
 
 @pytest.mark.only("openai")

@@ -13,6 +13,7 @@
 - テキストの送受信（`chat()`）とストリーミング（`stream()`）
 - ツール呼び出し（並列を含む）。`@tool` で関数から JSON Schema を作り、`run_tool_calls()` でまとめて実行する
 - ツールを往復させるときに、署名や推論情報（Gemini の thoughtSignature、Anthropic の thinking、OpenAI の reasoning、DeepSeek の reasoning_content）を落とさない
+- 履歴の JSON 保存・復元（`Message.to_dict()` / `from_dict()`）。推論情報（署名・推論）も残すので、復元した会話でも送り返せる。`chat()` は保存した dict のリストをそのまま受け取る
 - 会話の途中でのプロバイダーの切り替え（履歴の変換）。Anthropic のモデルどうしの切り替えでは、thinking ブロックを捨てずにそのまま送る
 - 画像入力（`ImagePart`）
 - 共通の例外（基底は `SwitchLLMError`）と自動リトライ。プロバイダーが返したエラーは、文言（`message`）と本文の全体（`body`）をそのまま持つ

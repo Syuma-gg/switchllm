@@ -115,6 +115,21 @@ def place_order(order: dict) -> str:
 - 並列ツール呼び出しにも対応（Anthropic・Gemini では結果を1メッセージにまとめて送る）
 - `run_tool_calls` は、モデルが決めた引数で関数を実行する。危険な操作をする関数では引数を検証すること（[SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md)）
 
+### 履歴の保存と復元
+
+```python
+import json
+
+saved = json.dumps([m.to_dict() for m in messages], ensure_ascii=False)   # ファイルやデータベースに保存する
+
+messages = json.loads(saved)                           # chat() は dict のまま受け取る
+res = client.chat(messages + [{"role": "user", "content": "明日は？"}], tools=[get_weather])
+```
+
+- `to_dict()` は生データ（`provider_state`）も残すので、復元した会話でも署名や推論を落とさずに送り返せる。残さないと、復元したツールの会話が失敗したり（DeepSeek は 400 を返す）、モデルの推論が引き継がれなかったりする
+- 1つの dict を `Message` に戻すときは `Message.from_dict()`
+- 読み込むのは自分で保存した履歴だけにする。生データはそのままプロバイダーに送られる
+
 ### プロバイダー固有の機能
 
 共通化できないパラメータは、各社の形式のまま `extra_by_provider=` に並べて書く。送るのはモデル文字列で選んだプロバイダーの分だけなので、モデルを切り替えても呼び出し側のコードは変わらない。書いていないプロバイダーには何も足さない。キーはモデル文字列の `provider:` 部分（`google:` で指定するなら `"google"`）。

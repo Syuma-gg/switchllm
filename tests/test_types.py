@@ -19,7 +19,9 @@ def test_from_dict_assistant_with_tool_calls():
     })
     assert m.text == "調べます"
     assert m.tool_calls == [ToolCall(id="c1", name="f", arguments={"x": 1}), call]
-    assert m.provider_state is None  # dict から作ったものは生データを持たない（別モデル扱いで変換し直す）
+    # provider_state のない dict（手で書いた履歴）は生データを持たないので、共通型から変換し直す。
+    # to_dict() の結果は provider_state を持つ（tests/test_history.py）
+    assert m.provider_state is None
 
 
 def test_text_and_parts_of_list_content():

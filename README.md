@@ -115,6 +115,21 @@ def place_order(order: dict) -> str:
 - Parallel tool calls are supported (for Anthropic and Gemini, the results are sent together in one message)
 - `run_tool_calls` runs your functions with arguments chosen by the model. Validate the arguments in functions that do anything dangerous ([SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md), in Japanese)
 
+### Saving and restoring history
+
+```python
+import json
+
+saved = json.dumps([m.to_dict() for m in messages])   # store it in a file or a database
+
+messages = json.loads(saved)                           # chat() accepts the dicts as they are
+res = client.chat(messages + [{"role": "user", "content": "And tomorrow?"}], tools=[get_weather])
+```
+
+- `to_dict()` keeps the raw data (`provider_state`) too, so a restored conversation still sends back signatures and reasoning. Without it, a restored tool conversation can fail (DeepSeek returns 400) or lose the model's reasoning
+- `Message.from_dict()` turns one dict back into a `Message`
+- Load only history that you saved yourself: the raw data is sent to the provider unchanged
+
 ### Provider-specific features
 
 Parameters that cannot be unified are written in each provider's own format, side by side, in `extra_by_provider=`. Only the part for the provider chosen by the model string is sent, so switching models does not change the calling code. Providers you leave out get nothing extra. The keys are the `provider:` part of the model string (use `"google"` if you write `google:`).

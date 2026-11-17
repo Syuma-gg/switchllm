@@ -34,6 +34,7 @@
 | リトライ、例外 | B | `tests/test_http.py` | 接続エラー、`Retry-After`、エラー本体の解釈、ストリームの途中の切断。実際の 429 / 5xx / 切断での挙動は未確認 |
 | プロバイダーの切り替え | B | `tests/test_cross_provider.py`、`tests/test_consistency.py`、`tests/test_client.py` | 履歴の変換、4アダプターで同じ振る舞いになること、`with_model()`、`extra_by_provider`。U5、U8、U16、U17 |
 | 共通型 | B | `tests/test_types.py` | `Message.from_dict`、`ToolCall.arguments_json`、`ImagePart` |
+| 履歴の保存・復元 | B | `tests/test_history.py` | `to_dict` / `from_dict` の往復、4アダプターで復元した履歴から同じリクエストを送れること。実 API では未確認（E2E の `test_restored_history_continues`） |
 | `@tool`、`run_tool_calls` | B | `tests/test_tools.py` | 生成したスキーマを各社が受け付けるかは実 API で確認する |
 | 画像入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py` | 4アダプターのリクエスト形状、Gemini の URL 拒否、`from_file` の形式判定。実 API では未確認 |
 | SSE パース | B | `tests/test_client.py` | |

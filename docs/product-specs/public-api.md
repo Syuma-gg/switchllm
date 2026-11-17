@@ -13,7 +13,7 @@
 | `parse_model` | 関数 | `"provider:model"` を最初の `:` で分解する |
 | `MODEL_ENV` | 定数 | モデル文字列を読む環境変数の名前（`"SWITCHLLM_MODEL"`） |
 | `register_provider` | 関数 | OpenAI 互換サーバーなどを名前付きで登録する |
-| `Message` | クラス | 会話の1メッセージ。`Message.user()` / `system()` / `assistant()` / `tool_result()` |
+| `Message` | クラス | 会話の1メッセージ。`Message.user()` / `system()` / `assistant()` / `tool_result()`。`to_dict()` / `from_dict()` で、推論情報（`provider_state`）ごと JSON に保存・復元できる（[判断](../design-docs/history-serialization.md)） |
 | `TextPart` | クラス | テキストのパーツ |
 | `ImagePart` | クラス | 画像のパーツ（base64 か URL）。`ImagePart.from_file()` |
 | `ToolCall` | クラス | モデルが要求したツール呼び出し |
@@ -48,7 +48,7 @@
 | `Usage.details` | プロバイダーが返した生の内訳 |
 | `ToolCall.arguments` | 常に dict。JSON として壊れていたら `{}` にし、原文を `raw_arguments` に残す |
 | `stream()` の `done` | 最後に1回だけ届く。`response` は非ストリーミングの `chat()` と同じ内容。終わりの合図が来ないまま接続が閉じたら、`done` ではなく `StreamError` |
-| `Response.message.provider_state` | プロバイダーの生データ。利用者は触らず、メッセージごと履歴に積む |
+| `Response.message.provider_state` | プロバイダーの生データ。利用者は触らず、メッセージごと履歴に積む。保存するときは `to_dict()` に含まれる |
 
 ## プリセット
 
