@@ -67,10 +67,10 @@ jobs:
         run: python -m pytest
       - name: pytest with the installed wheel
         working-directory: sdist
-        # pythonpath から src を外し、site-packages の switchllm を import させる（scripts/ はテストが使う）
+        # pythonpath から src を外し、site-packages の switchllm を import させる（scripts/ と e2e/ はテストが使う）
         run: |
           python -c "import switchllm; assert 'site-packages' in switchllm.__file__, switchllm.__file__"
-          python -m pytest -o pythonpath=scripts
+          python -m pytest -o "pythonpath=scripts e2e"
 
   publish-testpypi:
     name: publish to TestPyPI

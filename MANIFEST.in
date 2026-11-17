@@ -1,10 +1,14 @@
 # sdist に入れる追加のファイル。sdist を展開した先で python -m pytest が全部通るようにする
 # （tests/test_docs.py が CLAUDE.md・README・ARCHITECTURE.md・docs/ を、
-#   tests/test_quality_gate.py が scripts/ を、tests/test_harness.py が harness/ と .claude/settings.json を読む）。
+#   tests/test_quality_gate.py が scripts/ を、tests/test_harness.py が harness/ と .claude/settings.json を、
+#   tests/test_recording.py が e2e/ を読む。e2e/ は testpaths にも入っている）。
+# e2e/recordings/（実 API の応答の記録）は大きくなるので入れない。sdist では記録の再生が 0 件になる。
 # wheel には影響しない。
 include CHANGELOG.md README.ja.md ARCHITECTURE.md CLAUDE.md .claude/settings.json
 graft docs
 graft scripts
 graft tests
+graft e2e
+prune e2e/recordings
 graft harness
 global-exclude __pycache__ *.py[cod]

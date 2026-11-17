@@ -13,6 +13,7 @@
 | [PLANS.md](PLANS.md) | 実行計画の書き方と一覧（進行中 / 完了） |
 | [exec-plans/tech-debt-tracker.md](exec-plans/tech-debt-tracker.md) | 既知の負債 |
 | [QUALITY_SCORE.md](QUALITY_SCORE.md) | 領域ごとの品質評価 |
+| [testing.md](testing.md) | テストの方針（テスト駆動の手順、テストの3つの層、実 API の記録と再生） |
 | [e2e-tests.md](e2e-tests.md) | 実 API に対する E2E テストの回し方と、テストケース（境界値を含む）の一覧 |
 | [quality-gates.md](quality-gates.md) | 品質検査の方針（原則、仕組み、落ちたときの直し方）。テンプレートの写しで、switchllm 用には書き換えない |
 | [RELIABILITY.md](RELIABILITY.md) | タイムアウト、リトライ、ストリーミングが失敗したときの扱い |

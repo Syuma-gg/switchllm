@@ -1,23 +1,38 @@
-"""実 API を呼ぶ E2E テストの設定。**料金が発生する**（ollama / lmstudio は除く）。詳細は docs/e2e-tests.md。
+"""E2E テストの設定（docs/e2e-tests.md、docs/testing.md）。
 
-    python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" --collect-only -q   # 回数を見るだけ
-    python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5"
+- **実 API で回す**（料金が発生する。ollama / lmstudio は除く）::
 
-既定の ``python -m pytest`` は tests/ だけを回すので、ここは含まれない（pyproject.toml の testpaths）。
+      python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" --collect-only -q   # 回数を見るだけ
+      python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" --record          # 回して記録する
+
+- **記録を再生する**（``--models`` を渡さないとき。ネットワークを使わない）。既定の ``python -m pytest`` にも入る。
+  記録は e2e/recordings/ にあり、ライブラリが記録と違うリクエストを送るようになったら失敗する
 """
 
 from __future__ import annotations
 
+import datetime
 import os
+from pathlib import Path
 from collections.abc import Callable, Iterator
+from typing import Any
 
+import httpx
 import pytest
+from e2e_recording import RECORDINGS, Recorder, Replayer, load, recording_path, save
 from e2e_support import VISION_ADAPTERS, adapter_of, pairs, relevant, requires_key, split_models, switch_premises
 
+import switchllm
 from switchllm import Client, SwitchLLMError
+from switchllm.providers import ADAPTERS, PRESETS
 
+LIVE = pytest.StashKey[bool]()
 MODELS = pytest.StashKey[list[str]]()
-CLIENTS = pytest.StashKey[dict[str, Client]]()
+PAIRS = pytest.StashKey[list[tuple[str, str]]]()
+REPORTS = pytest.StashKey[dict[str, pytest.TestReport]]()
+
+REPLAY_KEY = "switchllm-replay-key"  # 再生ではネットワークを使わないので、キーは何でもよい
+E2E_DIR = Path(__file__).parent
 
 MARKERS = (
     "calls(n): このテストが API を呼ぶ最大の回数（収集したときに合計を表示する）",
@@ -33,43 +48,72 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--models",
         default=os.environ.get("SWITCHLLM_E2E_MODELS", ""),
-        help="試すモデル文字列をカンマ区切りで（環境変数 SWITCHLLM_E2E_MODELS でも可）。隣どうしで切り替えも試す",
+        help="実 API で試すモデル文字列をカンマ区切りで（環境変数 SWITCHLLM_E2E_MODELS でも可）。"
+        "渡さなければ、記録を再生する",
     )
     group.addoption(
         "--vision-models",
         default=os.environ.get("SWITCHLLM_E2E_VISION_MODELS", ""),
         help="画像のテストも回す Chat Completions 互換のモデル（カンマ区切り）",
     )
+    group.addoption("--record", action="store_true", help="実 API のやりとりを e2e/recordings/ に記録する（通ったテストだけ）")
+
+
+def _recorded() -> list[dict[str, Any]]:
+    return [load(p)[0] for p in sorted(RECORDINGS.rglob("*.json"))]
 
 
 def pytest_configure(config: pytest.Config) -> None:
     for line in MARKERS:
         config.addinivalue_line("markers", line)
     models = split_models(config.getoption("--models"))
-    if not models:
-        raise pytest.UsageError(
-            "E2E tests call real APIs and cost money. Pass the models to try, e.g. "
-            '--models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" (or set SWITCHLLM_E2E_MODELS). '
-            "Add --collect-only to see how many calls they make without calling any API."
-        )
-    for model in models:
-        try:
-            adapter_of(model)
-        except ValueError as e:
-            raise pytest.UsageError(str(e)) from None
+    live = bool(models)
+    if config.getoption("--record") and not live:
+        raise pytest.UsageError("--record records real API responses, so it needs --models (and costs money)")
+    if live:
+        for model in models:
+            try:
+                adapter_of(model)
+            except ValueError as e:
+                raise pytest.UsageError(str(e)) from None
+        found_pairs = pairs(models)
+    else:
+        metas = _recorded()
+        models = sorted({m for meta in metas if "pair" not in meta for m in meta["models"]})
+        found_pairs = sorted({tuple(meta["pair"]) for meta in metas if "pair" in meta})
+    config.stash[LIVE] = live
     config.stash[MODELS] = models
+    config.stash[PAIRS] = found_pairs
+    config.stash[REPORTS] = {}
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    models = metafunc.config.stash[MODELS]
     if "model" in metafunc.fixturenames:
+        models = metafunc.config.stash[MODELS]
         metafunc.parametrize("model", models, ids=models)
     if "pair" in metafunc.fixturenames:
-        found = pairs(models)
+        found = metafunc.config.stash[PAIRS]
         metafunc.parametrize("pair", found, ids=[f"{a}->{b}" for a, b in found])
 
 
-def _applies(item: pytest.Item, model: str, vision_models: list[str]) -> bool:
+def _params(item: pytest.Item) -> dict[str, Any]:
+    callspec = getattr(item, "callspec", None)
+    return callspec.params if callspec is not None else {}
+
+
+def _has_params(item: pytest.Item) -> bool:
+    # 渡すものがない（モデルが1つで切り替えの組がない、再生する記録がない）と、pytest は中身のない値で
+    # テストを1つ作る。それは外す
+    params = _params(item)
+    return isinstance(params["model"], str) if "model" in params else isinstance(params.get("pair"), tuple)
+
+
+def _applies(item: pytest.Item, vision_models: list[str]) -> bool:
+    """実 API で回すときに、このモデルでこのテストを作るか。"""
+    params = _params(item)
+    if "model" not in params:
+        return True
+    model = params["model"]
     only = item.get_closest_marker("only")
     if only is not None and adapter_of(model) not in only.args:
         return False
@@ -81,8 +125,7 @@ def _applies(item: pytest.Item, model: str, vision_models: list[str]) -> bool:
 
 
 def _premises(item: pytest.Item) -> tuple[str, ...]:
-    params = getattr(item, "callspec", None)
-    params = params.params if params is not None else {}
+    params = _params(item)
     if "pair" in params:
         return switch_premises(*params["pair"])
     mark = item.get_closest_marker("premise")
@@ -92,55 +135,133 @@ def _premises(item: pytest.Item) -> tuple[str, ...]:
 
 
 def _models_of(item: pytest.Item) -> list[str]:
-    params = item.callspec.params if hasattr(item, "callspec") else {}
+    params = _params(item)
     return [params["model"]] if "model" in params else list(params.get("pair", ()))
 
 
+def _recording_of(item: pytest.Item) -> Path:
+    return recording_path(RECORDINGS, item.path.stem, item.name)
+
+
+def _is_e2e(item: pytest.Item) -> bool:
+    # pytest_collection_modifyitems などはセッション全体のフックなので、tests/ のテストにも呼ばれる
+    return E2E_DIR in item.path.parents
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    # 対象外のモデルには、skip ではなく、最初からテストを作らない（品質検査は skip を増やさない）
+    # 対象外のものには、skip ではなく、最初からテストを作らない（品質検査は skip を増やさない）。
+    # 再生では、記録のあるものだけを残す
+    live = config.stash[LIVE]
     vision_models = split_models(config.getoption("--vision-models"))
     keep, drop = [], []
     for item in items:
-        params = item.callspec.params if hasattr(item, "callspec") else {}
-        if "model" in params:
-            ok = _applies(item, params["model"], vision_models)
+        if not _is_e2e(item):
+            ok = True
+        elif not _has_params(item):
+            ok = False
         else:
-            # モデルが1つなら切り替えの組がなく、pytest は中身のない組を作る。それも外す
-            ok = isinstance(params.get("pair"), tuple)
+            # 記録があるのは、記録したときに対象だったテストだけなので、再生では記録の有無だけを見る
+            ok = _applies(item, vision_models) if live else _recording_of(item).is_file()
         (keep if ok else drop).append(item)
     if drop:
         config.hook.pytest_deselected(items=drop)
         items[:] = keep
-    for item in items:
+    e2e_items = [item for item in items if _is_e2e(item)]
+    for item in e2e_items:
         item.user_properties.append(("premises", _premises(item)))
 
-    if config.option.collectonly:
+    if not live or config.option.collectonly:
         return
-    # キーが足りないと、途中まで料金を払ってから止まる。API を呼ぶ前に、すべてのクライアントを作る
-    used = list(dict.fromkeys(m for item in items for m in _models_of(item)))
-    try:
-        config.stash[CLIENTS] = {m: Client(m) for m in used}
-    except SwitchLLMError as e:
-        pytest.exit(f"設定の誤り（API を呼ぶ前に止めた）: {e}", returncode=2)
+    # キーが足りないと、途中まで料金を払ってから止まる。API を呼ぶ前に、すべてのクライアントを作ってみる
+    for model in dict.fromkeys(m for item in e2e_items for m in _models_of(item)):
+        try:
+            Client(model).close()
+        except SwitchLLMError as e:
+            pytest.exit(f"設定の誤り（API を呼ぶ前に止めた）: {e}", returncode=2)
 
 
-def pytest_report_collectionfinish(config: pytest.Config, items: list[pytest.Item]) -> str:
+def pytest_report_collectionfinish(config: pytest.Config, items: list[pytest.Item]) -> str | None:
+    items = [item for item in items if _is_e2e(item)]
+    if not config.stash[LIVE]:
+        return f"switchllm E2E: 記録を再生する（{len(items)} 件。ネットワークは使わない）" if items else None
     calls = sum(int(m.args[0]) for item in items for m in [item.get_closest_marker("calls")] if m is not None)
-    models = ", ".join(config.stash[MODELS])
-    return f"switchllm E2E: API を最大 {calls} 回呼ぶ（リトライを除く。料金が発生する）。モデル: {models}"
+    record = "e2e/recordings/ に記録する" if config.getoption("--record") else "記録しない（--record で記録する）"
+    return (f"switchllm E2E: 実 API を最大 {calls} 回呼ぶ（リトライを除く。料金が発生する）。{record}。"
+            f"モデル: {', '.join(config.stash[MODELS])}")
 
 
-def pytest_sessionfinish(session: pytest.Session) -> None:
-    for client in session.config.stash.get(CLIENTS, {}).values():
-        client.close()
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Iterator[None]:
+    report = yield
+    if report.when == "call" or not report.passed:
+        item.config.stash[REPORTS][item.nodeid] = report
+    return report
 
 
 # --------------------------------------------------------------------------- #
 # fixture
 # --------------------------------------------------------------------------- #
+def _secrets(extra: list[str]) -> list[str]:
+    """記録から消す値: 各プロバイダーのキーの環境変数の値と、テストで渡したキー。"""
+    envs = {e for cls in ADAPTERS.values() for e in cls.api_key_env}
+    envs |= {e for p in PRESETS.values() for e in (p.api_key_env or ())}
+    return [os.environ[e] for e in envs if os.environ.get(e)] + extra
+
+
 @pytest.fixture
-def client(request: pytest.FixtureRequest, model: str) -> Client:
-    return request.config.stash[CLIENTS][model]
+def make_client(request: pytest.FixtureRequest) -> Iterator[Callable[..., Client]]:
+    """このテスト用のクライアントを作る。実 API なら記録し、再生なら記録した応答を返す。"""
+    config = request.config
+    live = config.stash[LIVE]
+    path = _recording_of(request.node)
+    recorder = replayer = None
+    if live:
+        recorder = Recorder(httpx.HTTPTransport())
+        transport: httpx.BaseTransport = recorder
+    else:
+        _, exchanges = load(path)
+        replayer = Replayer(exchanges)
+        transport = httpx.MockTransport(replayer)
+    http = httpx.Client(transport=transport, timeout=httpx.Timeout(120.0, connect=10.0))
+    passed_keys: list[str] = []
+
+    def make(model: str, **kw: Any) -> Client:
+        if not live:
+            kw.setdefault("retry_backoff", 0)
+            if requires_key(model):
+                kw.setdefault("api_key", REPLAY_KEY)
+        if kw.get("api_key"):
+            passed_keys.append(kw["api_key"])
+        return Client(model, http_client=http, **kw)
+
+    yield make
+    http.close()
+
+    report = config.stash[REPORTS].get(request.node.nodeid)
+    if replayer is not None and report is not None and report.passed:
+        unused = replayer.unused()
+        assert not unused, f"{unused} recorded request(s) were not sent. Re-record with --models ... --record"
+    if recorder is not None and config.getoption("--record") and report is not None and report.passed:
+        params = _params(request.node)
+        meta: dict[str, Any] = {
+            "nodeid": request.node.nodeid,
+            "models": _models_of(request.node),
+            "recorded_at": datetime.date.today().isoformat(),
+            "switchllm_version": switchllm.__version__,
+        }
+        if "pair" in params:
+            meta["pair"] = list(params["pair"])
+        save(path, meta, recorder.exchanges, secrets=_secrets(passed_keys))
+
+
+def replay_kw(config: pytest.Config, model: str) -> dict[str, Any]:
+    """with_model() で別のプロバイダーへ切り替えるときに足す引数（再生では、キーの環境変数がなくてもよいように）。"""
+    return {"api_key": REPLAY_KEY} if not config.stash[LIVE] and requires_key(model) else {}
+
+
+@pytest.fixture
+def client(make_client: Callable[..., Client], model: str) -> Client:
+    return make_client(model)
 
 
 @pytest.fixture
@@ -159,26 +280,27 @@ def note(request: pytest.FixtureRequest) -> Callable[[str], None]:
 
 
 @pytest.fixture
-def switch_clients(request: pytest.FixtureRequest, pair: tuple[str, str]) -> Iterator[tuple[Client, Client]]:
+def switch_clients(request: pytest.FixtureRequest, make_client: Callable[..., Client],
+                   pair: tuple[str, str]) -> Iterator[tuple[Client, Client]]:
     a, b = pair
-    first = request.config.stash[CLIENTS][a]
-    other = first.with_model(b)  # 切り替えは with_model() で（利用者と同じ使い方）
+    first = make_client(a)
+    other = first.with_model(b, **replay_kw(request.config, b))  # 切り替えは with_model() で（利用者と同じ使い方）
     yield first, other
     other.close()
 
 
 # --------------------------------------------------------------------------- #
-# 最後の一覧
+# 最後の一覧（実 API で回したときだけ）
 # --------------------------------------------------------------------------- #
 def _finished(tr: pytest.TerminalReporter) -> list[pytest.TestReport]:
-    """各テストの結果（本体の結果と、準備で失敗したもの）を、実行した順に返す。"""
+    """各テストの結果（本体の結果と、準備で失敗したもの）を返す。"""
     reports = [r for rs in tr.stats.values() for r in rs if isinstance(r, pytest.TestReport)]
     return [r for r in reports if r.when == "call" or (r.when == "setup" and not r.passed)]
 
 
 def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter, config: pytest.Config) -> None:
-    reports = _finished(terminalreporter)
-    if not reports:
+    reports = [r for r in _finished(terminalreporter) if "e2e" in r.nodeid.split("/")[0]]
+    if not config.stash[LIVE] or not reports:
         return
     tr = terminalreporter
     tr.section("switchllm E2E: U 番号ごとの結果")
@@ -196,3 +318,6 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter, config: p
         notes = [v for k, v in r.user_properties if k == "note"]
         if notes:
             tr.write_line(f"[{r.outcome.upper()}] {r.nodeid.split('::', 1)[-1]}: " + " / ".join(notes))
+    if config.getoption("--record"):
+        saved = sum(r.passed for r in reports)
+        tr.write_line(f"\n記録した: {saved} 件（e2e/recordings/）。失敗したテストは記録していない（前の記録があれば残る）")

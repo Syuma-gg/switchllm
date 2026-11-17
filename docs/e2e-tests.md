@@ -2,7 +2,7 @@
 
 `e2e/` のテストは、ライブラリの関数（`Client.chat()` / `stream()` / `with_model()` / `run_tool_calls()`）を、本物の API に対して呼ぶ。**料金が発生する**（`ollama` / `lmstudio` は除く）。
 
-ネットワークを使わないテスト（`tests/`）と分けて置き、既定の `python -m pytest` には入らない（`pyproject.toml` の `testpaths`）。品質検査（Stop フックと CI）にも入らない。
+`--models` を渡したときだけ実 API を呼ぶ。渡さなければ、実 API で記録したやりとり（`e2e/recordings/`）を再生するだけで、ネットワークを使わない。再生は既定の `python -m pytest`、品質検査（Stop フックと CI）にも入る。記録と再生の決まりは [テストの方針](testing.md) にある。
 
 ## 回し方
 
@@ -10,16 +10,20 @@
 # 何を何回呼ぶかを見るだけ（API は呼ばない。キーも要らない）
 python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" --collect-only -q
 
-# 実行する（料金が発生する）
-python -m pytest e2e --models "anthropic:claude-sonnet-5-5,anthropic:claude-haiku-5-5,openai:gpt-5.5,gemini:gemini-flash-latest,deepseek:deepseek-flash,ollama:<model>,lmstudio:<model>"
+# 実行して記録する（料金が発生する）
+python -m pytest e2e --models "anthropic:claude-sonnet-5-5,anthropic:claude-haiku-5-5,openai:gpt-5.5,gemini:gemini-flash-latest,deepseek:deepseek-flash,ollama:<model>,lmstudio:<model>" --record
+
+# 記録を再生する（料金なし。python -m pytest でも回る）
+python -m pytest e2e
 
 # 一部だけ
 python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 ```
 
-- `--models`（または環境変数 `SWITCHLLM_E2E_MODELS`）に、試すモデル文字列をカンマ区切りで渡す。渡さなければ、何も呼ばずに使い方の誤りとして止まる
+- `--models`（または環境変数 `SWITCHLLM_E2E_MODELS`）に、試すモデル文字列をカンマ区切りで渡す。渡さなければ、記録を再生する
+- `--record` を付けると、通ったテストのやりとりを `e2e/recordings/` に記録する。付けずに実 API で回しても、記録は残らない。`--record` だけを付けて `--models` を渡さなければ、使い方の誤りとして止まる
 - 実行の前に、すべてのモデルのクライアントを作る。キーが足りなければ、API を呼ぶ前に止まる
-- 最後に「U 番号ごとの結果」（[実 API 検証](exec-plans/active/real-api-verification.md) の表と対応）と、テストごとの観察メモ（推論情報が返ったか、API が拒否したときの文言など）を表示する。表の「結果」列にはここから書き写す
+- 実 API で回したときは、最後に「U 番号ごとの結果」（[実 API 検証](exec-plans/active/real-api-verification.md) の表と対応）と、テストごとの観察メモ（推論情報が返ったか、API が拒否したときの文言など）を表示する。表の「結果」列にはここから書き写す
 - `--vision-models` に挙げた Chat Completions 互換のモデルでは、画像のテストも回す（OpenAI・Anthropic・Gemini のモデルでは常に回す）
 - Claude Code が実行するときは、モデルと料金の目安を伝えて、ユーザーの了承を得てから（[CLAUDE.md](../CLAUDE.md)）
 

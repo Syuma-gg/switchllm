@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import WEATHER_TOOL
+from sample_tools import WEATHER_TOOL
 from switchllm import ConfigurationError, ImagePart, Message, TextPart, ToolCall, UnsupportedFeatureError
 from switchllm.providers.gemini import SYNTHETIC_ID_PREFIX
 

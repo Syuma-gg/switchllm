@@ -83,9 +83,3 @@ class FakeAPI:
 def api() -> FakeAPI:
     return FakeAPI()
 
-
-WEATHER_TOOL = {
-    "name": "get_weather",
-    "description": "現在の天気を返す",
-    "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
-}

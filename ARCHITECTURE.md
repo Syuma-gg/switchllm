@@ -72,9 +72,11 @@ providers/     Provider   parse_response() / parse_stream(): 各社の JSON → 
 | `tests/test_docs.py` | リンク切れ、索引漏れ、公開 API・プリセット・オプションの一覧の一致、CLAUDE.md の長さ |
 | `tests/test_quality_gate.py` | 品質検査（`scripts/quality_gate.py`）の判定、`noqa`・`pragma: no cover` に理由があること |
 | `tests/test_harness.py` | 品質検査のファイル・Stop フック・CLAUDE.md の節が、テンプレート（`harness/quality-gate/`）と同じであること |
-| `e2e/test_e2e_*.py` | 実 API に対する E2E テスト（基本と境界値、ツール、ストリーミング、画像、エラー、切り替え、usage）。既定の実行には入らず、`--models` を渡したときだけ回る |
+| `tests/test_recording.py` | 実 API の記録と再生（秘密を残さない、記録と違うリクエストを見逃さない）、リポジトリの記録にキーがないこと |
+| `tests/sample_tools.py` | テストで共有するツール定義（`conftest` からは import しない） |
+| `e2e/test_e2e_*.py` | 実 API に対する E2E テスト（基本と境界値、ツール、ストリーミング、画像、エラー、切り替え、usage）。`--models` を渡すと実 API で回し、渡さなければ記録を再生する |
 
-`e2e/` の E2E テストだけは実 API を叩く（料金が発生する。既定の `python -m pytest` には入らない。[E2E テスト](docs/e2e-tests.md)）。`scripts/quality_gate.py` は ruff・pytest・カバレッジをまとめて回す（Stop フックと CI から呼ぶ。[方針](docs/quality-gates.md)）。これは `harness/quality-gate/` にある、他のプロジェクトでも使うテンプレートの写しなので、直すときはテンプレートも同じ変更で直す（[テンプレート](harness/quality-gate/README.md)）。
+`e2e/` の E2E テストだけは、`--models` を渡すと実 API を叩く（料金が発生する。[E2E テスト](docs/e2e-tests.md)）。渡さなければ、`e2e/recordings/` に記録したやりとりを再生し、既定の `python -m pytest` にも入る（[テストの方針](docs/testing.md)）。`scripts/quality_gate.py` は ruff・pytest・カバレッジをまとめて回す（Stop フックと CI から呼ぶ。[方針](docs/quality-gates.md)）。これは `harness/quality-gate/` にある、他のプロジェクトでも使うテンプレートの写しなので、直すときはテンプレートも同じ変更で直す（[テンプレート](harness/quality-gate/README.md)）。
 
 ## よくある変更
 

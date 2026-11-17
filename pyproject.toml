@@ -51,8 +51,8 @@ where = ["src"]
 version = { attr = "switchllm.__version__" }
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "scripts"]  # scripts/ は tests/test_quality_gate.py が読む
-testpaths = ["tests"]  # e2e/ は実 API を呼ぶ（料金が発生する）ので入れない。回し方は docs/e2e-tests.md
+pythonpath = ["src", "scripts", "e2e"]  # scripts/ は tests/test_quality_gate.py が、e2e/ は tests/test_recording.py が読む
+testpaths = ["tests", "e2e"]  # e2e/ は --models を渡さなければ記録を再生する（ネットワークなし）。docs/testing.md
 
 # ---- 品質検査の基準 ----
 # scripts/quality_gate.py（Claude Code の Stop フックと CI）がこの値で検査する。

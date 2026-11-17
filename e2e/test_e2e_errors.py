@@ -5,15 +5,15 @@ from __future__ import annotations
 import pytest
 from e2e_support import MAX_TOKENS
 
-from switchllm import AuthenticationError, BadRequestError, Client, NotFoundError, parse_model
+from switchllm import AuthenticationError, BadRequestError, NotFoundError, parse_model
 
 
 @pytest.mark.needs_key
 @pytest.mark.calls(1)
-def test_invalid_api_key(model, note):
+def test_invalid_api_key(make_client, model, note):
     # API の文言と本文をそのまま持つ（RELIABILITY.md）。Gemini は無効なキーを 400 で返すことがあるので、
     # どちらの例外だったかを残す
-    with Client(model, api_key="switchllm-e2e-invalid-key", max_retries=0) as bad:
+    with make_client(model, api_key="switchllm-e2e-invalid-key", max_retries=0) as bad:
         with pytest.raises((AuthenticationError, BadRequestError)) as info:
             bad.chat("hi", max_tokens=16)
     e = info.value
@@ -22,9 +22,9 @@ def test_invalid_api_key(model, note):
 
 
 @pytest.mark.calls(1)
-def test_unknown_model(model, note):
+def test_unknown_model(make_client, model, note):
     key, _ = parse_model(model)
-    with Client(f"{key}:switchllm-e2e-no-such-model", max_retries=0) as missing:
+    with make_client(f"{key}:switchllm-e2e-no-such-model", max_retries=0) as missing:
         with pytest.raises((NotFoundError, BadRequestError)) as info:
             missing.chat("hi", max_tokens=16)
     e = info.value

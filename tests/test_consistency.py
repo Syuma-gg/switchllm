@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 import pytest
 
-from conftest import WEATHER_TOOL
+from sample_tools import WEATHER_TOOL
 from switchllm import StreamError
 
 

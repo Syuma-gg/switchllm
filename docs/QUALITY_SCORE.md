@@ -1,12 +1,12 @@
 # 品質評価
 
-領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-17）。
+領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-18）。
 
 テストは GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確認した）。
 
-カバレッジ（分岐を含む）は 98.69%（2026-11-17、Python 3.12）。基準は `pyproject.toml` の `fail_under = 98` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）。行はすべて到達している。残りは分岐の一部で、多くはパーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）。
+カバレッジ（分岐を含む）は 98.75%（2026-11-18、Python 3.12）。基準は `pyproject.toml` の `fail_under = 98` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）。行はすべて到達している。残りは分岐の一部で、多くはパーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）。
 
-実 API に対する E2E テストは `e2e/` にあり、既定の実行と CI には入らない（料金が発生するため。[E2E テスト](e2e-tests.md)）。まだ実 API では回していない。
+実 API に対する E2E テストは `e2e/` にあり、`--models` を渡したときだけ実 API を呼ぶ（料金が発生するため。[E2E テスト](e2e-tests.md)）。渡さなければ、実 API で記録したやりとりを再生し、既定の実行と CI にも入る（[テストの方針](testing.md)）。まだ実 API では回しておらず、記録は 0 件。
 
 ## 評価の基準
 
@@ -37,6 +37,7 @@
 | `@tool`、`run_tool_calls` | B | `tests/test_tools.py` | 生成したスキーマを各社が受け付けるかは実 API で確認する |
 | 画像入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py` | 4アダプターのリクエスト形状、Gemini の URL 拒否、`from_file` の形式判定。実 API では未確認 |
 | SSE パース | B | `tests/test_client.py` | |
+| 実 API の記録と再生 | B | `tests/test_recording.py` | 秘密を残さない（ヘッダー、URL の `key`、キーの値）、記録と違うリクエストで失敗する、gzip の応答、仮 ID の扱い。実 API の記録はまだない |
 | 層構造、ランタイム依存 | — | `tests/test_architecture.py` | 検査そのもの |
 | ドキュメント | — | `tests/test_docs.py` | リンク・索引・公開 API・プリセット・オプションの一致を検査 |
 

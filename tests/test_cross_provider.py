@@ -1,6 +1,6 @@
 """会話の途中でプロバイダー（またはモデル）を変えたときの履歴変換。"""
 
-from conftest import WEATHER_TOOL
+from sample_tools import WEATHER_TOOL
 from switchllm import Message, register_provider
 from switchllm.providers import PRESETS
 from switchllm.providers.gemini import DUMMY_THOUGHT_SIGNATURE

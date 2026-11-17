@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import WEATHER_TOOL
+from sample_tools import WEATHER_TOOL
 from switchllm import ImagePart, Message, TextPart, ToolCall, register_provider
 from switchllm.providers import PRESETS
 

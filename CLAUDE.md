@@ -10,16 +10,17 @@ OpenAI / Anthropic / Gemini / OpenAI互換サーバーを同じコードで呼�
 
 ```powershell
 pip install -e ".[dev]"
-python -m pytest                     # 全テスト（ネットワーク不要・数秒）。docs と層構造の検査を含む
+python -m pytest                     # 全テスト（ネットワーク不要・数秒）。docs と層構造の検査、実 API の記録の再生を含む
 python -m pytest tests/test_gemini.py -q
 python -m pytest e2e --models "openai:gpt-5.5" --collect-only -q  # E2E（実 API）が呼ぶ回数を見るだけ
+python -m pytest e2e --models "openai:gpt-5.5" --record          # 実 API で回して記録する（料金が発生する）
 ruff check                           # プロジェクト全体。規則は pyproject.toml
 python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop フックと CI と同じ検査）
 ```
 
 - CI（`.github/workflows/test.yml`）は同じ `python -m pytest` を Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す。対応する Python の版を変えたら、ここと `pyproject.toml` の `requires-python`・`classifiers` を合わせる
 - 公開は `.github/workflows/publish.yml`（手動で実行すると TestPyPI、GitHub の Release を公開すると PyPI）。設定と手順は [v0.1 公開](docs/exec-plans/active/v0.1-release.md)
-- **`e2e/`（E2E テスト）は実 API を叩き、料金が発生する。実行前に必ずユーザーに確認すること。** 既定の `python -m pytest` には入らない（[E2E テスト](docs/e2e-tests.md)）
+- **`--models` を付けた `e2e/`（E2E テスト）は実 API を叩き、料金が発生する。実行前に必ずユーザーに確認すること。** 付けなければ記録を再生するだけで、ネットワークを使わない（[E2E テスト](docs/e2e-tests.md)）
 - APIキーは環境変数で渡す。コードやファイルに書かない（[docs/SECURITY.md](docs/SECURITY.md)）。
 
 ## 品質検査
@@ -30,6 +31,10 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 - テストには振る舞いを確かめる assert を書く。基準（`pyproject.toml` の `fail_under`・ruff のルール・除外）を緩めない
 - `# noqa`・`# pragma: no cover`・skip は品質上の理由があるときだけ使い、同じ行に理由を書き、報告で伝える
 - 品質を落とさずに直せないときは、止まって状況と選択肢をユーザーに報告する
+
+## テスト駆動
+
+振る舞いを変えるときは、先にテストを書き、変更前のコードで失敗することを確かめてから直す。報告では、変更前に失敗したことを伝える。記録の再生が失敗したら、記録を手で直さず、実 API で記録し直すか変更を直す（[テストの方針](docs/testing.md)）。
 
 ## どこを読むか
 
@@ -44,6 +49,7 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 | 進行中の作業、次にやること | [docs/PLANS.md](docs/PLANS.md) |
 | 既知の負債 | [docs/exec-plans/tech-debt-tracker.md](docs/exec-plans/tech-debt-tracker.md) |
 | テストと検証の状況 | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md) |
+| テスト駆動の手順、テストの層、記録と再生 | [docs/testing.md](docs/testing.md) |
 | 実 API に対する E2E テスト（回し方、テストケース） | [docs/e2e-tests.md](docs/e2e-tests.md) |
 | 検査に落ちたときの直し方、基準を変えてよいか | [docs/quality-gates.md](docs/quality-gates.md) |
 | 品質検査のテンプレート（他のプロジェクトに入れる、検査そのものを直す） | [harness/quality-gate/README.md](harness/quality-gate/README.md) |
@@ -58,7 +64,7 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 3. **未知の SSE イベントは無視する**（例外にしない）。プロバイダーは新しいイベントを追加する
 4. **共通パラメータを増やしたら4アダプターすべてで対応する**か、`UnsupportedFeatureError` を明示的に投げる。黙って無視しない。増やす前に [scope.md](docs/product-specs/scope.md) を確認する
 5. **正規化した値の意味を変えない**（`stop_reason` / `Usage` / `ToolCall.arguments`。定義は [public-api.md](docs/product-specs/public-api.md)）
-6. **テストはネットワークを使わない**。`tests/conftest.py` の `FakeAPI` で応答を積み、送られたリクエスト本体を検証する。実 API を呼ぶテストは `e2e/` にだけ置く
+6. **テストはネットワークを使わない**。`tests/conftest.py` の `FakeAPI` で応答を積み、送られたリクエスト本体を検証する。実 API を呼ぶテストは `e2e/` にだけ置き、`--models` を渡したときだけ呼ぶ
 7. **API 仕様に関わる変更は一次情報（各社の公式ドキュメント）で確認してから行う**。確認したら `docs/references/` の該当文書に出典を足し、[実 API 検証](docs/exec-plans/active/real-api-verification.md) の表を更新する
 
 ## コード規約

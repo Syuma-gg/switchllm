@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from conftest import WEATHER_TOOL
+from sample_tools import WEATHER_TOOL
 from switchllm import (
     AuthenticationError,
     Client,
