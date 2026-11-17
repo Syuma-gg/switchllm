@@ -177,7 +177,7 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 
 ## Known limitations
 
-- **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` (this costs a small amount)
+- **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` (this costs a small amount; add `--plan` first to see how many calls it makes without calling the APIs)
 - No async support yet
 - Image input is supported; audio, PDF, and file input are not. Image URLs are not supported for Gemini (pass base64 instead)
 - Structured output and reasoning effort are not unified (list each provider's settings in `extra_by_provider`)

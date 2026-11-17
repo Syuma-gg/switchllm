@@ -177,7 +177,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 
 ## 既知の制限
 
-- **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する）
+- **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--plan` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
 - 非同期（`async`）は未対応
 - 画像入力は対応、音声・PDF・ファイル入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
 - 構造化出力と推論の強さは共通化していない（`extra_by_provider` で各社の指定を並べて渡す）

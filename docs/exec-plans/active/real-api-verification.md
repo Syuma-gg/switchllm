@@ -6,9 +6,12 @@
 
 ## 手順
 
+- [x] `scripts/smoke_test.py` を、下の表（U1〜U18）を1回の実行で確かめられるように広げる（2026-11-17）
 - [ ] 各社のキーで `scripts/smoke_test.py` を実行する。**料金が発生するので、実行前にユーザーの確認を取る**
-  - 例: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest deepseek:deepseek-flash`
-  - text / ツールの往復 / ストリーミングの3つを試す
+  - まず `--plan` で呼び出しの回数を確かめる（API は呼ばない）。モデルと料金の目安を伝えて了承を得てから実行する
+  - 例: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 anthropic:claude-haiku-5-5 openai:gpt-5.5 gemini:gemini-flash-latest deepseek:deepseek-flash deepseek:deepseek-v4-pro ollama:<model> lmstudio:<model>`（この並びで 100 回）
+  - モデルの並べ方で切り替えの組が決まる（隣どうしで A → B → A）。同じプロバイダーの2つのモデルを隣に置くと U8（Anthropic）と U17（DeepSeek）を、Gemini の隣に別のプロバイダーを置くと U5 を確かめられる。U5 の「Gemini 3 系以外」は、Gemini 2.5 などのモデルも並べたときだけ確かめられる
+  - LM Studio は、推論するモデル（`reasoning_content` を返すもの）を読み込むと U11 の「ほかの互換サーバー」を確かめられる
 - [ ] ローカルの Ollama / LM Studio で同じ確認をする（料金なし）
 - [ ] 失敗した箇所を直し、同じ形のレスポンスをモックのテストにも足す
 - [ ] 下の表を上から潰す。結果は「結果」列に日付つきで書き、分かった仕様は `docs/references/` に反映する
@@ -48,6 +51,7 @@ ID はほかの文書から参照しているので変えない。
 - 2026-11-16: `scripts/smoke_test.py` は `tool_choice="required"` を使っているので、Sonnet 5.5 や Opus 5.5 では 400 になる（Anthropic はこれらのモデルでツールの強制を受け付けない）。また、今の smoke test で確かめられるのは表の一部（U3・U4・U6・U10・U12・U13・U15・U16 など）だけなので、残りも1回の実行で確かめられるように拡張する
 - 2026-11-17: API が返したエラーを、手を加えずに渡すようにした。`APIError.message` に API の文言だけを入れ、知らない形の本文は HTTP の理由句ではなく本文をそのまま見せる（[RELIABILITY.md](../../RELIABILITY.md)）
 - 2026-11-17: DeepSeek に対応した。公式文書（Thinking Mode・Chat Completions API・Tool Calls・Models & Pricing）を読み直し、出典を [Chat Completions 互換](../../references/openai-chat-compatible.md) に書いた。U11 を直し、同じプロバイダー・同じモデルが返した `reasoning_content` を assistant メッセージに足して送り返すようにした。`reasoning`（OpenRouter の形式）は、ストリーミングでもフィールド名を変えずに組み直し、送り返さない。`deepseek` のプリセット（`https://api.deepseek.com`、`DEEPSEEK_API_KEY`）を足した（[判断](../../design-docs/verified-presets.md)）。文書に書かれていない、別の履歴を受け付けるか（U17）と usage の内訳（U18）を表に足した。2026-11-17 時点のモデルは `deepseek-flash` と `deepseek-v4-pro` で、どちらも思考モードが既定。思考モードでは `tool_choice` の `required` とツール名の指定が 400 になるので、smoke test のツールの往復では `auto` にする
+- 2026-11-17: smoke test を広げた。モデルごとに text・history（手で作った履歴）・tools（3ターン）・tool_choice_none・stream・stream_tools・usage（ほかの確認の応答の内訳を調べる。API は呼ばない）を、OpenAI には store_false、Gemini には json_schema（`schema_field="parametersJsonSchema"`）を足して回す。並べた順で隣どうしのモデルを、ツールの往復の途中で切り替えて元に戻す。確認ごとに、関係するプロバイダーの U 番号だけを数え、最後に U 番号ごとの結果を表示する。ツールの強制は使わず、`auto` のままプロンプトでツールを使うよう明示する。`--plan` で、API を呼ばずに呼び出しの回数を表示する。実行前に、すべてのモデルのクライアントを作って、キーがないと料金を払う前に止まるようにした。流れは、DeepSeek のふりをする偽のサーバー（tools 付きで reasoning_content のない履歴を 400 にする）で、料金をかけずに確かめた
 - 2026-11-17: U8 を直した。Anthropic の文書（Thinking・Preserved thinking・Prefix checks）を読み、出典を [Anthropic Messages](../../references/anthropic-messages.md) に書いた。文書は「切り替えるときに thinking ブロックを取り除くな。読めないものは API が料金なしで捨て、エラーにしない」「捨てたブロックは会話の変更と数えないので、元のモデルに戻しても両方のブロックが有効なまま」としている。anthropic アダプターだけ `resend_across_models = True` にし、同じプロバイダーキーならモデルが違っても生データを送るようにした。openai と gemini は同じモデルのときだけのまま（別のモデルで変換し直すことをテストで固定した）。あわせて、preserved thinking に対応するモデル（Opus 5.5・Sonnet 5.5・Haiku 5.5 など）は、送り返した thinking ブロックより前の内容（system・tools・それより前のメッセージ）が変わっていると 400 にすることがあると分かった。switchllm は同じ履歴から毎回同じリクエストを組み立てるので、`res.message` を加工しなければ当たらない
 
 ## 判断ログ
