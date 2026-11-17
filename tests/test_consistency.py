@@ -24,6 +24,7 @@ class Case:
     error_stream: list[tuple[str | None, Any]]  # 途中で「boom」というエラーイベントが届く
     unknown_event: tuple[str | None, Any]  # 将来足されるかもしれない、知らないイベント
     common_params: Callable[[dict[str, Any]], tuple[Any, Any, Any]]  # 本体から (max_tokens, temperature, system) を取り出す
+    has_stop: Callable[[dict[str, Any]], bool]  # 本体に stop の指定があるか
 
 
 def _anthropic_text(text: str) -> list[tuple[str | None, Any]]:
@@ -64,6 +65,7 @@ CASES = [
         ],
         unknown_event=("response.something_new", {"type": "response.something_new"}),
         common_params=lambda b: (b["max_output_tokens"], b["temperature"], b["instructions"]),
+        has_stop=lambda b: "stop" in b,
     ),
     Case(
         model="openai-chat:gpt-x",
@@ -79,6 +81,7 @@ CASES = [
         unknown_event=(None, {"object": "chat.completion.chunk", "choices": [{"delta": {"something_new": 1}}]}),
         # 接続先が OpenAI 本家なので max_completion_tokens（S11）
         common_params=lambda b: (b["max_completion_tokens"], b["temperature"], b["messages"][0]["content"]),
+        has_stop=lambda b: "stop" in b,
     ),
     Case(
         model="anthropic:claude-sonnet-5-5",
@@ -89,6 +92,7 @@ CASES = [
         error_stream=[*_anthropic_text("途中"), ("error", {"type": "error", "error": {"type": "overloaded_error", "message": "boom"}})],
         unknown_event=("something_new", {"type": "something_new"}),
         common_params=lambda b: (b["max_tokens"], b["temperature"], b["system"]),
+        has_stop=lambda b: "stop_sequences" in b,
     ),
     Case(
         model="gemini:gemini-flash-latest",
@@ -106,6 +110,7 @@ CASES = [
             b["generationConfig"]["temperature"],
             b["systemInstruction"]["parts"][0]["text"],
         ),
+        has_stop=lambda b: "stopSequences" in b["generationConfig"],
     ),
 ]
 
@@ -117,6 +122,17 @@ def test_common_parameters_reach_each_apis_own_field(api, case):
     api.reply_json(case.ok)
     api.client(case.model).chat("hi", system="簡潔に", max_tokens=123, temperature=0.3)
     assert case.common_params(api.body()) == (123, 0.3, "簡潔に")
+
+
+def test_zero_is_sent_and_empty_stop_means_none(api, case):
+    # 境界値: 0 は有効な値（temperature の下限）なので、偽と見なして落とさずにそのまま送る。
+    # max_tokens=0 は API が拒否する値だが、ライブラリは先回りして弾かない（API のエラーをそのまま返す）。
+    # 空の stop は「指定なし」。OpenAI Responses でも UnsupportedFeatureError にしない
+    api.reply_json(case.ok)
+    api.client(case.model).chat("hi", system="s", max_tokens=0, temperature=0, stop=[])
+    body = api.body()
+    assert case.common_params(body)[:2] == (0, 0)
+    assert not case.has_stop(body)
 
 
 def test_tool_choice_is_sent_only_when_given(api, case):

@@ -22,7 +22,7 @@
 - `candidates[0].content.parts` の `text`（`thought: true` は推論）と `functionCall` を読む。再送用に `parts` 全体を `ProviderState` に入れる（`thoughtSignature` を含む）
 - `functionCall` に id がなければ仮 ID `switchllm_...` を振り、送り返すときは id を付けない（U6）
 - stop_reason: `STOP` は `end`、`MAX_TOKENS` は `max_tokens`、`SAFETY` などフィルタ系は `content_filter`。プロンプト自体がブロックされると `candidates` が空で `promptFeedback.blockReason` が入るので `content_filter`
-- usage: `promptTokenCount` と、`candidatesTokenCount + thoughtsTokenCount`（U14）。`promptTokenCount` はキャッシュした内容を含む。`totalTokenCount` は「prompt + tool-use prompt + thoughts + response candidates」なので、candidates と thoughts は別に数えている（candidates が thoughts を含まないとは明記していないので、smoke test で total と内訳の和を比べる）
+- usage: `promptTokenCount` と、`candidatesTokenCount + thoughtsTokenCount`（U14）。`promptTokenCount` はキャッシュした内容を含む。`totalTokenCount` は「prompt + tool-use prompt + thoughts + response candidates」なので、candidates と thoughts は別に数えている（candidates が thoughts を含まないとは明記していないので、E2E テストの `test_usage_breakdown` で total と内訳の和を比べる）
 
 ## ストリーミング
 

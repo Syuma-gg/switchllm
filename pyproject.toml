@@ -52,7 +52,7 @@ version = { attr = "switchllm.__version__" }
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "scripts"]  # scripts/ は tests/test_quality_gate.py が読む
-testpaths = ["tests"]
+testpaths = ["tests"]  # e2e/ は実 API を呼ぶ（料金が発生する）ので入れない。回し方は docs/e2e-tests.md
 
 # ---- 品質検査の基準 ----
 # scripts/quality_gate.py（Claude Code の Stop フックと CI）がこの値で検査する。
