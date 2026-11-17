@@ -12,7 +12,7 @@ print(client.chat("こんにちは").text)
 ```
 
 - 依存は `httpx` だけ。各社の SDK は使わず、HTTP リクエストの形式差をアダプターで吸収する
-- ツール呼び出しの往復に必要な署名・推論情報（Gemini の thoughtSignature、Anthropic の thinking、OpenAI の reasoning）を落とさない
+- ツール呼び出しの往復に必要な署名・推論情報（Gemini の thoughtSignature、Anthropic の thinking、OpenAI の reasoning、DeepSeek の reasoning_content）を落とさない
 - エージェントフレームワークではなく、その下で使う薄い層（[やること・やらないこと](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/scope.md)）
 - プロバイダーは文字列で選ぶ。失敗したときに別のプロバイダーへ自動で切り替える機能（フォールバック、ルーティング）はない。必要なら `RateLimitError` などを捕まえて `client.with_model()` で切り替える
 
@@ -34,6 +34,7 @@ APIキーは環境変数で渡す（`api_key=` 引数でも可）。
 | Anthropic | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
 | Google Gemini | `gemini:gemini-flash-latest` | `GEMINI_API_KEY`（または `GOOGLE_API_KEY`） |
 | OpenAI（Chat Completions） | `openai-chat:<model>` | `OPENAI_API_KEY` |
+| DeepSeek | `deepseek:deepseek-flash` | `DEEPSEEK_API_KEY` |
 | Ollama / LM Studio（ローカル） | `ollama:llama3.2` / `lmstudio:<model>` | 不要 |
 | その他の OpenAI 互換 API | `register_provider()` で登録する（下の「その他の OpenAI 互換 API」） | 登録時に指定 |
 

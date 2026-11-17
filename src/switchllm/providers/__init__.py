@@ -43,6 +43,8 @@ PRESETS: dict[str, ProviderPreset] = {
     "google": ProviderPreset("gemini"),
     # OpenAI Chat Completions 形式（base_url= を渡せば任意の互換サーバーにも使える）
     "openai-chat": ProviderPreset("openai_chat", "https://api.openai.com/v1", ("OPENAI_API_KEY",)),
+    # クラウドの互換 API。base_url は docs/references/openai-chat-compatible.md の出典で確認済み
+    "deepseek": ProviderPreset("openai_chat", "https://api.deepseek.com", ("DEEPSEEK_API_KEY",)),
     # ローカル実行（APIキー不要）。base_url は docs/references/openai-chat-compatible.md の出典で確認済み
     "ollama": ProviderPreset("openai_chat", "http://localhost:11434/v1", ()),
     "lmstudio": ProviderPreset("openai_chat", "http://localhost:1234/v1", ()),

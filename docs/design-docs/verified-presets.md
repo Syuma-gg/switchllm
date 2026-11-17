@@ -14,6 +14,7 @@
 - 残すのは、ネイティブ3社（`openai` / `anthropic` / `gemini`、別名の `google`）、`openai-chat`、ローカル実行の `ollama` / `lmstudio` の7個
 - `ollama` / `lmstudio` の base_url は、2026-11-09 にそれぞれの公式ドキュメントで確認した（[出典](../references/openai-chat-compatible.md)）
 - それ以外の互換 API は、利用者が `register_provider()` で足す
+- 2026-11-17 に `deepseek` を足した（8個）。作者が DeepSeek に対応すると決め、アダプターが DeepSeek の仕様（ツールを使う会話での `reasoning_content` の送り返し）に追従することになった。追従の負担をすでに引き受けているので、プリセットで「この名前で動く」と約束する。base_url とキーの環境変数は公式文書で確認した（[出典](../references/openai-chat-compatible.md)）。疎通は[実 API 検証](../exec-plans/active/real-api-verification.md)で確かめる
 
 ## 却下した案
 

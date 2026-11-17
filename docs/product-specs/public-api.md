@@ -59,6 +59,7 @@
 |---|---|---|---|
 | `openai` | Responses API | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
 | `openai-chat` | Chat Completions | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| `deepseek` | Chat Completions | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
 | `anthropic` | Messages API | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` |
 | `gemini` | generateContent | `https://generativelanguage.googleapis.com/v1beta` | `GEMINI_API_KEY` または `GOOGLE_API_KEY` |
 | `google` | `gemini` の別名 | 同上 | 同上 |

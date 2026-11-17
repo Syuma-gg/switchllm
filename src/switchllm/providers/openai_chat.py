@@ -2,6 +2,10 @@
 
 Ollama / LM Studio / vLLM / OpenRouter / Groq / DeepSeek / xAI など、
 「OpenAI 互換」を名乗るサーバーはこの形式を話すので、base_url を変えるだけで使える。
+
+DeepSeek 形式の ``reasoning_content`` を返したときだけ、メッセージに ProviderState を付け、
+同じプロバイダー・同じモデルへ送るときに assistant メッセージへ ``reasoning_content`` を足す
+（docs/references/openai-chat-compatible.md の「推論テキストの送り返し」）。
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from typing import Any, Iterator
 
 from .._http import HTTPRequest
 from ..errors import StreamError
-from ..types import ImagePart, Message, Response, StreamEvent, TextPart, ToolCall, Usage
+from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice
 from .openai_responses import _parse_args
 
@@ -65,6 +69,12 @@ class OpenAIChatProvider(Provider):
                         {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": tc.arguments_json()}}
                         for tc in m.tool_calls
                     ]
+                # DeepSeek は、ツールを使うリクエストでは過去の reasoning_content をすべて送り返すことを求め、
+                # 送らないと 400 にする（ツールがなければ無視する）。生データ全体は送らない。
+                # 返ってきた message には、リクエストでは受け付けられないフィールドがありうるため
+                raw = self.native_raw(m)
+                if isinstance(raw, dict) and isinstance(raw.get("reasoning_content"), str):
+                    d["reasoning_content"] = raw["reasoning_content"]
                 msgs.append(d)
             elif m.role == "tool":
                 content = f"Error: {m.text}" if m.is_error else m.text
@@ -109,12 +119,16 @@ class OpenAIChatProvider(Provider):
         content = msg.get("content")
         if isinstance(content, list):  # 一部の互換サーバーは配列で返す
             content = "".join(c.get("text", "") for c in content if isinstance(c, dict))
-        # DeepSeek は reasoning_content、OpenRouter は reasoning に推論テキストを入れる
-        thinking = msg.get("reasoning_content") or msg.get("reasoning")
+        # DeepSeek は reasoning_content、OpenRouter は reasoning に推論テキストを入れる。
+        # 送り返すのは DeepSeek の形式だけ（reasoning を送り返せとする文書は確認していない）
+        reasoning = msg.get("reasoning_content")
+        has_reasoning = isinstance(reasoning, str) and bool(reasoning)
+        state = ProviderState(self.key, self.model, msg) if has_reasoning else None
+        thinking = reasoning or msg.get("reasoning")
         stop = "tool_use" if calls else _FINISH.get(choice.get("finish_reason") or "stop", "other")
         u = data.get("usage") or {}
         return Response(
-            message=Message(role="assistant", content=content or "", tool_calls=calls),
+            message=Message(role="assistant", content=content or "", tool_calls=calls, provider_state=state),
             stop_reason=stop,  # type: ignore[arg-type]
             usage=Usage(int(u.get("prompt_tokens") or 0), int(u.get("completion_tokens") or 0), details=u),
             provider=self.key,
@@ -125,7 +139,9 @@ class OpenAIChatProvider(Provider):
 
     def parse_stream(self, events: Iterator[tuple[str, str]]) -> Iterator[StreamEvent]:
         text: list[str] = []
-        thinking: list[str] = []
+        # 推論テキストは、来たフィールド名（reasoning_content / reasoning）ごとに分けて集める。
+        # 名前を変えずに組み直さないと、送り返さない reasoning まで送り返すことになる
+        thinking: dict[str, list[str]] = {}
         calls: dict[int, dict[str, str]] = {}
         finish: str | None = None
         usage: dict[str, Any] | None = None
@@ -147,10 +163,12 @@ class OpenAIChatProvider(Provider):
                 if delta.get("content"):
                     text.append(delta["content"])
                     yield StreamEvent("text", text=delta["content"])
-                r = delta.get("reasoning_content") or delta.get("reasoning")
-                if isinstance(r, str) and r:
-                    thinking.append(r)
-                    yield StreamEvent("thinking", text=r)
+                for field_name in ("reasoning_content", "reasoning"):
+                    r = delta.get(field_name)
+                    if isinstance(r, str) and r:
+                        thinking.setdefault(field_name, []).append(r)
+                        yield StreamEvent("thinking", text=r)
+                        break
                 for tc in delta.get("tool_calls") or []:
                     slot = calls.setdefault(tc.get("index", len(calls)), {"id": "", "name": "", "arguments": ""})
                     if tc.get("id"):
@@ -174,7 +192,7 @@ class OpenAIChatProvider(Provider):
                 {"id": s["id"] or f"call_{i}", "type": "function", "function": {"name": s["name"], "arguments": s["arguments"]}}
                 for i, s in sorted(calls.items())
             ]
-        if thinking:
-            message["reasoning_content"] = "".join(thinking)
+        for field_name, pieces in thinking.items():
+            message[field_name] = "".join(pieces)
         final = {"model": model, "choices": [{"message": message, "finish_reason": finish}], "usage": usage or {}}
         yield StreamEvent("done", response=self.parse_response(final))

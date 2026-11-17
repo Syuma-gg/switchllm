@@ -40,7 +40,7 @@ providers/     Provider   parse_response() / parse_stream(): 各社の JSON → 
 | アダプター | ファイル | プリセット | 仕様メモ |
 |---|---|---|---|
 | `openai` | `providers/openai_responses.py` | `openai` | [OpenAI Responses](docs/references/openai-responses.md) |
-| `openai_chat` | `providers/openai_chat.py` | `openai-chat`、`ollama`、`lmstudio`、`register_provider()` で足したもの | [Chat Completions 互換](docs/references/openai-chat-compatible.md) |
+| `openai_chat` | `providers/openai_chat.py` | `openai-chat`、`deepseek`、`ollama`、`lmstudio`、`register_provider()` で足したもの | [Chat Completions 互換](docs/references/openai-chat-compatible.md) |
 | `anthropic` | `providers/anthropic.py` | `anthropic` | [Anthropic Messages](docs/references/anthropic-messages.md) |
 | `gemini` | `providers/gemini.py` | `gemini`、`google` | [Gemini generateContent](docs/references/gemini-generate-content.md) |
 

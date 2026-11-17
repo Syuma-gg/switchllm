@@ -96,6 +96,10 @@ class ProviderState:
     OpenAI Responses API の reasoning アイテムは、ツール呼び出しの往復で
     「受け取ったまま返す」ことが求められる。共通型に変換すると失われるので、
     ここに退避しておく。
+
+    Chat Completions 互換では、DeepSeek 形式の ``reasoning_content`` を返したときだけ
+    message 全体を持ち、送るときは ``reasoning_content`` だけを使う（ツールを使う会話で
+    送り返さないと 400 になる）。
     """
 
     provider: str

@@ -12,7 +12,7 @@ print(client.chat("Hello").text)
 ```
 
 - The only dependency is `httpx`. No vendor SDKs: adapters absorb the differences between each provider's HTTP formats
-- Keeps the signatures and reasoning data that tool-call round trips need (Gemini's thoughtSignature, Anthropic's thinking, OpenAI's reasoning)
+- Keeps the signatures and reasoning data that tool-call round trips need (Gemini's thoughtSignature, Anthropic's thinking, OpenAI's reasoning, DeepSeek's reasoning_content)
 - Not an agent framework, but a thin layer underneath one ([what it does and does not do](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/scope.md), in Japanese)
 - You choose the provider with a string. There is no automatic switching to another provider on failure (fallback or routing). If you need it, catch `RateLimitError` and similar errors, and switch with `client.with_model()`
 
@@ -34,6 +34,7 @@ Pass API keys through environment variables (or the `api_key=` argument).
 | Anthropic | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
 | Google Gemini | `gemini:gemini-flash-latest` | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) |
 | OpenAI (Chat Completions) | `openai-chat:<model>` | `OPENAI_API_KEY` |
+| DeepSeek | `deepseek:deepseek-flash` | `DEEPSEEK_API_KEY` |
 | Ollama / LM Studio (local) | `ollama:llama3.2` / `lmstudio:<model>` | Not needed |
 | Other OpenAI-compatible APIs | Register with `register_provider()` (see "Other OpenAI-compatible APIs" below) | Set when registering |
 

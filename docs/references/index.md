@@ -23,7 +23,7 @@
 | tool_choice を指定しないとき | 送らない（既定は `auto`） | 送らない（既定は `auto`。Ollama は非対応） | 送らない（既定は `auto`） | 送らない（既定は `AUTO`） |
 | モデルのツール呼び出し | `function_call` アイテム（arguments は JSON 文字列） | `tool_calls[].function.arguments`（JSON 文字列） | `tool_use` ブロック（`input` はオブジェクト） | `functionCall` パート（`args` はオブジェクト） |
 | ツール結果 | `function_call_output` | `role: tool` | user メッセージ内の `tool_result` | user の `functionResponse` |
-| 保持が必要な推論情報 | `reasoning` アイテム | なし | `thinking` ブロック + `signature` | `thoughtSignature` |
+| 保持が必要な推論情報 | `reasoning` アイテム | `reasoning_content`（DeepSeek。ツールを使う会話で必要） | `thinking` ブロック + `signature` | `thoughtSignature` |
 | ストリームの終わり | `response.completed` | `finish_reason` か `data: [DONE]` | `message_stop` | `finishReason` の入ったチャンク |
 
 ストリームの終わりの合図が来ないまま接続が閉じたら、どのアダプターも `StreamError` にする（途中までを正常終了として返さない）。

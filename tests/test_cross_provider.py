@@ -34,6 +34,18 @@ def test_claude_history_to_openai_drops_thinking(api):
     assert "CLAUDE_SIG" not in api.requests[1].content.decode()
 
 
+def test_claude_history_to_deepseek_has_no_reasoning_content(api, monkeypatch):
+    # Claude の thinking は DeepSeek の reasoning_content にしない（別のモデルの推論は送らない）。
+    # reasoning_content のない履歴を DeepSeek が受け付けるかは実 API で確かめる（U17）
+    claude, history = _claude_history(api)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    api.reply_json({"choices": [{"message": {"content": "雪です"}, "finish_reason": "stop"}]})
+    claude.with_model("deepseek:deepseek-flash").chat(history, tools=[WEATHER_TOOL])
+    assert api.body(1)["messages"][1] == {"role": "assistant", "content": "調べます", "tool_calls": [
+        {"id": "toolu_1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "仙台"}'}}]}
+    assert "考える" not in api.requests[1].content.decode()
+
+
 def test_claude_history_to_gemini_injects_dummy_signature(api):
     claude, history = _claude_history(api)
     api.reply_json({"candidates": [{"content": {"parts": [{"text": "雪です"}]}, "finishReason": "STOP"}]})

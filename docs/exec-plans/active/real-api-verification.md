@@ -7,7 +7,7 @@
 ## 手順
 
 - [ ] 各社のキーで `scripts/smoke_test.py` を実行する。**料金が発生するので、実行前にユーザーの確認を取る**
-  - 例: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest`
+  - 例: `python scripts/smoke_test.py anthropic:claude-sonnet-5-5 openai:gpt-5.5 gemini:gemini-flash-latest deepseek:deepseek-flash`
   - text / ツールの往復 / ストリーミングの3つを試す
 - [ ] ローカルの Ollama / LM Studio で同じ確認をする（料金なし）
 - [ ] 失敗した箇所を直し、同じ形のレスポンスをモックのテストにも足す
@@ -30,12 +30,14 @@ ID はほかの文書から参照しているので変えない。
 | U8 | Anthropic | 別のモデルへ切り替えると thinking ブロックを捨てる | thinking を有効にしたままツール往復の途中でモデルを変えると 400 になる可能性がある（同じモデルの中なら問題ない） | |
 | U9 | Anthropic | `tool_choice: "none"` を `{"type": "none"}` にする | 対応済みと理解しているが未確認 | |
 | U10 | Chat Completions 互換 | ストリーミングで `stream_options: {include_usage: true}` を送る | 拒否するサーバーがあれば `Client(..., stream_usage=False)` で無効化できる | |
-| U11 | Chat Completions 互換（DeepSeek 形式） | `reasoning_content` は受け取るが送り返さない | 思考モードでツールを使うときに送り返しが必要かは未確認 | |
+| U11 | Chat Completions 互換（DeepSeek 形式） | 同じプロバイダー・同じモデルが返した `reasoning_content` を、assistant メッセージに足して送り返す（ツールの有無にかかわらず） | DeepSeek の文書どおりに直したが、実リクエストでは未確認。`reasoning_content` を返すほかの互換サーバー（LM Studio など）が、送り返したものを受け付けるかも未確認 | 2026-11-17: 文書で確認し、送り返すように直した（DeepSeek は、ツールを使うリクエストで送り返さないと 400）。実 API は未確認 |
 | U12 | プリセット | `ollama` / `lmstudio` の base_url | 公式ドキュメントでは確認した。実際の疎通は未確認 | 文書で確認済み（2026-11-09） |
 | U13 | サンプル | モデル ID `gpt-5.5` / `claude-sonnet-5-5` / `gemini-flash-latest` | モデル ID は頻繁に変わる。`gemini-flash-latest` は公式の latest エイリアス | |
 | U14 | usage | Anthropic の `input_tokens` はキャッシュ分を含まない、Gemini の `candidatesTokenCount` は `thoughtsTokenCount` を含まない、という前提で合算している | 調査したときの出典が記録されていない | |
 | U15 | Ollama | `tool_choice` は明示したときだけ送る | Ollama の公式ドキュメントは `tool_choice` を非対応と記載している。明示したときに無視されるのか拒否されるのかは未確認 | 2026-11-15: 指定がなければ送らないように変えた（[切り替えの精査](../completed/2026-11-15-switching-review.md) の S10）。明示したときの挙動は未確認 |
 | U16 | ストリーミング（Chat Completions 互換・Gemini） | 終わりの合図（Chat Completions は `finish_reason` か `[DONE]`、Gemini は最後のチャンクの `finishReason`）が来ないまま閉じたら `StreamError` にする | OpenAI の文書は「`[DONE]` の前に usage のチャンクが来る」と書くだけで、常に `[DONE]` で終わるとは明記していない。Gemini と互換サーバーで、最後のチャンクに必ず合図が入るかは未確認。Anthropic の `message_stop` は文書で確認済み | |
+| U17 | DeepSeek（思考モード・ツールあり） | 別のプロバイダーや別のモデルの履歴、手で作ったメッセージは、`reasoning_content` を付けずに送る | 文書は「送り返さないと 400」とだけ書き、ほかで作った履歴やモデルの切り替え（`deepseek-flash` → `deepseek-v4-pro`）の扱いを書いていない。400 になるなら、会話の途中で DeepSeek に切り替えられない | |
+| U18 | usage（DeepSeek） | `completion_tokens` を、推論の分を含む出力トークン数として `output_tokens` に入れる | `completion_tokens_details.reasoning_tokens` はあるが、`completion_tokens` がそれを含むかは文書にない | |
 
 ## 進捗ログ
 
@@ -45,6 +47,7 @@ ID はほかの文書から参照しているので変えない。
 - 2026-11-16: 作業を再開した。API キーはどの環境変数のスコープにもなく、Ollama と LM Studio も起動していなかった。料金のかからない準備として、各社の公式文書で前提を調べた。文書で確認できたのは U2・U9・U13・U14（Anthropic 側）。U1 は、今の文書では `store: false` でも reasoning アイテムに `encrypted_content` が既定で付き、`include` の指定は要らない（`docs/references/openai-responses.md` の記述が古い）。U11 は、DeepSeek がツールを使うリクエストでは過去の `reasoning_content` をすべて送り返すことを求め、送らないと 400 になる（今の実装は送り返さないので失敗する）。U8 は、Anthropic が「切り替えるときも thinking ブロックを捨てるな。読めないものは API が料金なしで捨てる」としていて、今の設計（別のモデルには捨てる）と食い違う。調べた結果の表と出典への反映はまだ
 - 2026-11-16: `scripts/smoke_test.py` は `tool_choice="required"` を使っているので、Sonnet 5.5 や Opus 5.5 では 400 になる（Anthropic はこれらのモデルでツールの強制を受け付けない）。また、今の smoke test で確かめられるのは表の一部（U3・U4・U6・U10・U12・U13・U15・U16 など）だけなので、残りも1回の実行で確かめられるように拡張する
 - 2026-11-17: API が返したエラーを、手を加えずに渡すようにした。`APIError.message` に API の文言だけを入れ、知らない形の本文は HTTP の理由句ではなく本文をそのまま見せる（[RELIABILITY.md](../../RELIABILITY.md)）
+- 2026-11-17: DeepSeek に対応した。公式文書（Thinking Mode・Chat Completions API・Tool Calls・Models & Pricing）を読み直し、出典を [Chat Completions 互換](../../references/openai-chat-compatible.md) に書いた。U11 を直し、同じプロバイダー・同じモデルが返した `reasoning_content` を assistant メッセージに足して送り返すようにした。`reasoning`（OpenRouter の形式）は、ストリーミングでもフィールド名を変えずに組み直し、送り返さない。`deepseek` のプリセット（`https://api.deepseek.com`、`DEEPSEEK_API_KEY`）を足した（[判断](../../design-docs/verified-presets.md)）。文書に書かれていない、別の履歴を受け付けるか（U17）と usage の内訳（U18）を表に足した。2026-11-17 時点のモデルは `deepseek-flash` と `deepseek-v4-pro` で、どちらも思考モードが既定。思考モードでは `tool_choice` の `required` とツール名の指定が 400 になるので、smoke test のツールの往復では `auto` にする
 
 ## 判断ログ
 

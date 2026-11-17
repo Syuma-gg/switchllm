@@ -64,6 +64,98 @@ def _tool_call_roundtrip(api, client):
     assert msgs[2] == {"role": "tool", "tool_call_id": "call_1", "content": "曇り"}
 
 
+def test_deepseek_preset(api, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-secret")
+    api.reply_json(_ok())
+    api.client("deepseek:deepseek-flash", api_key=None).chat("hi", max_tokens=10)
+    req = api.requests[0]
+    assert str(req.url) == "https://api.deepseek.com/chat/completions"
+    assert req.headers["authorization"] == "Bearer ds-secret"
+    assert api.body()["max_tokens"] == 10  # DeepSeek の文書にあるのは max_tokens だけ
+
+
+def _deepseek_tool_turn():
+    """DeepSeek の思考モードが、ツールを呼ぶときに返す形（thinking_mode の文書の例）。"""
+    return {"choices": [{"message": {"role": "assistant", "content": "", "reasoning_content": "天気を調べる",
+            "tool_calls": [{"id": "call_1", "type": "function",
+                            "function": {"name": "get_weather", "arguments": '{"city":"札幌"}'}}]},
+            "finish_reason": "tool_calls"}]}
+
+
+def _deepseek_answer(content="雪です", reasoning="答える"):
+    return {"choices": [{"message": {"role": "assistant", "content": content, "reasoning_content": reasoning},
+            "finish_reason": "stop"}]}
+
+
+def test_reasoning_content_is_sent_back_in_every_later_request(api, monkeypatch):
+    # ツールを使う会話では、過去の reasoning_content をすべて送り返さないと 400 になる。
+    # ツールを呼ばなかったターンの分も含む
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    api.reply_json(_deepseek_tool_turn())
+    api.reply_json(_deepseek_answer())
+    api.reply_json(_deepseek_answer("どういたしまして", "礼に応える"))
+    client = api.client("deepseek:deepseek-flash", api_key=None)
+
+    first = client.chat("札幌の天気", tools=[WEATHER_TOOL])
+    assert first.thinking == "天気を調べる"
+    history = [Message.user("札幌の天気"), first.message, Message.tool_result("call_1", "雪")]
+    second = client.chat(history, tools=[WEATHER_TOOL])
+    assert api.body(1)["messages"][1] == {
+        "role": "assistant", "content": None, "reasoning_content": "天気を調べる",
+        "tool_calls": [{"id": "call_1", "type": "function",
+                        "function": {"name": "get_weather", "arguments": '{"city": "札幌"}'}}],
+    }
+
+    client.chat([*history, second.message, Message.user("ありがとう")], tools=[WEATHER_TOOL])
+    sent = [m.get("reasoning_content") for m in api.body(2)["messages"] if m["role"] == "assistant"]
+    assert sent == ["天気を調べる", "答える"]
+
+
+def test_streamed_reasoning_content_is_sent_back(api):
+    api.reply_sse([
+        (None, {"choices": [{"delta": {"role": "assistant", "reasoning_content": "天気を"}}]}),
+        (None, {"choices": [{"delta": {"reasoning_content": "調べる"}}]}),
+        (None, {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call_1", "function": {
+            "name": "get_weather", "arguments": '{"city":"札幌"}'}}]}, "finish_reason": "tool_calls"}]}),
+        (None, "[DONE]"),
+    ])
+    api.reply_json(_deepseek_answer())
+    client = api.client("openai-chat:reasoning-model")
+    res = list(client.stream("札幌の天気", tools=[WEATHER_TOOL]))[-1].response
+    client.chat([Message.user("札幌の天気"), res.message, Message.tool_result("call_1", "雪")], tools=[WEATHER_TOOL])
+    assert api.body(1)["messages"][1]["reasoning_content"] == "天気を調べる"
+
+
+def test_reasoning_content_is_not_sent_to_another_model(api):
+    # 別のモデルが作った推論テキストは送らない（同じプロバイダー・同じモデルのときだけ再送する）
+    api.reply_json(_deepseek_tool_turn())
+    api.reply_json(_deepseek_answer())
+    client = api.client("openai-chat:model-a")
+    res = client.chat("札幌の天気", tools=[WEATHER_TOOL])
+    history = [Message.user("札幌の天気"), res.message, Message.tool_result("call_1", "雪")]
+    client.with_model("openai-chat:model-b").chat(history, tools=[WEATHER_TOOL])
+    assert "reasoning_content" not in api.body(1)["messages"][1]
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_openrouter_reasoning_is_shown_but_not_sent_back(api, stream):
+    # reasoning（OpenRouter の形式）は送り返せとする文書を確認していないので、表示するだけにする
+    if stream:
+        api.reply_sse([
+            (None, {"choices": [{"delta": {"reasoning": "考えた"}}]}),
+            (None, {"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}),
+            (None, "[DONE]"),
+        ])
+    else:
+        api.reply_json({"choices": [{"message": {"content": "ok", "reasoning": "考えた"}, "finish_reason": "stop"}]})
+    api.reply_json(_ok())
+    client = api.client("openai-chat:router-model")
+    res = list(client.stream("x"))[-1].response if stream else client.chat("x")
+    assert res.thinking == "考えた" and res.message.provider_state is None
+    client.chat([Message.user("x"), res.message, Message.user("y")])
+    assert api.body(1)["messages"][1] == {"role": "assistant", "content": "ok"}
+
+
 def test_invalid_json_arguments_are_kept_raw(api):
     api.reply_json({"choices": [{"message": {"tool_calls": [
         {"id": "c", "type": "function", "function": {"name": "f", "arguments": "{broken"}}]}, "finish_reason": "tool_calls"}]})
