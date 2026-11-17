@@ -51,7 +51,7 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 
 ここには規則だけを書く。理由はリンク先にある。
 
-1. **生データ再送**: 推論情報を持つアダプター（openai / anthropic / gemini）の `parse_response` は、assistant メッセージに必ず `ProviderState(self.key, self.model, raw)` を付ける。`build_request` は assistant メッセージでまず `self.native_raw(m)` を見て、あれば無加工で送る。`openai_chat` は `reasoning_content` を返したときだけ付け、送るときはその `reasoning_content` だけを assistant メッセージに足す。再送は同じプロバイダーキーかつ同じモデルのときだけ（[理由](docs/design-docs/provider-state-resend.md)）
+1. **生データ再送**: 推論情報を持つアダプター（openai / anthropic / gemini）の `parse_response` は、assistant メッセージに必ず `ProviderState(self.key, self.model, raw)` を付ける。`build_request` は assistant メッセージでまず `self.native_raw(m)` を見て、あれば無加工で送る。`openai_chat` は `reasoning_content` を返したときだけ付け、送るときはその `reasoning_content` だけを assistant メッセージに足す。再送は同じプロバイダーキーかつ同じモデルのときだけ。例外は `anthropic`（`resend_across_models = True`）で、同じプロバイダーキーならモデルが違っても送る（[理由](docs/design-docs/provider-state-resend.md)）
 2. **`parse_stream` は最後に `done` を1回だけ yield** し、非ストリーミングと同じ Response にする。非ストリーミングと同じ形の dict を組み立てて `parse_response` を再利用する
 3. **未知の SSE イベントは無視する**（例外にしない）。プロバイダーは新しいイベントを追加する
 4. **共通パラメータを増やしたら4アダプターすべてで対応する**か、`UnsupportedFeatureError` を明示的に投げる。黙って無視しない。増やす前に [scope.md](docs/product-specs/scope.md) を確認する

@@ -8,7 +8,7 @@
 |---|---|---|
 | [基本方針](core-beliefs.md) | 採用 | — |
 | [OpenAI 本家は Responses API、互換サーバーは Chat Completions](openai-responses-api.md) | 採用 | 一次情報で確認、実 API 未検証 |
-| [生データを ProviderState に退避して同じモデルへ再送する](provider-state-resend.md) | 採用 | 一次情報で確認、実 API 未検証 |
+| [生データを ProviderState に退避して再送する](provider-state-resend.md) | 採用 | 一次情報で確認、実 API 未検証 |
 | [主要3社はネイティブ API を使う](native-apis.md) | 採用 | 一次情報で確認 |
 | [出力は OpenAI 形式ではなく独自の共通型](common-types.md) | 採用 | — |
 | [SDK を使わず httpx で直接呼ぶ](http-without-sdk.md) | 採用 | — |

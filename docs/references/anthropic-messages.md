@@ -10,6 +10,7 @@
 |---|---|
 | system | トップレベルの `system`（system メッセージが複数あれば空行で連結） |
 | user | `content` ブロック（`text` / `image`）。空の text ブロックは拒否されるので送らない |
+| assistant（同じプロバイダーキーのとき） | 受け取った `content` ブロックをそのまま送る。モデルが違っても送る（下の「モデルの切り替え」） |
 | assistant（再送しないとき） | `text` と `tool_use`（`input` はオブジェクト） |
 | ツール結果 | user メッセージ内の `tool_result`（`tool_use_id`。エラーは `is_error: true`） |
 | 連続する同じ role | 1メッセージにまとめる（並列ツールの結果は1つの user メッセージに入れる） |
@@ -36,6 +37,26 @@
 | `error` | `StreamError` |
 | `ping`・その他 | 無視（Anthropic は新しいイベントを追加することがあると明言している） |
 
+## モデルの切り替え
+
+Anthropic のモデルどうしで切り替えるときも、thinking ブロックを捨てずに、受け取ったまま送る（U8。[判断](../design-docs/provider-state-resend.md)）。
+
+- Anthropic は「切り替えるときに thinking ブロックを取り除くな」としている。新しいモデルが読めないブロック（別のモデルや別のアカウントのもの）は、API がそのリクエストでは捨て、エラーにもせず料金もかけない。読めるモデルには届き、推論を引き継げる
+- 捨てられたブロックは会話の変更とは数えないので、元のモデルに戻しても、両方のモデルのブロックが有効なまま
+- どの組み合わせで読めるかはモデルによる（例: Opus 5.5 から Fable 5.1 へは引き継ぐが、Fable 5.1 から Opus 5.5 へは捨てる）。一覧は出典の「Which model switches keep the reasoning」にあり、増え続けるので、ここには写さない
+- Sonnet 5.5・Haiku 5.5・Fable 5.2・Mythos 5.2 の thinking ブロックは、作ったアカウント（かつながったアカウント）でしか使えない。ほかのアカウントでは API がエラーにせずに捨てる
+- 再送するのは同じプロバイダーキーのときだけ。`register_provider()` で同じ `anthropic` 形式を別の名前で足した接続先には送らない
+- 切り替え先のモデルで 400 になるのは、ブロックではなく設定の違いによるもの（preserved thinking に対応するモデルは `thinking: {"type": "enabled"}` を 400 にする）。thinking の設定は利用者が `extra=` で渡すので、switchllm は変えない
+
+### 前置きの検査（prefix check）
+
+preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1・Mythos 5.1・Opus 5.5・Sonnet 5.5・Haiku 5.5）は、thinking ブロックを送り返すと、それより前の内容（system・tools・それより前のメッセージ）がブロックを作ったときと同じかを確かめる。違えば、モデルによって 400 になるか、そのまま読まれる。
+
+- 1語でも変わったら違うと数える。thinking ブロックのうち、間のものだけを抜いたり動かしたりするのも違うと数える（古いもの・新しいもの・全部を抜くのはよい）
+- モデル・effort・`max_tokens`・`tool_choice` などのパラメータ、JSON の書式やキーの順は比べない
+- 400 の文言は ``Invalid `signature` in `thinking` block. The block is bound to a different conversation.``。`thinking.block_binding.prefix_mismatch_behavior` を `"drop_block"` にすると、エラーにせずにブロックを捨てる（beta ヘッダー `thinking-binding-controls-2026-08-01` が要る）
+- switchllm は、同じ履歴からは毎回同じリクエストを組み立てる（system はトップレベルにまとめ、続く同じ role のメッセージは1つにまとめる）。`res.message` を加工せずに履歴に積めば、前置きは変わらない。履歴の途中を書き換えたり、`tools` を変えたりすると、この検査に当たりうる
+
 ## 注意点
 
 - thinking とツールを併用するとき、thinking ブロックを signature ごと無加工で返す必要がある（[判断](../design-docs/provider-state-resend.md)）
@@ -52,6 +73,10 @@
 - [Implement tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use) の「Forcing tool use」（2026-11-16 確認: 「Not every model and setting supports forced tool use」。対応しないモデルの一覧と、強制すると「the response starts with the `tool_use` block and has no `thinking` block」。`{"type": "none"}` は「prevents Claude from using any tools」）
 - [Errors](https://platform.claude.com/docs/en/api/errors) の「Forced tool use not supported」（2026-11-16 確認: 上のエラーの文言と、`auto` と `none` は受け付けること）
 - [Thinking](https://platform.claude.com/docs/en/build-with-claude/thinking) の「Thinking with tool use」（2026-11-17 確認: 強制は「incompatible with manual extended thinking」。6つのモデルで拒否する理由は、どの文書にも書かれていない）
+- [Thinking](https://platform.claude.com/docs/en/build-with-claude/thinking) の「Thinking block preservation by model」（2026-11-17 確認: 「Don't strip thinking blocks when you switch. The API drops unreadable ones without billing them, and a model that reads them still gets them.」「Required: within a tool-use turn, pass thinking blocks back.」、アカウントに結びつくモデルの一覧）
+- [Preserved thinking](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking) の「Switch models and back」（2026-11-17 確認: 「A thinking block that the new model or account can't use never causes an error. The API drops it for that request and doesn't bill it」「A dropped block doesn't count as a change to the conversation, so both models' blocks stay valid.」、モデルの組み合わせごとの一覧、preserved thinking のモデルは `thinking: {"type": "enabled"}` を 400 にする）
+- [Prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)（2026-11-17 確認: 「A prefix check fails if system, tools, or an earlier message changed after Claude produced a block. It also fails if a thinking block between others was left out or moved.」、400 になるかはモデルによる、比べないパラメータ、`prefix_mismatch_behavior`）
+- [Fix: bound to a different conversation](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/fix-bound-to-a-different-conversation)（2026-11-17 確認: 400 の文言）
 
 ## 関連する未検証の前提
 

@@ -90,7 +90,7 @@ class ToolCall:
 @dataclass(frozen=True)
 class ProviderState:
     """プロバイダーが返した生データ。同じプロバイダー・同じモデルへ履歴を送り返すときに
-    そのまま再送するために保持する。
+    そのまま再送するために保持する（Anthropic は、同じプロバイダーなら別のモデルへも送る）。
 
     Anthropic の thinking ブロック（signature 付き）、Gemini の thoughtSignature、
     OpenAI Responses API の reasoning アイテムは、ツール呼び出しの往復で

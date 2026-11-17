@@ -69,6 +69,10 @@ class Provider(ABC):
     #: ``Client(..., **options)`` で受け付けるオプション名。読むオプションを足したらここにも足す
     #: （``tests/test_client.py`` がソースと照合する）
     option_names: frozenset[str] = frozenset()
+    #: True なら、同じプロバイダーキーの別のモデルが生成した生データも再送する。
+    #: プロバイダーが「モデルを替えても推論情報を捨てるな」と文書で求めているときだけ True にする
+    #: （docs/design-docs/provider-state-resend.md）
+    resend_across_models: bool = False
 
     @classmethod
     def check_options(cls, key: str, options: dict[str, Any]) -> None:
@@ -105,11 +109,14 @@ class Provider(ABC):
 
     # ---- 共通ヘルパー ---- #
     def native_raw(self, msg: Message) -> Any | None:
-        """同じプロバイダー・同じモデルが生成した assistant メッセージなら、生データを返す。"""
+        """同じプロバイダー・同じモデルが生成した assistant メッセージなら、生データを返す。
+        ``resend_across_models`` が True のアダプターでは、モデルが違っても返す。"""
         st = msg.provider_state
-        if st is not None and st.provider == self.key and st.model == self.model:
-            return copy.deepcopy(st.raw)
-        return None
+        if st is None or st.provider != self.key:
+            return None
+        if st.model != self.model and not self.resend_across_models:
+            return None
+        return copy.deepcopy(st.raw)
 
     @staticmethod
     def system_text(messages: list[Message]) -> str:

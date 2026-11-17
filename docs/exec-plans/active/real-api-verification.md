@@ -27,7 +27,7 @@ ID はほかの文書から参照しているので変えない。
 | U5 | Gemini | 他プロバイダーの履歴を送るとき、最初の functionCall にダミー署名 `skip_thought_signature_validator` を付ける | 公式は「最終手段で、性能が落ちる」と記載。Gemini 2.5 など Gemini 3 系以外に付けて害がないかは未確認。`inject_dummy_signatures=False` で無効化できる | |
 | U6 | Gemini | functionCall に id がなければ仮 ID `switchllm_...` を振り、functionResponse には id を付けない | Gemini 3 では id が常に返るという二次情報がある。古いモデルでの挙動は未確認 | |
 | U7 | Gemini | generateContent を使う | Google は generateContent を「レガシー」と表記し、新規開発には Interactions API を勧めている。当面は動くはずだが、将来の移行候補 | |
-| U8 | Anthropic | 別のモデルへ切り替えると thinking ブロックを捨てる | thinking を有効にしたままツール往復の途中でモデルを変えると 400 になる可能性がある（同じモデルの中なら問題ない） | |
+| U8 | Anthropic | 別のモデルへ切り替えても、同じプロバイダーキーなら thinking ブロックを受け取ったまま送る | 文書は「読めないブロックは API がエラーにせず、料金もかけずに捨てる」とするが、実リクエストでは未確認。ツール往復の途中で切り替えたときと、読めない組み合わせ（例: Sonnet 5.5 から Haiku 5.5）で確かめる | 2026-11-17: 文書で確認し、モデルが違っても送るように直した（それまでは thinking を抜いて変換し直していた）。実 API は未確認 |
 | U9 | Anthropic | `tool_choice: "none"` を `{"type": "none"}` にする | 対応済みと理解しているが未確認 | |
 | U10 | Chat Completions 互換 | ストリーミングで `stream_options: {include_usage: true}` を送る | 拒否するサーバーがあれば `Client(..., stream_usage=False)` で無効化できる | |
 | U11 | Chat Completions 互換（DeepSeek 形式） | 同じプロバイダー・同じモデルが返した `reasoning_content` を、assistant メッセージに足して送り返す（ツールの有無にかかわらず） | DeepSeek の文書どおりに直したが、実リクエストでは未確認。`reasoning_content` を返すほかの互換サーバー（LM Studio など）が、送り返したものを受け付けるかも未確認 | 2026-11-17: 文書で確認し、送り返すように直した（DeepSeek は、ツールを使うリクエストで送り返さないと 400）。実 API は未確認 |
@@ -48,6 +48,7 @@ ID はほかの文書から参照しているので変えない。
 - 2026-11-16: `scripts/smoke_test.py` は `tool_choice="required"` を使っているので、Sonnet 5.5 や Opus 5.5 では 400 になる（Anthropic はこれらのモデルでツールの強制を受け付けない）。また、今の smoke test で確かめられるのは表の一部（U3・U4・U6・U10・U12・U13・U15・U16 など）だけなので、残りも1回の実行で確かめられるように拡張する
 - 2026-11-17: API が返したエラーを、手を加えずに渡すようにした。`APIError.message` に API の文言だけを入れ、知らない形の本文は HTTP の理由句ではなく本文をそのまま見せる（[RELIABILITY.md](../../RELIABILITY.md)）
 - 2026-11-17: DeepSeek に対応した。公式文書（Thinking Mode・Chat Completions API・Tool Calls・Models & Pricing）を読み直し、出典を [Chat Completions 互換](../../references/openai-chat-compatible.md) に書いた。U11 を直し、同じプロバイダー・同じモデルが返した `reasoning_content` を assistant メッセージに足して送り返すようにした。`reasoning`（OpenRouter の形式）は、ストリーミングでもフィールド名を変えずに組み直し、送り返さない。`deepseek` のプリセット（`https://api.deepseek.com`、`DEEPSEEK_API_KEY`）を足した（[判断](../../design-docs/verified-presets.md)）。文書に書かれていない、別の履歴を受け付けるか（U17）と usage の内訳（U18）を表に足した。2026-11-17 時点のモデルは `deepseek-flash` と `deepseek-v4-pro` で、どちらも思考モードが既定。思考モードでは `tool_choice` の `required` とツール名の指定が 400 になるので、smoke test のツールの往復では `auto` にする
+- 2026-11-17: U8 を直した。Anthropic の文書（Thinking・Preserved thinking・Prefix checks）を読み、出典を [Anthropic Messages](../../references/anthropic-messages.md) に書いた。文書は「切り替えるときに thinking ブロックを取り除くな。読めないものは API が料金なしで捨て、エラーにしない」「捨てたブロックは会話の変更と数えないので、元のモデルに戻しても両方のブロックが有効なまま」としている。anthropic アダプターだけ `resend_across_models = True` にし、同じプロバイダーキーならモデルが違っても生データを送るようにした。openai と gemini は同じモデルのときだけのまま（別のモデルで変換し直すことをテストで固定した）。あわせて、preserved thinking に対応するモデル（Opus 5.5・Sonnet 5.5・Haiku 5.5 など）は、送り返した thinking ブロックより前の内容（system・tools・それより前のメッセージ）が変わっていると 400 にすることがあると分かった。switchllm は同じ履歴から毎回同じリクエストを組み立てるので、`res.message` を加工しなければ当たらない
 
 ## 判断ログ
 

@@ -170,7 +170,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 詳しい理由は [設計判断の一覧](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/index.md) にある。
 
 - **OpenAI 本家は Responses API、互換サーバーは Chat Completions。** GPT-5.4 以降、Chat Completions では推論とツール呼び出しを両立できないため（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/openai-responses-api.md)）
-- **生データを `provider_state` に退避し、同じモデルへはそのまま返す。** 署名や推論アイテムを落とすと、ツールの往復がエラーになるため。別のモデルへは共通型から変換し直す（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/provider-state-resend.md)）
+- **生データを `provider_state` に退避し、同じモデルへはそのまま返す。** 署名や推論アイテムを落とすと、ツールの往復がエラーになるため。別のモデルへは共通型から変換し直す。例外は Anthropic で、Anthropic の文書が求めるとおり、別の Claude のモデルへも thinking ブロックをそのまま送る。新しいモデルが読めないものは、API がエラーにせず、料金もかけずに捨てる（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/provider-state-resend.md)）
 - **主要3社はネイティブ API を使う。** 各社の OpenAI 互換エンドポイントは、キャッシュや thinking などの機能が制限されるため（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/native-apis.md)）
 - **`usage` の意味を揃える。** `input_tokens` はキャッシュを含む入力の総数、`output_tokens` は推論を含む出力の総数（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/usage-normalization.md)）
 - **SDK を使わず HTTP を直接呼ぶ。** 依存を httpx だけにし、形式の差をコード上で見えるようにするため（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/http-without-sdk.md)）

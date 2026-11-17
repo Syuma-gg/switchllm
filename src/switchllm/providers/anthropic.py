@@ -40,6 +40,10 @@ class AnthropicProvider(Provider):
     default_base_url = "https://api.anthropic.com"
     api_key_env = ("ANTHROPIC_API_KEY",)
     option_names = frozenset({"default_max_tokens", "anthropic_version", "beta"})
+    # Anthropic は、モデルを切り替えるときも thinking ブロックを捨てずにそのまま送ることを求める。
+    # 新しいモデルが読めないブロックは、API がエラーにせず、料金もかけずに捨てる
+    # （docs/references/anthropic-messages.md の「モデルの切り替え」）
+    resend_across_models = True
 
     def _user_blocks(self, m: Message) -> list[dict[str, Any]]:
         blocks: list[dict[str, Any]] = []
