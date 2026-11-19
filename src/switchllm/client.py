@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any, Iterable, Iterator, Sequence, Union
 
@@ -17,7 +18,7 @@ import httpx
 from ._http import RetryPolicy, request_json, stream_sse
 from .errors import ConfigurationError
 from .providers import PRESETS, create_provider
-from .providers.base import ChatRequest, Provider, deep_merge, normalize_tool_choice
+from .providers.base import ChatRequest, Provider, deep_merge, normalize_tool_choice, strict_object_schema
 from .tools import Tool, ToolLike, as_tool
 from .types import ImagePart, Message, Response, StreamEvent, TextPart
 
@@ -99,6 +100,17 @@ def _check_tool_choice(tool_choice: Any, tools: list[Tool]) -> None:
         )
 
 
+def _fill_parsed(res: Response) -> None:
+    """構造化出力の本文を読んで ``res.parsed`` に入れる。最後まで答えたときだけ読む。
+    拒否や上限で止まった本文は、JSON として読めてもスキーマに合う保証がないため。"""
+    if res.stop_reason != "end":
+        return
+    try:
+        res.parsed = json.loads(res.text)
+    except ValueError:  # JSON でない本文（JSONDecodeError は ValueError の子）
+        res.parsed = None
+
+
 class Client:
     def __init__(
         self,
@@ -157,6 +169,7 @@ class Client:
         max_tokens: int | None,
         temperature: float | None,
         stop: list[str] | None,
+        response_schema: dict[str, Any] | None,
         extra: dict[str, Any] | None,
         extra_by_provider: dict[str, dict[str, Any]] | None,
     ) -> ChatRequest:
@@ -165,6 +178,11 @@ class Client:
             msgs = [Message.system(system), *msgs]
         tool_list = [as_tool(t) for t in (tools or [])]
         _check_tool_choice(tool_choice, tool_list)
+        if response_schema is not None and not isinstance(response_schema, dict):
+            raise TypeError(
+                f"response_schema must be a JSON Schema dict, got {response_schema!r}. "
+                "For a Pydantic model, pass Model.model_json_schema()"
+            )
         return ChatRequest(
             messages=msgs,
             tools=tool_list,
@@ -172,6 +190,7 @@ class Client:
             max_tokens=max_tokens,
             temperature=temperature,
             stop=stop,
+            response_schema=None if response_schema is None else strict_object_schema(response_schema),
             extra=_pick_extra(self.provider.key, extra, extra_by_provider),
         )
 
@@ -186,23 +205,29 @@ class Client:
         max_tokens: int | None = None,
         temperature: float | None = None,
         stop: list[str] | None = None,
+        response_schema: dict[str, Any] | None = None,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> Response:
         """1回分の応答を返す。
 
+        ``response_schema`` に JSON Schema の dict を渡すと、答えをその形の JSON に縛り、
+        読んだ値を ``Response.parsed`` に入れる（構造化出力。docs/design-docs/structured-output.md）。
         ``extra`` はプロバイダー固有パラメータをリクエスト本体にそのままマージする。
         ``extra_by_provider`` は ``{"anthropic": {...}, "openai": {...}}`` の形で各社の分を並べ、
         モデル文字列の ``provider:`` 部分と同じ名前の分だけをマージする（``extra`` より優先）。
         モデルを切り替えても、呼び出し側のコードを直さずに済む。"""
         req = self._request(
             messages, system=system, tools=tools, tool_choice=tool_choice,
-            max_tokens=max_tokens, temperature=temperature, stop=stop, extra=extra,
-            extra_by_provider=extra_by_provider,
+            max_tokens=max_tokens, temperature=temperature, stop=stop,
+            response_schema=response_schema, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=False)
         data = request_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
-        return self.provider.parse_response(data)
+        res = self.provider.parse_response(data)
+        if req.response_schema is not None:
+            _fill_parsed(res)
+        return res
 
     def stream(
         self,
@@ -214,19 +239,24 @@ class Client:
         max_tokens: int | None = None,
         temperature: float | None = None,
         stop: list[str] | None = None,
+        response_schema: dict[str, Any] | None = None,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> Iterator[StreamEvent]:
         """差分を逐次返す。最後の ``done`` イベントに完成した Response（ツール呼び出し込み）が入る。
-        引数の意味は ``chat()`` と同じ。"""
+        引数の意味は ``chat()`` と同じ。``response_schema`` を渡したときの ``text`` イベントは JSON の断片で、
+        ``done`` の ``response.parsed`` は ``chat()`` と同じになる。"""
         req = self._request(
             messages, system=system, tools=tools, tool_choice=tool_choice,
-            max_tokens=max_tokens, temperature=temperature, stop=stop, extra=extra,
-            extra_by_provider=extra_by_provider,
+            max_tokens=max_tokens, temperature=temperature, stop=stop,
+            response_schema=response_schema, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=True)
         events = stream_sse(self._http, http_req, provider=self.provider.key, retry=self.retry)
-        yield from self.provider.parse_stream(events)
+        for ev in self.provider.parse_stream(events):
+            if ev.type == "done" and ev.response is not None and req.response_schema is not None:
+                _fill_parsed(ev.response)
+            yield ev
 
     # ------------------------------------------------------------------ #
     def close(self) -> None:

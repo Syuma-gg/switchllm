@@ -17,7 +17,7 @@
 | `TextPart` | クラス | テキストのパーツ |
 | `ImagePart` | クラス | 画像のパーツ（base64 か URL）。`ImagePart.from_file()` |
 | `ToolCall` | クラス | モデルが要求したツール呼び出し |
-| `Response` | クラス | `chat()` の結果 |
+| `Response` | クラス | `chat()` の結果。`chat(response_schema=...)` で構造化出力を指定したら、読んだ JSON が `parsed` に入る（[判断](../design-docs/structured-output.md)） |
 | `Usage` | クラス | トークン使用量 |
 | `StreamEvent` | クラス | `stream()` のイベント（`text` / `thinking` / `done`） |
 | `Tool` | クラス | ツール定義（名前・説明・JSON Schema・関数） |
@@ -47,6 +47,7 @@
 | `Usage.output_tokens` | 出力トークンの総数（推論トークンを含む） |
 | `Usage.details` | プロバイダーが返した生の内訳 |
 | `ToolCall.arguments` | 常に dict。JSON として壊れていたら `{}` にし、原文を `raw_arguments` に残す |
+| `Response.parsed` | `response_schema=` を指定し、`stop_reason` が `end` で、本文が JSON として読めたときだけ、読んだ値。それ以外（拒否、上限で止まった、ツールを呼んだ、指定なし）は `None`。スキーマに合うかはライブラリでは確かめない（各社が出力を縛る） |
 | `stream()` の `done` | 最後に1回だけ届く。`response` は非ストリーミングの `chat()` と同じ内容。終わりの合図が来ないまま接続が閉じたら、`done` ではなく `StreamError` |
 | `Response.message.provider_state` | プロバイダーの生データ。利用者は触らず、メッセージごと履歴に積む。保存するときは `to_dict()` に含まれる |
 
@@ -85,6 +86,7 @@
 | `max_tokens_field` | `openai_chat` | max_tokens を送るフィールド名。既定は、接続先が OpenAI 本家なら `max_completion_tokens`、それ以外は `max_tokens` |
 | `stream_usage` | `openai_chat` | `False` にすると、ストリーミングで `stream_options.include_usage` を送らない（既定 `True`、U10） |
 | `headers` | `openai_chat` | リクエストに足すヘッダー（dict） |
+| `json_schema` | `openai_chat` | `False` にすると、`response_schema=` を送る前に `UnsupportedFeatureError` にする。JSON Schema を受け付けない接続先のため（既定 `True`、`deepseek` のプリセットは `False`） |
 | `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 4096。Anthropic は必須） |
 | `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2023-06-01`） |
 | `beta` | `anthropic` | `anthropic-beta` ヘッダーにする名前のリスト |

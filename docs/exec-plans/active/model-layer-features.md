@@ -30,7 +30,7 @@ LLM をコードで呼ぶときによく使うのに、今は各社の書き方�
   - 今の問題: `Message.from_dict()` は推論情報（`provider_state`）を捨てる。保存した会話を復元すると、DeepSeek ではツールを使う会話が 400 になり、Gemini はダミー署名に頼り、OpenAI と Anthropic は推論を引き継げない
   - 決めること: API の形（`Message.to_dict()` / `from_dict()` を推論情報ごと往復させるか、会話の一覧を丸ごと保存する関数を足すか）、保存の形式に版を持たせるか、`ProviderState` を公開するか（[負債](../tech-debt-tracker.md) の「`ProviderState` が公開 API にない」も解消する）、画像（base64）を履歴に含めたときの大きさ
   - テスト: 4アダプターそれぞれで、応答 → JSON → 復元 → 次のリクエストが、保存しなかったときと同じになること
-- [ ] **2. 構造化出力**
+- [x] **2. 構造化出力**（2026-11-20。[判断](../../design-docs/structured-output.md)）
   - 今の問題: 「やらない」としていたので、モデルを変えるたびに書き方が変わる（OpenAI `text.format`、Gemini `generationConfig.responseSchema` など）
   - 決めること: 共通パラメータの名前と受け取る形（JSON Schema の dict か、型ヒントからも作るか）、結果を文字列のまま返すか、読んだ値も返すか、ストリーミングとツールとの組み合わせ、JSON Schema に対応しない接続先（JSON モードだけのもの、対応しないもの）の扱い
   - 一次情報で確かめる: OpenAI Responses、Chat Completions の `response_format`、Anthropic、Gemini、DeepSeek、Ollama、LM Studio
@@ -57,11 +57,14 @@ LLM をコードで呼ぶときによく使うのに、今は各社の書き方�
 
 ## 進捗ログ
 
+- 2026-11-20: 2（構造化出力）を終えた。テスト（`tests/test_structured_output.py`）を先に書き、変更前のコードで、`response_schema` の引数・`Response.parsed`・`json_schema` のオプションがないことで失敗するのを確かめてから実装した（引数の型のテストは、Python の「unexpected keyword argument」の文言にも当たって通ってしまったので、ライブラリの文言で確かめるように直した）。4アダプター（Ollama・LM Studio を含む）で、各社の形式で送ること、`chat()` と `stream()` の `done` が同じ `parsed` を返すこと、拒否・上限・ツールを呼んだときは `parsed` が `None` であることを確かめた。E2E に `test_e2e_structured.py`（3つ、1モデル最大 4 回）を足した。README の「制限」にあった `store: false` の記述（`include` が要る）が、2026-11-17 に文書で確かめた内容（要らない）と食い違っていたので直した
+- 2026-11-20: 2（構造化出力）の一次情報を確かめ、各社の形式・スキーマの制約・拒否と途中で切れたときの返り方・ストリーミングとツールとの併用を `docs/references/` の4つの文書の「構造化出力」に書いた。分かったこと: 指定の場所は4社で違う（OpenAI `text.format`、Chat Completions `response_format`、Anthropic `output_config.format`、Gemini `responseJsonSchema`）。スキーマの条件は OpenAI（strict）が最も厳しく、全オブジェクトに `additionalProperties: false`、全プロパティを `required`。Anthropic も `additionalProperties: false` は必須。Gemini は使えないキーワードを黙って無視する。DeepSeek は JSON Schema を受け付けず、JSON モードだけ。どの社も、HTTP の応答では JSON を文字列で返す。文書で決めきれないものを U19〜U22 として [実 API 検証](real-api-verification.md) に足した。Anthropic の API の新しい版（`2026-10-21`）で `temperature` が 400 になることを見つけ、[負債](../tech-debt-tracker.md) に書いた
 - 2026-11-18: 1（履歴の JSON 保存・復元）を終えた。テスト（`tests/test_history.py`）を先に書き、`to_dict` がないことと、`content: null` を空にしないことで失敗するのを確かめてから実装した。4アダプター（Anthropic・OpenAI・Gemini・DeepSeek）で、JSON を経て復元した履歴から、元の履歴と同じリクエストを送り、推論情報（署名・暗号化された推論・reasoning_content）を送り返すことを確かめた。E2E にも `test_restored_history_continues` を足した。`from_dict()` が `{"type": "text"}` / `{"type": "image"}` のパーツの dict を読めるようになったので、`tests/test_client.py` で「読めないパーツの dict」の例に使っていた `{"type": "text"}` を、今も読めない OpenAI の `image_url` の形に替え、読めるようになった形が送られることを確かめるテストを足した
 - 2026-11-18: できることとできないことを整理し、基本方針に「機能を足すか絞るかの基準」を足した。この基準に照らして6つを選び、作者がすべて必要と判断したので、この計画を作った
 
 ## 判断ログ
 
+- 2026-11-20: 構造化出力は、`response_schema=` に JSON Schema の dict を受け取る。スキーマには、プロパティを並べたオブジェクトへの `additionalProperties: false` だけを足す。結果は `Response.parsed` にも入れる。JSON Schema を受け付けない DeepSeek では送る前に `UnsupportedFeatureError` にする（作者の判断。4つとも推奨の案。[判断](../../design-docs/structured-output.md)）
 - 2026-11-18: 履歴の保存・復元は `Message.to_dict()` を足し、`Message.from_dict()` を推論情報ごと元に戻せるように広げる形にする。版の番号は付けず、`ProviderState` は公開しない（作者の判断。[判断](../../design-docs/history-serialization.md)）
 
 - 2026-11-18: 構造化出力と推論の強さの共通化を、[スコープ](../../product-specs/scope.md) の「やらないこと」から外す（作者の判断）。以前は、指定の方法がモデルの世代で変わり、4アダプターで追い続けるのが重いとして見送っていた（[判断](../../design-docs/provider-specific-params.md)）。今回、「LLM をいろいろ変えて試すとき、パラメータ1つだけを変えればよい」ことを機能を選ぶ基準にした。この2つは、今はモデルを変えるたびに呼び出し側の書き方が変わるので、基準に照らして足す

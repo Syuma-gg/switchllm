@@ -14,9 +14,9 @@ import json
 from typing import Any, Iterator
 
 from .._http import HTTPRequest
-from ..errors import StreamError
+from ..errors import StreamError, UnsupportedFeatureError
 from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
-from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice
+from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice, schema_name
 from .openai_responses import _parse_args
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -34,7 +34,7 @@ class OpenAIChatProvider(Provider):
     adapter = "openai_chat"
     default_base_url = OPENAI_BASE_URL
     api_key_env = ("OPENAI_API_KEY",)
-    option_names = frozenset({"max_tokens_field", "stream_usage", "headers"})
+    option_names = frozenset({"max_tokens_field", "stream_usage", "headers", "json_schema"})
 
     def _max_tokens_field(self) -> str:
         """OpenAI 本家は ``max_tokens`` を非推奨とし、o-series とは互換性がないと記載している。
@@ -96,6 +96,18 @@ class OpenAIChatProvider(Provider):
             if req.tool_choice is not None:
                 mode, name = normalize_tool_choice(req.tool_choice)
                 body["tool_choice"] = {"type": "function", "function": {"name": name}} if mode == "tool" else mode
+        if req.response_schema is not None:
+            # DeepSeek の response_format は text と json_object だけ（docs/references/openai-chat-compatible.md）。
+            # 黙って JSON モードに替えず、送る前に知らせる
+            if not self.options.get("json_schema", True):
+                raise UnsupportedFeatureError(
+                    f"{self.key!r} does not support JSON Schema output (response_schema=). For JSON mode, pass "
+                    "extra={'response_format': {'type': 'json_object'}} and describe the JSON format in the prompt"
+                )
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": schema_name(req.response_schema), "schema": req.response_schema, "strict": True},
+            }
         if stream:
             body["stream"] = True
             if self.options.get("stream_usage", True):

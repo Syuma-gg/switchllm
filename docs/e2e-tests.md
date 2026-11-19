@@ -83,6 +83,16 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | `test_image_base64` | 64×64 の赤い PNG（base64）の色を答えられる | ○ | 1 | |
 | `test_image_url_is_rejected_before_sending`（Gemini だけ） | URL の画像は送る前に `UnsupportedFeatureError` | | 0 | |
 
+### 構造化出力（`test_e2e_structured.py`）
+
+JSON Schema を受け付けない接続先（`deepseek` のプリセット）では、どれも送る前に `UnsupportedFeatureError` になることを確かめる（呼ばない）。
+
+| テスト | 確かめること | 境界 | 回数 | 前提 |
+|---|---|---|---|---|
+| `test_structured_output` | 入れ子のオブジェクト・配列・enum を含むスキーマを受け付け、`stop_reason` が `end`、`parsed` がスキーマどおりのキーと型（`additionalProperties: false` を入れ子にも足して送る） | | 1 | U19、U20、U21 |
+| `test_structured_output_stream` | ストリーミングでも同じ。`text` の差分をつなぐと `done` の本文（JSON）になり、`parsed` が入る | | 1 | U19、U20、U21 |
+| `test_structured_output_with_tools` | ツールと一緒に指定する。ツールを呼んだ応答の `parsed` は `None`、結果を渡したあとの答えはスキーマどおり。受け付けないモデルは API のエラーをそのまま返す | | 2 | U22 |
+
 ### エラー（`test_e2e_errors.py`）
 
 失敗するリクエストは、多くのプロバイダーで課金されない。

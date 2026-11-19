@@ -63,8 +63,27 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - OpenAI SDK 互換のレイヤーは本番向けではないとされているので使わない（[判断](../design-docs/native-apis.md)）
 - ツールの強制（`tool_choice` の `any` と `tool`。共通の `"required"` とツール名）は、Claude Fable 5.2・Mythos 5.2・Opus 5.5・Sonnet 5.5・Fable 5.1・Mythos 5.1 と、thinking を予算で指定するモード（`thinking: {"type": "enabled"}`）では 400 になる。エラーの文言は `tool_choice: type "tool" and "any" are not supported for this model.`。`auto` と `none` はどれでも使える。それ以外のモデルは強制を受け付けるが、強制した応答は thinking を飛ばして `tool_use` から始まる。switchllm は先回りして弾かず、黙って `auto` に替えもせず、API のエラーをそのまま `BadRequestError` で返す（[RELIABILITY.md](../RELIABILITY.md)）。公式は代わりに、`auto` のままプロンプトでツールを使う場面を書くことを勧めている
 
+## 構造化出力
+
+`response_schema=` は `output_config.format` で送る（[判断](../design-docs/structured-output.md)）。以下は 2026-11-20 に文書で確かめた形式。
+
+- 指定: `output_config: {"format": {"type": "json_schema", "schema": {...}}}`。`name` はない。正式な機能で、beta ヘッダーは要らない。以前の `output_format` は非推奨で、beta ヘッダー `structured-outputs-2025-11-13` を付けないと 400 になる
+- 対応するモデル: 「Structured outputs are available on every model」
+- スキーマの条件: オブジェクトの `additionalProperties` は `false` にする（それ以外は使えない）。すべてのプロパティを `required` に入れる必要はない（出力では required の項目が先に並ぶ）。対応しない機能を使うと「a 400 error with details」
+- 使えるもの: 基本の型すべて（object・array・string・integer・number・boolean・null）、`$ref`・`$defs`・`definitions`、`default`、`enum` と `const`（文字列・数・真偽値・null だけ）、`anyOf` と `allOf`（制限つき）、string の `format`（date-time・time・date・duration・email・hostname・uri・ipv4・ipv6・uuid）、単純な `pattern`、array の `minItems`（0 と 1 だけ）
+- 使えないもの: 再帰するスキーマ、`oneOf`（`anyOf` を使う）、`not`、`type` や `properties` と同じ階層の `anyOf`、数の制約（`minimum`・`maximum`・`multipleOf` など）、文字列の長さ（`minLength`・`maxLength`）、`minItems` の 0・1 以外、外部の `$ref`
+- 上限（1つのリクエストの、strict なツールと JSON 出力のスキーマを合わせた数）: 省略できるパラメータは 24 個まで、`anyOf` か型の配列を使うパラメータは 16 個まで、strict なツールは 20 個まで。内部の上限を超えると 400 の「Schema is too complex for compilation.」。コンパイルは 180 秒で打ち切る
+- 結果: JSON は `text` ブロックに入る（HTTP の応答に読んだ値はない。`parsed_output` は SDK の機能）。拒否は `stop_reason: "refusal"`（200 で返り、出力はスキーマに合わないことがある）。`max_tokens` で切れたら出力が途中までのことがある。enum と const の値は、大文字・小文字が違って返ることがある
+- 併用: ストリーミングはいつもどおり。thinking とも使える（文法は thinking には効かず、最後の答えにだけ効く）。strict なツールとも同じリクエストで使える。citations を有効にすると 400。assistant の先読み（prefill）とは併用できない
+- スキーマごとに文法をコンパイルするので、初回は遅くなる。コンパイルした文法は最後に使ってから 24 時間残る。`output_config.format` を変えると、その会話のプロンプトキャッシュが無効になる
+- API の版: 文書の例は `anthropic-version: 2026-10-21` を送っている。switchllm の既定の `2023-06-01` で `output_config` を受け付けるかは書かれていない（U19）
+
 ## 出典
 
+- [Structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)（2026-11-20 確認: 「The request carries the schema in `output_config.format` with `type: "json_schema"`」「Structured outputs are available on every model」「`required` and `additionalProperties` (must be set to `false` for objects)」「If you use an unsupported feature, you'll receive a 400 error with details」、使えるもの・使えないものの一覧、上限の表、拒否と `max_tokens` のとき、「Grammars apply only to Claude's direct output, not to tool use calls, tool results, or thinking tags」、citations は 400、「Prefilling is incompatible with JSON outputs」、「The `output_format` parameter has moved to `output_config.format`, and beta headers are no longer required」、文法のキャッシュ）
+- [Messages API](https://platform.claude.com/docs/en/api/messages)（2026-11-20 確認: `output_config.format` は `type: "json_schema"` と `schema` の2つの項目）
+- [Versioning](https://platform.claude.com/docs/en/api/versioning)（2026-11-20 確認: 版は `2026-10-21`・`2023-06-01`・`2023-01-01`。「Anthropic recommends using the latest API version whenever possible」。`2026-10-21` では「The `temperature`, `top_p`, and `top_k` request parameters are removed. A request that sends any of them returns a 400 error on every model」）
+- [Migrating to 2026-10-21](https://platform.claude.com/docs/en/api/migration-2026-10-21)（2026-11-20 確認: 「If you call the API without an SDK, set the `anthropic-version` header to `2026-10-21`」「If a request relies on a non-default value, either stop sending the parameter, or keep that request on `2023-06-01`」）
 - [Streaming Messages](https://docs.anthropic.com/en/api/messages-streaming)
 - [Extended thinking](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking)
 - [OpenAI SDK compatibility](https://docs.anthropic.com/en/api/openai-sdk)
@@ -84,4 +103,4 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 
 ## 関連する未検証の前提
 
-U8、U9、U14（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U8、U9、U14、U19（[実 API 検証](../exec-plans/active/real-api-verification.md)）

@@ -64,6 +64,7 @@ providers/     Provider   parse_response() / parse_stream(): 各社の JSON → 
 | `tests/test_<adapter>.py` | アダプターごとのリクエスト形状 / ツール往復 / ストリーミング / エラー |
 | `tests/test_cross_provider.py` | 会話の途中でプロバイダーを替えたときの履歴変換 |
 | `tests/test_consistency.py` | 同じテストを4アダプターで回し、切り替えても同じ振る舞いになること（共通パラメータ、`tool_choice`、ストリームの終わりとエラー、未知のイベント） |
+| `tests/test_structured_output.py` | 構造化出力（`response_schema=`）。4アダプターで各社の形式になり、同じ `parsed` を返すこと、スキーマに足すもの、JSON Schema を受け付けない接続先 |
 | `tests/test_client.py` | モデル文字列、APIキー、`with_model()`、プロバイダー別のオプション、`extra_by_provider`、送る前の検査、プロバイダーの登録 |
 | `tests/test_http.py` | リトライ、`Retry-After`、例外への対応づけ、エラー本体の解釈、接続エラー |
 | `tests/test_tools.py` | `@tool` のスキーマ生成と対応型の範囲、`run_tool_calls` |
@@ -74,7 +75,7 @@ providers/     Provider   parse_response() / parse_stream(): 各社の JSON → 
 | `tests/test_harness.py` | 品質検査のファイル・Stop フック・CLAUDE.md の節が、テンプレート（`harness/quality-gate/`）と同じであること |
 | `tests/test_recording.py` | 実 API の記録と再生（秘密を残さない、記録と違うリクエストを見逃さない）、リポジトリの記録にキーがないこと |
 | `tests/sample_tools.py` | テストで共有するツール定義（`conftest` からは import しない） |
-| `e2e/test_e2e_*.py` | 実 API に対する E2E テスト（基本と境界値、ツール、ストリーミング、画像、エラー、切り替え、usage）。`--models` を渡すと実 API で回し、渡さなければ記録を再生する |
+| `e2e/test_e2e_*.py` | 実 API に対する E2E テスト（基本と境界値、ツール、ストリーミング、画像、構造化出力、エラー、切り替え、usage）。`--models` を渡すと実 API で回し、渡さなければ記録を再生する |
 
 `e2e/` の E2E テストだけは、`--models` を渡すと実 API を叩く（料金が発生する。[E2E テスト](docs/e2e-tests.md)）。渡さなければ、`e2e/recordings/` に記録したやりとりを再生し、既定の `python -m pytest` にも入る（[テストの方針](docs/testing.md)）。`scripts/quality_gate.py` は ruff・pytest・カバレッジをまとめて回す（Stop フックと CI から呼ぶ。[方針](docs/quality-gates.md)）。これは `harness/quality-gate/` にある、他のプロジェクトでも使うテンプレートの写しなので、直すときはテンプレートも同じ変更で直す（[テンプレート](harness/quality-gate/README.md)）。
 

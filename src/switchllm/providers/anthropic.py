@@ -113,6 +113,9 @@ class AnthropicProvider(Provider):
                     "required": {"type": "any"},
                     "tool": {"type": "tool", "name": name},
                 }[mode]
+        if req.response_schema is not None:
+            # name はない。beta ヘッダーも要らない（docs/references/anthropic-messages.md）
+            body["output_config"] = {"format": {"type": "json_schema", "schema": req.response_schema}}
         if stream:
             body["stream"] = True
         body = deep_merge(body, req.extra)

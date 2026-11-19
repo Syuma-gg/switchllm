@@ -113,6 +113,10 @@ class GeminiProvider(Provider):
             gen["temperature"] = req.temperature
         if req.stop:
             gen["stopSequences"] = req.stop
+        if req.response_schema is not None:
+            # JSON Schema をそのまま受け取る responseJsonSchema を使う（U20。docs/references/gemini-generate-content.md）
+            gen["responseMimeType"] = "application/json"
+            gen["responseJsonSchema"] = req.response_schema
         if gen:
             body["generationConfig"] = gen
         if req.tools:

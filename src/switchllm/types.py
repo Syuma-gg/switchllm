@@ -266,6 +266,9 @@ class Response:
     model: str
     raw: dict[str, Any]
     thinking: str | None = None
+    #: ``response_schema=`` を指定し、``stop_reason`` が ``end`` で、本文が JSON として読めたときだけ、
+    #: 読んだ値。それ以外は None（docs/design-docs/structured-output.md）
+    parsed: Any = None
 
     @property
     def text(self) -> str:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Iterator
@@ -31,7 +32,52 @@ class ChatRequest:
     max_tokens: int | None = None
     temperature: float | None = None
     stop: list[str] | None = None
+    #: 構造化出力の JSON Schema。``Client`` が ``strict_object_schema()`` を通したもの。None なら指定なし
+    response_schema: dict[str, Any] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+# 構造化出力のスキーマで、中にスキーマを持つキーワード（docs/design-docs/structured-output.md）
+_SCHEMA_MAPS = ("properties", "$defs", "definitions")
+_SCHEMA_LISTS = ("anyOf", "allOf", "oneOf", "prefixItems")
+# OpenAI の json_schema の name の条件（docs/references/openai-chat-compatible.md）
+_SCHEMA_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def strict_object_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """プロパティを並べたオブジェクトに ``additionalProperties: false`` を足した写しを返す。
+
+    OpenAI（strict）と Anthropic が必須とし、Gemini も受け付ける。プロパティのないオブジェクト
+    （キーを決めない dict）と、``additionalProperties`` を書いてあるものは変えない。足すと意味が変わるため。"""
+    out = copy.deepcopy(schema)
+    _close_objects(out)
+    return out
+
+
+def _close_objects(node: Any) -> None:
+    if not isinstance(node, dict):
+        return
+    if isinstance(node.get("properties"), dict) and "additionalProperties" not in node:
+        node["additionalProperties"] = False
+    for key in _SCHEMA_MAPS:
+        sub = node.get(key)
+        if isinstance(sub, dict):
+            for child in sub.values():
+                _close_objects(child)
+    for key in _SCHEMA_LISTS:
+        sub = node.get(key)
+        if isinstance(sub, list):
+            for child in sub:
+                _close_objects(child)
+    items = node.get("items")
+    for child in items if isinstance(items, list) else [items]:  # list は古い書き方のタプル
+        _close_objects(child)
+
+
+def schema_name(schema: dict[str, Any]) -> str:
+    """OpenAI が必須とする json_schema の name。``title`` が条件に合えばそれ、合わなければ ``"response"``。"""
+    title = schema.get("title")
+    return title if isinstance(title, str) and _SCHEMA_NAME.fullmatch(title) else "response"
 
 
 def deep_merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:

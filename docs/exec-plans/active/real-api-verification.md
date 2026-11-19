@@ -6,7 +6,7 @@
 
 ## 手順
 
-- [x] 下の表（U1〜U18）を1回の実行で確かめられるようにする（2026-11-17。smoke test を広げ、同じ日に pytest の E2E テスト `e2e/` に置き換えた。[E2E テスト](../../e2e-tests.md)）
+- [x] 下の表（U1〜U18。U19〜U22 は構造化出力を実装するときに E2E のケースを足す）を1回の実行で確かめられるようにする（2026-11-17。smoke test を広げ、同じ日に pytest の E2E テスト `e2e/` に置き換えた。[E2E テスト](../../e2e-tests.md)）
 - [ ] 各社のキーで E2E テストを `--record` を付けて実行し、記録をコミットする。**料金が発生するので、実行前にユーザーの確認を取る**。記録は、それ以降の `python -m pytest` で毎回再生される
   - まず `--collect-only` で呼び出しの回数を確かめる（API は呼ばない）。モデルと料金の目安を伝えて了承を得てから実行する
   - 例: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,anthropic:claude-haiku-5-5,openai:gpt-5.5,gemini:gemini-flash-latest,deepseek:deepseek-flash,deepseek:deepseek-v4-pro,ollama:<model>,lmstudio:<model>"`
@@ -41,6 +41,10 @@ ID はほかの文書から参照しているので変えない。
 | U16 | ストリーミング（Chat Completions 互換・Gemini） | 終わりの合図（Chat Completions は `finish_reason` か `[DONE]`、Gemini は最後のチャンクの `finishReason`）が来ないまま閉じたら `StreamError` にする | OpenAI の文書は「`[DONE]` の前に usage のチャンクが来る」と書くだけで、常に `[DONE]` で終わるとは明記していない。Gemini と互換サーバーで、最後のチャンクに必ず合図が入るかは未確認。Anthropic の `message_stop` は文書で確認済み | |
 | U17 | DeepSeek（思考モード・ツールあり） | 別のプロバイダーや別のモデルの履歴、手で作ったメッセージは、`reasoning_content` を付けずに送る | 文書は「送り返さないと 400」とだけ書き、ほかで作った履歴やモデルの切り替え（`deepseek-flash` → `deepseek-v4-pro`）の扱いを書いていない。400 になるなら、会話の途中で DeepSeek に切り替えられない | |
 | U18 | usage（DeepSeek） | `completion_tokens` を、推論の分を含む出力トークン数として `output_tokens` に入れる | `completion_tokens_details.reasoning_tokens` はあるが、`completion_tokens` がそれを含むかは文書にない | |
+| U19 | Anthropic（構造化出力） | `anthropic-version: 2023-06-01` のまま `output_config.format` を送る | 文書の例は `2026-10-21` だけで、`2023-06-01` で受け付けるかは書かれていない。版の約束は「新しい版で省略できる入力を足すことがある」としか言っていない | |
+| U20 | Gemini（構造化出力） | `generationConfig` の `responseMimeType` と `responseJsonSchema` で送る | 文書の SDK の例はこの形だが、REST の例は `responseFormat.text` で、API リファレンスの `responseJsonSchema` の説明は自分を指している | |
+| U21 | Ollama・LM Studio（構造化出力） | OpenAI と同じ `response_format: {"type": "json_schema", ...}` を送る | Ollama は対応表にチェックがあるだけで例がない。LM Studio は例があるが、Chat Completions のページのパラメータの一覧にない。受け付けないときに黙って無視するかも分からない | |
+| U22 | OpenAI Responses（構造化出力） | `text.format` と `tools` を同じリクエストで送る | 文書は使い分けを書くだけで、併用できるかを書いていない | |
 
 ## 進捗ログ
 

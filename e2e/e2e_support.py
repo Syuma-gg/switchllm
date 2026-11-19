@@ -53,6 +53,13 @@ def requires_key(model: str) -> bool:
     return PRESETS[key].api_key_env != ()
 
 
+def json_schema_supported(model: str) -> bool:
+    """``response_schema=`` を送るか。送らない接続先（DeepSeek のプリセット）は、送る前に UnsupportedFeatureError にする。
+    モデルごとの一覧ではなく、ライブラリのプリセットの設定を見る。"""
+    key, _ = parse_model(model)
+    return bool(PRESETS[key].options.get("json_schema", True))
+
+
 def pairs(models: list[str]) -> list[tuple[str, str]]:
     """隣どうしの組。3つ以上なら最後から最初へも戻る（2つなら A → B だけ。B → A は戻すときに通る）。"""
     if len(models) < 2:
@@ -83,6 +90,10 @@ SCOPE: dict[str, frozenset[str]] = {
     "U15": frozenset({"ollama"}),
     "U16": frozenset({"openai_chat", "gemini"}),
     "U18": frozenset({"deepseek"}),
+    "U19": frozenset({"anthropic"}),
+    "U20": frozenset({"gemini"}),
+    "U21": frozenset({"ollama", "lmstudio"}),
+    "U22": frozenset({"openai"}),
 }
 
 

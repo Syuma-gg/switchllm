@@ -130,6 +130,25 @@ res = client.chat(messages + [{"role": "user", "content": "明日は？"}], tool
 - 1つの dict を `Message` に戻すときは `Message.from_dict()`
 - 読み込むのは自分で保存した履歴だけにする。生データはそのままプロバイダーに送られる
 
+### 構造化出力
+
+```python
+schema = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    "required": ["name", "age"],
+}
+res = client.chat("タロウは20歳です。", response_schema=schema)
+res.parsed   # {"name": "タロウ", "age": 20}
+res.text     # 同じ JSON の文字列
+```
+
+- `response_schema=` に JSON Schema の dict を渡すと、各社の形式（OpenAI `text.format`、Anthropic `output_config.format`、Gemini `responseJsonSchema`、Chat Completions `response_format`）で送り、答えをその形に縛る。Pydantic なら `Model.model_json_schema()` を渡す
+- `res.parsed` が入るのは、モデルが最後まで答え（`stop_reason == "end"`）、本文が JSON として読めたときだけ。拒否や上限で止まったときは `None` なので、`res.stop_reason` と `res.text` を見る
+- `properties` を並べたオブジェクトには `additionalProperties: false` を足して送る（OpenAI と Anthropic が必須とする）。スキーマのほかの部分は変えない
+- `stream()` では、`text` イベントが JSON の断片になり、最後の `done` の Response に `parsed` が入る
+- DeepSeek は JSON モードだけなので、`response_schema=` を指定すると送る前に `UnsupportedFeatureError`。`extra={"response_format": {"type": "json_object"}}` を渡し、形をプロンプトで伝える（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/structured-output.md)）
+
 ### プロバイダー固有の機能
 
 共通化できないパラメータは、各社の形式のまま `extra_by_provider=` に並べて書く。送るのはモデル文字列で選んだプロバイダーの分だけなので、モデルを切り替えても呼び出し側のコードは変わらない。書いていないプロバイダーには何も足さない。キーはモデル文字列の `provider:` 部分（`google:` で指定するなら `"google"`）。
@@ -195,10 +214,11 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
 - 非同期（`async`）は未対応
 - 画像入力は対応、音声・PDF・ファイル入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
-- 構造化出力と推論の強さは共通化していない（`extra_by_provider` で各社の指定を並べて渡す）
+- 推論の強さはまだ共通化していない（`extra_by_provider` で各社の指定を並べて渡す）
+- 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）
 - Anthropic は max_tokens が必須なので、指定しないと 4096 で送る（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないため、長い出力では Anthropic だけ `stop_reason="max_tokens"` で切れることがある
 - OpenAI Responses には `stop` シーケンスが存在しないため、指定すると `UnsupportedFeatureError`
-- Responses API は既定でレスポンスを保存する。`extra={"store": False}` にする場合、reasoning アイテムの再送には `include: ["reasoning.encrypted_content"]` も必要
+- Responses API は既定でレスポンスを保存する。`extra={"store": False}` にしても、reasoning アイテムには既定で `encrypted_content` が付くので、`include` なしで再送できる（実 API では未確認）
 - Gemini の関数スキーマは `parameters`（OpenAPI のサブセット）で送る。複雑な JSON Schema を使うなら `Client(..., schema_field="parametersJsonSchema")`
 - Google は generateContent を「レガシー」とし、新規開発には Interactions API を勧めている。本ライブラリは広く文書化された generateContent を使う
 

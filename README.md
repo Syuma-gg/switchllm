@@ -130,6 +130,25 @@ res = client.chat(messages + [{"role": "user", "content": "And tomorrow?"}], too
 - `Message.from_dict()` turns one dict back into a `Message`
 - Load only history that you saved yourself: the raw data is sent to the provider unchanged
 
+### Structured output
+
+```python
+schema = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    "required": ["name", "age"],
+}
+res = client.chat("Taro is 20 years old.", response_schema=schema)
+res.parsed   # {"name": "Taro", "age": 20}
+res.text     # the same JSON as a string
+```
+
+- `response_schema=` takes a JSON Schema dict and constrains the answer to it, in each provider's own format (OpenAI `text.format`, Anthropic `output_config.format`, Gemini `responseJsonSchema`, Chat Completions `response_format`). For a Pydantic model, pass `Model.model_json_schema()`
+- `res.parsed` is set only when the model finished (`stop_reason == "end"`) and the text is valid JSON. After a refusal or at the token limit it is `None`; check `res.stop_reason` and `res.text`
+- `additionalProperties: false` is added to every object that lists `properties` (OpenAI and Anthropic require it). Nothing else in the schema is changed
+- With `stream()`, the `text` events are pieces of the JSON, and the final `done` response has `parsed`
+- DeepSeek supports only JSON mode, so `response_schema=` raises `UnsupportedFeatureError` before sending. Use `extra={"response_format": {"type": "json_object"}}` and describe the format in the prompt ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/structured-output.md), in Japanese)
+
 ### Provider-specific features
 
 Parameters that cannot be unified are written in each provider's own format, side by side, in `extra_by_provider=`. Only the part for the provider chosen by the model string is sent, so switching models does not change the calling code. Providers you leave out get nothing extra. The keys are the `provider:` part of the model string (use `"google"` if you write `google:`).
@@ -195,10 +214,11 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` (this costs a small amount; add `--collect-only` first to see how many calls it makes without calling the APIs)
 - No async support yet
 - Image input is supported; audio, PDF, and file input are not. Image URLs are not supported for Gemini (pass base64 instead)
-- Structured output and reasoning effort are not unified (list each provider's settings in `extra_by_provider`)
+- Reasoning effort is not unified yet (list each provider's settings in `extra_by_provider`)
+- Structured output: OpenAI requires every property to be listed in `required` (make an optional field nullable instead, for example `{"type": ["string", "null"]}`), and each provider supports a different subset of JSON Schema. Keywords a provider does not support are rejected with `BadRequestError` (Gemini ignores them)
 - Anthropic requires max_tokens, so it is sent as 4096 when you do not give one (change it with `Client(..., default_max_tokens=...)`). The other providers send no limit unless you give one, so a long answer may stop with `stop_reason="max_tokens"` on Anthropic only
 - The OpenAI Responses API has no `stop` sequences, so specifying one raises `UnsupportedFeatureError`
-- The Responses API stores responses by default. If you set `extra={"store": False}`, resending reasoning items also requires `include: ["reasoning.encrypted_content"]`
+- The Responses API stores responses by default. With `extra={"store": False}`, reasoning items still include `encrypted_content` by default, so they can be resent without `include` (not yet verified against the real API)
 - Gemini function schemas are sent as `parameters` (a subset of OpenAPI). For complex JSON Schemas, use `Client(..., schema_field="parametersJsonSchema")`
 - Google calls generateContent "legacy" and recommends the Interactions API for new projects. This library uses generateContent, which is widely documented
 

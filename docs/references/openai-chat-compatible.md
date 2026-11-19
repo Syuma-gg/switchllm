@@ -65,8 +65,33 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 - Ollama: ローカルではキー不要（クライアントがキーを要求する場合はダミー値でよく、Ollama は無視する）。Chat Completions・ストリーミング・ツールに対応。`tool_choice` は非対応と明記されているので、指定がなければ送らない（明示したときの挙動は U15）
 - LM Studio: `/v1/chat/completions` に対応。既定のポートは 1234
 
+## 構造化出力
+
+`response_schema=` は、OpenAI 本家と同じ `response_format` の `json_schema`（`strict: true`）で送る。オプション `json_schema` を `False` にした接続先（`deepseek` のプリセット）では、送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/structured-output.md)）。以下は 2026-11-20 に文書で確かめた形式で、接続先によって受け付ける形が違う。
+
+| 接続先 | JSON Schema | JSON モード | 文書の書き方 |
+|---|---|---|---|
+| OpenAI 本家 | `response_format: {"type": "json_schema", "json_schema": {"name", "description", "schema", "strict"}}` | `{"type": "json_object"}` | リファレンスに項目と制約がある |
+| DeepSeek | **ない**（`type` は `text` か `json_object` だけ） | `{"type": "json_object"}` | リファレンスに「Must be one of `text` or `json_object`」 |
+| Ollama | `response_format` に対応とあるが、形の例はない | 「JSON mode」に対応とあるが、形の例はない | 対応表にチェックがあるだけ（U21） |
+| LM Studio | OpenAI と同じ形の例がある | 書かれていない | 構造化出力のページに例がある（U21） |
+
+- OpenAI 本家: `name` は英数字・`_`・`-` で 64 文字まで（必須）。`strict` は既定で `false`。`true` にしたときのスキーマの条件は Responses と同じ（[OpenAI Responses](openai-responses.md) の「構造化出力」）。公式は「Using `json_schema` is preferred for models that support it」とする
+- DeepSeek の JSON モード: プロンプトに「json」の語と、出したい JSON の例を入れる必要がある。`content` が空白だけで返ることがあり（`finish_reason` が `stop` でも）、公式は再試行を勧めている。`finish_reason` が `length` なら途中で切れている。思考モードやツールと一緒に使えるかは書かれていない。スキーマで縛れるのは、beta の接続先（`https://api.deepseek.com/beta`）での strict なツール呼び出しだけで、答えの形を縛る指定はない
+- Ollama: OpenAI 互換の API でも `response_format` で構造化出力が使えるとあるが、例は独自 API の `format` だけ。「Ollama's cloud currently does not support structured outputs」。使えるキーワードは書かれていない
+- LM Studio: 例では `strict` を文字列の `"true"` で送っている。GGUF のモデルは llama.cpp の文法、MLX のモデルは Outlines で縛る。「Not all models are capable of structured output, particularly LLMs below 7B parameters」。一方、Chat Completions のページの、受け付けるパラメータの一覧には `response_format` がない
+- ストリーミングやツールとの併用は、どの互換サーバーの文書にも書かれていない
+
 ## 出典
 
+- [Chat Completions API reference](https://developers.openai.com/api/docs/api-reference/chat/create)（2026-11-20 確認: `response_format` の `json_schema` は `name`（「Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64」）・`description`・`schema`・`strict`（「default: false」）。「Using `json_schema` is preferred for models that support it」）
+- [DeepSeek: JSON Output](https://api-docs.deepseek.com/guides/json_mode)（2026-11-20 確認: 「Include the word "json" in the system or user prompt, and provide an example of the desired JSON format」、`content` が空白だけで返ることがある、`max_tokens` を十分に取る）
+- [DeepSeek: Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion)（2026-11-20 確認: `response_format.type` は「Must be one of `text` or `json_object`」）
+- [DeepSeek: Tool Calls](https://api-docs.deepseek.com/guides/tool_calls)（2026-11-20 確認: strict モード（beta）は `base_url="https://api.deepseek.com/beta"` で、ツールの引数にだけ効く）
+- [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)（2026-11-20 確認: `/v1/chat/completions` の対応表に「JSON mode」と `response_format` のチェックがある。形の例はない）
+- [Ollama: Structured Outputs](https://docs.ollama.com/capabilities/structured-outputs)（2026-11-20 確認: 「Structured outputs work through the OpenAI-compatible API via `response_format`」、「Ollama's cloud currently does not support structured outputs」）
+- [LM Studio: Structured Output](https://lmstudio.ai/docs/developer/openai-compat/structured-output)（2026-11-20 確認: `response_format: {"type": "json_schema", "json_schema": {"name", "strict": "true", "schema"}}` の例、7B 未満のモデルの注意、GGUF と MLX での縛り方）
+- [LM Studio: Chat Completions](https://lmstudio.ai/docs/developer/openai-compat/chat-completions)（2026-11-20 確認: 受け付けるパラメータの一覧に `response_format` がない）
 - [Chat Completions API reference](https://developers.openai.com/api/docs/api-reference/chat/create)（2026-11-15 確認: `max_tokens` は「`max_completion_tokens` に置き換えられて非推奨で、o-series とは互換性がない」。`tool_choice` は「ツールがあれば `auto` が既定」）
 - [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)（2026-11-15 確認: `tool_choice` は非対応、`max_tokens` は対応、`max_completion_tokens` は記載なし）
 - [DeepSeek: Your First API Call](https://api-docs.deepseek.com/)（2026-11-17 確認: OpenAI 形式の base_url は `https://api.deepseek.com`、キーは `DEEPSEEK_API_KEY` から `Authorization: Bearer` で送る、モデル名は `deepseek-flash` / `deepseek-v4-pro`）
@@ -76,4 +101,4 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 
 ## 関連する未検証の前提
 
-U10、U11、U12、U15、U16、U17、U18（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U10、U11、U12、U15、U16、U17、U18、U21（[実 API 検証](../exec-plans/active/real-api-verification.md)）

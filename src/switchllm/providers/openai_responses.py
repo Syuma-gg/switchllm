@@ -13,7 +13,7 @@ from typing import Any, Iterator
 from .._http import HTTPRequest
 from ..errors import StreamError, UnsupportedFeatureError
 from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
-from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice
+from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice, schema_name
 
 
 def _parse_args(s: str | None) -> tuple[dict[str, Any], str | None]:
@@ -91,6 +91,16 @@ class OpenAIResponsesProvider(Provider):
             if req.tool_choice is not None:  # 省略時の既定は auto（docs/references/openai-responses.md）
                 mode, name = normalize_tool_choice(req.tool_choice)
                 body["tool_choice"] = {"type": "function", "name": name} if mode == "tool" else mode
+        if req.response_schema is not None:
+            # strict が false ではスキーマどおりの出力が保証されない（docs/references/openai-responses.md）
+            body["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_name(req.response_schema),
+                    "schema": req.response_schema,
+                    "strict": True,
+                }
+            }
         if stream:
             body["stream"] = True
         body = deep_merge(body, req.extra)
