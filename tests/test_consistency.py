@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import pytest
@@ -25,6 +25,9 @@ class Case:
     unknown_event: tuple[str | None, Any]  # 将来足されるかもしれない、知らないイベント
     common_params: Callable[[dict[str, Any]], tuple[Any, Any, Any]]  # 本体から (max_tokens, temperature, system) を取り出す
     has_stop: Callable[[dict[str, Any]], bool]  # 本体に stop の指定があるか
+    # temperature を送るときのクライアントのオプション。Anthropic の既定の版（2026-10-21）は temperature を
+    # 送る前に UnsupportedFeatureError にするので、古い版を選ぶ（docs/design-docs/anthropic-api-version.md）
+    temperature_options: dict[str, Any] = field(default_factory=dict)
 
 
 def _anthropic_text(text: str) -> list[tuple[str | None, Any]]:
@@ -93,6 +96,7 @@ CASES = [
         unknown_event=("something_new", {"type": "something_new"}),
         common_params=lambda b: (b["max_tokens"], b["temperature"], b["system"]),
         has_stop=lambda b: "stop_sequences" in b,
+        temperature_options={"anthropic_version": "2023-06-01"},
     ),
     Case(
         model="gemini:gemini-flash-latest",
@@ -120,7 +124,7 @@ pytestmark = pytest.mark.parametrize("case", CASES, ids=[c.model.split(":")[0] f
 def test_common_parameters_reach_each_apis_own_field(api, case):
     # 同じ呼び出しが、各社の形式のフィールドに入る（docs/references/index.md の対応表）
     api.reply_json(case.ok)
-    api.client(case.model).chat("hi", system="簡潔に", max_tokens=123, temperature=0.3)
+    api.client(case.model, **case.temperature_options).chat("hi", system="簡潔に", max_tokens=123, temperature=0.3)
     assert case.common_params(api.body()) == (123, 0.3, "簡潔に")
 
 
@@ -129,7 +133,7 @@ def test_zero_is_sent_and_empty_stop_means_none(api, case):
     # max_tokens=0 は API が拒否する値だが、ライブラリは先回りして弾かない（API のエラーをそのまま返す）。
     # 空の stop は「指定なし」。OpenAI Responses でも UnsupportedFeatureError にしない
     api.reply_json(case.ok)
-    api.client(case.model).chat("hi", system="s", max_tokens=0, temperature=0, stop=[])
+    api.client(case.model, **case.temperature_options).chat("hi", system="s", max_tokens=0, temperature=0, stop=[])
     body = api.body()
     assert case.common_params(body)[:2] == (0, 0)
     assert not case.has_stop(body)

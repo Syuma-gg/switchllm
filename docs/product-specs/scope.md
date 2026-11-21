@@ -14,6 +14,7 @@
 - `register_provider()` による OpenAI 互換サーバーの追加
 - 履歴の JSON 保存・復元（`Message.to_dict()` / `from_dict()`。推論情報を含む。2026-11-18）
 - 構造化出力（`response_schema=` に JSON Schema の dict を渡し、`Response.parsed` に読んだ値を入れる。2026-11-20。[判断](../design-docs/structured-output.md)）。スキーマのない JSON モードは共通化しない（`extra=` で渡す）
+- 推論の強さ（`reasoning_effort=` に段階の名前を渡し、各社の指定に名前を変えずに入れる。2026-11-21。[判断](../design-docs/reasoning-effort.md)）。推論の要約を返させる指定や、数での予算（Gemini 2.5 の `thinkingBudget`）は共通化しない（`extra=` で渡す）
 
 ## 足すと決めたもの
 
@@ -21,7 +22,6 @@
 
 | 機能 | 理由 |
 |---|---|
-| 推論の強さの共通パラメータ | コードで LLM を呼ぶときによく使うのに、今はモデルを変えるたびに書き方が変わる。指定の方法が各社で違い、世代でも変わるので、対応づけはモデルの一覧を持たずに済む形にする |
 | 非同期クライアント（`AsyncClient`） | エージェントフレームワークの多くや FastAPI は非同期で動く。アダプターは同期版と共有でき、`_http.py` に async 版の送信関数を足すだけで済む設計になっている |
 | すべてのアダプターに `headers=` | 今は Chat Completions 互換だけにあり、ゲートウェイを経由するとほかのアダプターへ切り替えられない |
 | PDF・ファイルの入力 | 文書を読ませる用途は多い。対応しない接続先には、送る前に `UnsupportedFeatureError` |

@@ -25,6 +25,8 @@
 | ツール結果 | `function_call_output` | `role: tool` | user メッセージ内の `tool_result` | user の `functionResponse` |
 | 保持が必要な推論情報 | `reasoning` アイテム | `reasoning_content`（DeepSeek。ツールを使う会話で必要） | `thinking` ブロック + `signature` | `thoughtSignature` |
 | response_schema（構造化出力） | `text.format`（`json_schema`） | `response_format`（`json_schema`。DeepSeek は `json_object` だけ） | `output_config.format`（`json_schema`） | `generationConfig` の `responseMimeType` と `responseJsonSchema` |
+| reasoning_effort（推論の強さ） | `reasoning.effort` | `reasoning_effort` | `output_config.effort`（`none` は `thinking: {"type": "disabled"}`、`minimal` は例外） | `generationConfig.thinkingConfig.thinkingLevel`（`none`・`max` は例外） |
+| temperature | `temperature` | `temperature` | 既定の版（`2026-10-21`）では例外。`2023-06-01` なら `temperature` | `generationConfig.temperature`（3.6 Flash 以降は無視される） |
 | ストリームの終わり | `response.completed` | `finish_reason` か `data: [DONE]` | `message_stop` | `finishReason` の入ったチャンク |
 
 ストリームの終わりの合図が来ないまま接続が閉じたら、どのアダプターも `StreamError` にする（途中までを正常終了として返さない）。

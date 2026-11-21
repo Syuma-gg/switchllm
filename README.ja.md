@@ -61,7 +61,7 @@ python examples/agent_loop.py
 ### テキスト・ストリーミング
 
 ```python
-res = client.chat("日本の首都は？", system="一言で答える", max_tokens=100, temperature=0)
+res = client.chat("日本の首都は？", system="一言で答える", max_tokens=100)
 res.text          # 本文
 res.stop_reason   # "end" | "tool_use" | "max_tokens" | "content_filter" | "other"
 res.usage         # input_tokens / output_tokens / total_tokens / details（生の内訳）
@@ -149,13 +149,24 @@ res.text     # 同じ JSON の文字列
 - `stream()` では、`text` イベントが JSON の断片になり、最後の `done` の Response に `parsed` が入る
 - DeepSeek は JSON モードだけなので、`response_schema=` を指定すると送る前に `UnsupportedFeatureError`。`extra={"response_format": {"type": "json_object"}}` を渡し、形をプロンプトで伝える（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/structured-output.md)）
 
+### 推論の強さ
+
+```python
+res = client.chat("「strawberry」に r はいくつある？", reasoning_effort="low")
+```
+
+- `reasoning_effort=` には `"none"`・`"minimal"`・`"low"`・`"medium"`・`"high"`・`"xhigh"`・`"max"` のどれか（OpenAI が文書に挙げる段階）を渡す。各社の指定（OpenAI `reasoning.effort`、Anthropic `output_config.effort`、Gemini `thinkingConfig.thinkingLevel`、Chat Completions `reasoning_effort`）に、名前を変えずに入れる。指定しなければモデルの既定の段階になる
+- 各社の API に名前のない段階は、送る前に `UnsupportedFeatureError`。Anthropic の `"minimal"` と、Gemini の `"none"`・`"max"` が当たる。Anthropic の `"none"` は thinking を切る（`thinking: {"type": "disabled"}`）
+- 使える段階はモデルによって違う（gpt-5.5 に `"max"` はなく、Claude Opus 5.5 は推論を切れない）。ライブラリはモデルの一覧を持たないので、API の `BadRequestError` で返る
+- 段階は目安で、トークンの予算ではない。同じ段階でも、モデルによって考える量は違う。ほかの推論の指定（要約、Gemini 2.5 の `thinkingBudget`）は `extra_by_provider=` に書く（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md)）
+
 ### プロバイダー固有の機能
 
 共通化できないパラメータは、各社の形式のまま `extra_by_provider=` に並べて書く。送るのはモデル文字列で選んだプロバイダーの分だけなので、モデルを切り替えても呼び出し側のコードは変わらない。書いていないプロバイダーには何も足さない。キーはモデル文字列の `provider:` 部分（`google:` で指定するなら `"google"`）。
 
 ```python
 client.chat("...", extra_by_provider={
-    "openai": {"reasoning": {"effort": "high"}},       # OpenAI Responses
+    "openai": {"reasoning": {"summary": "auto"}},      # OpenAI Responses: 推論の要約を返させる
     "anthropic": {"metadata": {"user_id": "u-1"}},     # Anthropic
 })
 ```
@@ -214,7 +225,8 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
 - 非同期（`async`）は未対応
 - 画像入力は対応、音声・PDF・ファイル入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
-- 推論の強さはまだ共通化していない（`extra_by_provider` で各社の指定を並べて渡す）
+- 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`extra_by_provider=` で各社の形式で頼む（OpenAI `{"reasoning": {"summary": "auto"}}`、Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`、Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`）
+- Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md)）
 - 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）
 - Anthropic は max_tokens が必須なので、指定しないと 4096 で送る（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないため、長い出力では Anthropic だけ `stop_reason="max_tokens"` で切れることがある
 - OpenAI Responses には `stop` シーケンスが存在しないため、指定すると `UnsupportedFeatureError`

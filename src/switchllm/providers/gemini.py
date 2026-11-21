@@ -45,6 +45,24 @@ class GeminiProvider(Provider):
         return parts
 
     @staticmethod
+    def _thinking_level(effort: str) -> str:
+        """thinkingLevel は minimal〜xhigh で、名前は変えずに送る（U26）。推論を切る段階と max はない。
+        Gemini 2.5 の thinkingBudget には換算しない（モデルの世代を見分ける一覧が要るため。
+        docs/references/gemini-generate-content.md の「推論の強さ」）"""
+        if effort == "none":
+            raise UnsupportedFeatureError(
+                "Gemini thinkingLevel has no 'none' (Gemini 3 and 4 can't turn thinking off with it). "
+                "Use reasoning_effort='minimal' on Gemini 3 Flash models, or on Gemini 2.5 Flash pass "
+                "extra={'generationConfig': {'thinkingConfig': {'thinkingBudget': 0}}}"
+            )
+        if effort == "max":
+            raise UnsupportedFeatureError(
+                "Gemini thinkingLevel has no 'max' (levels: minimal, low, medium, high, xhigh). "
+                "Use reasoning_effort='xhigh' or 'high'"
+            )
+        return effort
+
+    @staticmethod
     def _tool_response_payload(m: Message) -> dict[str, Any]:
         # functionResponse.response はオブジェクト必須。JSON オブジェクト文字列ならそのまま使う
         try:
@@ -117,6 +135,8 @@ class GeminiProvider(Provider):
             # JSON Schema をそのまま受け取る responseJsonSchema を使う（U20。docs/references/gemini-generate-content.md）
             gen["responseMimeType"] = "application/json"
             gen["responseJsonSchema"] = req.response_schema
+        if req.reasoning_effort is not None:
+            gen["thinkingConfig"] = {"thinkingLevel": self._thinking_level(req.reasoning_effort)}
         if gen:
             body["generationConfig"] = gen
         if req.tools:

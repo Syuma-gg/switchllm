@@ -23,6 +23,10 @@ from ..types import Message, Response, StreamEvent
 
 ToolChoice = Any  # None | "auto" | "none" | "required" | {"name": str}
 
+#: ``reasoning_effort=`` で受け付ける推論の強さ。OpenAI の7段階で、各社の段階の名前はどれもこの中にある
+#: （docs/design-docs/reasoning-effort.md）。アダプターは名前を変えずに送り、名前のない段階は UnsupportedFeatureError
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+
 
 @dataclass
 class ChatRequest:
@@ -34,6 +38,8 @@ class ChatRequest:
     stop: list[str] | None = None
     #: 構造化出力の JSON Schema。``Client`` が ``strict_object_schema()`` を通したもの。None なら指定なし
     response_schema: dict[str, Any] | None = None
+    #: 推論の強さ。``REASONING_EFFORTS`` のどれか（``Client`` が確かめたもの）。None なら指定なし
+    reasoning_effort: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 

@@ -47,6 +47,7 @@
 | `Usage.output_tokens` | 出力トークンの総数（推論トークンを含む） |
 | `Usage.details` | プロバイダーが返した生の内訳 |
 | `ToolCall.arguments` | 常に dict。JSON として壊れていたら `{}` にし、原文を `raw_arguments` に残す |
+| `chat(reasoning_effort=...)` / `stream(reasoning_effort=...)` | 推論の強さ。`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` のどれか（ほかの文字列は `ConfigurationError`、文字列でなければ `TypeError`）。各社の指定に名前を変えずに入れ、考える量まではそろえない。各社の API に名前のない段階（Anthropic の `minimal`、Gemini の `none`・`max`）は送る前に `UnsupportedFeatureError`。Anthropic の `none` は thinking を切る。モデルが受け付けない段階は API のエラー（[判断](../design-docs/reasoning-effort.md)） |
 | `Response.parsed` | `response_schema=` を指定し、`stop_reason` が `end` で、本文が JSON として読めたときだけ、読んだ値。それ以外（拒否、上限で止まった、ツールを呼んだ、指定なし）は `None`。スキーマに合うかはライブラリでは確かめない（各社が出力を縛る） |
 | `stream()` の `done` | 最後に1回だけ届く。`response` は非ストリーミングの `chat()` と同じ内容。終わりの合図が来ないまま接続が閉じたら、`done` ではなく `StreamError` |
 | `Response.message.provider_state` | プロバイダーの生データ。利用者は触らず、メッセージごと履歴に積む。保存するときは `to_dict()` に含まれる |
@@ -88,7 +89,7 @@
 | `headers` | `openai_chat` | リクエストに足すヘッダー（dict） |
 | `json_schema` | `openai_chat` | `False` にすると、`response_schema=` を送る前に `UnsupportedFeatureError` にする。JSON Schema を受け付けない接続先のため（既定 `True`、`deepseek` のプリセットは `False`） |
 | `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 4096。Anthropic は必須） |
-| `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2023-06-01`） |
+| `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2026-10-21`）。`2026-10-21` 以降の版では、`temperature=` を送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/anthropic-api-version.md)） |
 | `beta` | `anthropic` | `anthropic-beta` ヘッダーにする名前のリスト |
 | `schema_field` | `gemini` | 関数スキーマを入れるフィールド。既定 `parameters`、`parametersJsonSchema` も選べる（U4） |
 | `inject_dummy_signatures` | `gemini` | `False` にすると、他プロバイダーの履歴にダミー署名を付けない（既定 `True`、U5） |

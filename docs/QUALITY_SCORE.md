@@ -1,10 +1,10 @@
 # 品質評価
 
-領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-20）。
+領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-21）。
 
 テストは GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確認した）。
 
-カバレッジ（分岐を含む）は 98.76%（2026-11-20、Python 3.12）。基準は `pyproject.toml` の `fail_under = 98` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）。到達していない行は1つだけで、`types.py` の `_part_to_dict` の、知らないパーツを変えずに返す行（2026-11-18 の履歴の保存で足した。テストがない）。残りは分岐の一部で、多くはパーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）。
+カバレッジ（分岐を含む）は 98.80%（2026-11-21、Python 3.12）。基準は `pyproject.toml` の `fail_under = 98` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）。到達していない行は1つだけで、`types.py` の `_part_to_dict` の、知らないパーツを変えずに返す行（2026-11-18 の履歴の保存で足した。テストがない）。残りは分岐の一部で、多くはパーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）。
 
 実 API に対する E2E テストは `e2e/` にあり、`--models` を渡したときだけ実 API を呼ぶ（料金が発生するため。[E2E テスト](e2e-tests.md)）。渡さなければ、実 API で記録したやりとりを再生し、既定の実行と CI にも入る（[テストの方針](testing.md)）。まだ実 API では回しておらず、記録は 0 件。
 
@@ -21,10 +21,10 @@
 
 | アダプター | 評価 | モックのテスト | 実 API | 足りないテスト | 主な未検証の前提 |
 |---|---|---|---|---|---|
-| openai（Responses） | B | `tests/test_openai_responses.py` | 未確認 | — | U1〜U3、U22 |
-| openai_chat | B | `tests/test_openai_chat.py` | 未確認 | — | U10、U11、U15〜U18、U21 |
-| anthropic | B | `tests/test_anthropic.py` | 未確認 | — | U8、U9、U19 |
-| gemini | B | `tests/test_gemini.py` | 未確認 | — | U4〜U7、U16、U20 |
+| openai（Responses） | B | `tests/test_openai_responses.py` | 未確認 | — | U1〜U3、U22、U23 |
+| openai_chat | B | `tests/test_openai_chat.py` | 未確認 | — | U10、U11、U15〜U18、U21、U23、U27 |
+| anthropic | B | `tests/test_anthropic.py` | 未確認 | — | U8、U9、U19、U24、U25 |
+| gemini | B | `tests/test_gemini.py` | 未確認 | — | U4〜U7、U16、U20、U26 |
 
 ## 共通部分
 
@@ -36,6 +36,8 @@
 | 共通型 | B | `tests/test_types.py` | `Message.from_dict`、`ToolCall.arguments_json`、`ImagePart` |
 | 履歴の保存・復元 | B | `tests/test_history.py` | `to_dict` / `from_dict` の往復、4アダプターで復元した履歴から同じリクエストを送れること。実 API では未確認（E2E の `test_restored_history_continues`） |
 | 構造化出力（`response_schema=`） | B | `tests/test_structured_output.py` | 4アダプター（Ollama・LM Studio を含む）で各社の形式になること、`chat()` と `stream()` で同じ `parsed`、拒否・上限で `None`、`additionalProperties` の足し方、DeepSeek は送る前に例外。実 API では未確認（E2E の `test_e2e_structured.py`。U19〜U22） |
+| 推論の強さ（`reasoning_effort=`） | B | `tests/test_reasoning_effort.py` | 4アダプター（DeepSeek・Ollama を含む）と `stream()` で各社の指定になること、7段階の名前を変えずに送ること、名前のない段階と打ち間違いを送る前に例外にすること、Anthropic の `none` は thinking を切ること、`response_schema=`・`extra=` との並び方。実 API では未確認（E2E の `test_e2e_reasoning.py`。U23〜U27） |
+| Anthropic の API の版 | B | `tests/test_anthropic.py` | 既定は `2026-10-21`、この版以降で `temperature=` を送る前に例外にすること、古い版なら送ること。実 API では未確認（U25） |
 | `@tool`、`run_tool_calls` | B | `tests/test_tools.py` | 生成したスキーマを各社が受け付けるかは実 API で確認する |
 | 画像入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py` | 4アダプターのリクエスト形状、Gemini の URL 拒否、`from_file` の形式判定。実 API では未確認 |
 | SSE パース | B | `tests/test_client.py` | |

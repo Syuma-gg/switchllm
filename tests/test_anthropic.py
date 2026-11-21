@@ -1,7 +1,7 @@
 import pytest
 
 from sample_tools import WEATHER_TOOL
-from switchllm import ImagePart, Message, StreamError, TextPart
+from switchllm import ImagePart, Message, StreamError, TextPart, UnsupportedFeatureError
 
 
 def test_request_shape(api):
@@ -15,7 +15,7 @@ def test_request_shape(api):
     req = api.requests[0]
     assert str(req.url) == "https://api.anthropic.com/v1/messages"
     assert req.headers["x-api-key"] == "test-key"
-    assert req.headers["anthropic-version"] == "2023-06-01"
+    assert req.headers["anthropic-version"] == "2026-10-21"  # 最新の版（docs/design-docs/anthropic-api-version.md）
     body = api.body()
     assert body["system"] == "A\n\nB"  # 複数の system はトップレベルに集約
     assert body["max_tokens"] == 4096  # 必須なので既定値を入れる
@@ -165,6 +165,24 @@ def test_options_change_headers_and_default_max_tokens(api):
     req = api.requests[0]
     assert req.headers["anthropic-version"] == "2099-01-01" and req.headers["anthropic-beta"] == "a,b"
     assert api.body()["max_tokens"] == 32000
+
+
+@pytest.mark.parametrize("version", [None, "2026-10-21", "2099-01-01"])
+def test_temperature_is_rejected_before_sending_on_2026_10_21_and_later(api, version):
+    # 2026-10-21 からは temperature を送るだけで、どのモデルでも 400 になる（docs/design-docs/anthropic-api-version.md）。
+    # 送って失敗させず、古い版を選べば送れることを案内する。0 も「指定あり」
+    kw = {} if version is None else {"anthropic_version": version}
+    with pytest.raises(UnsupportedFeatureError, match="anthropic_version='2023-06-01'"):
+        api.client("anthropic:claude-sonnet-5-5", **kw).chat("hi", temperature=0)
+    assert api.requests == []
+
+
+def test_temperature_is_sent_on_older_api_version(api):
+    # 古い版なら今までどおり送る。モデルが拒否すれば API のエラーをそのまま返す
+    api.reply_json({"content": [], "stop_reason": "end_turn", "usage": {}})
+    api.client("anthropic:claude-opus-4-6", anthropic_version="2023-06-01").chat("hi", temperature=0.5)
+    assert api.requests[0].headers["anthropic-version"] == "2023-06-01"
+    assert api.body()["temperature"] == 0.5
 
 
 @pytest.mark.parametrize(

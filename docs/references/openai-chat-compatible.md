@@ -56,7 +56,7 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 | `ollama` | `http://localhost:11434/v1` | 不要 | 2026-11-09 | [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility) |
 | `lmstudio` | `http://localhost:1234/v1` | 不要 | 2026-11-09 | [LM Studio: OpenAI 互換エンドポイント](https://lmstudio.ai/docs/developer/openai-compat) |
 
-- DeepSeek: エンドポイントは `https://api.deepseek.com/chat/completions`、認証は `Authorization: Bearer`。`/v1` を付けた URL を受け付けるかは文書にない。モデルは `deepseek-flash` と `deepseek-v4-pro`（2026-11-17 時点）で、どちらも思考モードが既定。思考モードを切るには `extra={"thinking": {"type": "disabled"}}`（または `reasoning_effort: "none"`）を送る
+- DeepSeek: エンドポイントは `https://api.deepseek.com/chat/completions`、認証は `Authorization: Bearer`。`/v1` を付けた URL を受け付けるかは文書にない。モデルは `deepseek-flash` と `deepseek-v4-pro`（2026-11-17 時点）で、どちらも思考モードが既定。思考モードを切るには `reasoning_effort="none"` を渡す（下の「推論の強さ」）
 - DeepSeek の思考モードでは、`tool_choice` の `"required"` とツール名の指定は 400 になる。このライブラリは先回りして弾かず、API のエラーをそのまま返す（[実 API 検証](../exec-plans/active/real-api-verification.md) の判断ログ）。`temperature` はエラーにならず、効かない
 - DeepSeek の `finish_reason` には、OpenAI にない `insufficient_system_resource` と `aborted` がある。どちらも `stop_reason="other"` にする
 - DeepSeek の usage には `completion_tokens_details.reasoning_tokens` がある。`completion_tokens` が推論の分を含むかは文書にない（U18）
@@ -82,6 +82,22 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 - LM Studio: 例では `strict` を文字列の `"true"` で送っている。GGUF のモデルは llama.cpp の文法、MLX のモデルは Outlines で縛る。「Not all models are capable of structured output, particularly LLMs below 7B parameters」。一方、Chat Completions のページの、受け付けるパラメータの一覧には `response_format` がない
 - ストリーミングやツールとの併用は、どの互換サーバーの文書にも書かれていない
 
+## 推論の強さ
+
+`reasoning_effort=` は、どの接続先にもトップレベルの `reasoning_effort` で、段階の名前を変えずに送る（[判断](../design-docs/reasoning-effort.md)）。以下は 2026-11-21 に文書で確かめた形式。
+
+| 接続先 | 受け付ける段階 | 推論を切る | 文書にない段階 |
+|---|---|---|---|
+| OpenAI 本家 | `none`・`minimal`・`low`・`medium`・`high`・`xhigh`・`max`（モデルによって一部だけ。[OpenAI Responses](openai-responses.md) の「推論の強さ」） | `none`（受け付けないモデルは 400） | 書かれていない（U23） |
+| DeepSeek | `none`・`low`・`high`・`max`。`minimal` は `low`、`medium` と `xhigh` は `high` として受け付ける | `none` | 書かれていない |
+| Ollama | モデルが決める名前と、互換のための別名（`/api/show` で分かる） | `none`（真偽値だけのモデルでは `false` になる。gpt-oss は切れず `low` になる） | モデルの既定の段階になる（黙って置き換える） |
+| LM Studio | **書かれていない**（受け付けるパラメータの一覧にない） | 書かれていない | 書かれていない（U27） |
+
+- DeepSeek: 思考モードは既定で有効で、既定の段階は `high`。`thinking: {"type": "enabled" | "disabled"}` もあり、送ったときは `reasoning_effort` より優先する（「takes precedence over `reasoning_effort` for selecting the mode」）。`thinking` を送らなければ `reasoning_effort` で決まり、`none` なら思考モードを切る。Thinking Mode のガイドの表は `low`・`high`・`max` だけを挙げ、`ultra` を `max` の別名として挙げるが、API リファレンスは `none` を含め、`ultra` を挙げない。`max_tokens` の既定は思考モードで 64K（`max` なら 128K）、思考モードでないとき 8K。`max_tokens` が推論の分を含むかは書かれていない（U18）。思考モードでは `temperature` は効かない（エラーにならない）。`top_p` は、`deepseek-flash` では 0.95 未満を 0.95 として扱い、`deepseek-v4-pro` では渡した値を無視する
+- Ollama: `/v1/chat/completions` は `reasoning_effort` と `reasoning: {"effort"}` を受け付ける。メタデータのないモデルでは `minimal` を `low`、`xhigh` と `ultra` を `max` として扱う。`think`（Ollama 独自）は `/v1/responses` の一覧にだけある。推論テキストを返すフィールドの名前は、互換の API については書かれていない（独自 API は `message.thinking`）
+- LM Studio: Chat Completions のページが挙げるパラメータは `model`・`top_p`・`top_k`・`messages`・`temperature`・`max_tokens`・`stream`・`stop`・`presence_penalty`・`frequency_penalty`・`logit_bias`・`repeat_penalty`・`seed` だけ。`reasoning_effort` を送ると、受け付けるのか、無視するのか、拒否するのかは分からない（U27）
+- switchllm は、どの接続先でも名前を置き換えない。DeepSeek と Ollama は、文書にない段階を接続先の側で近い段階に置き換える
+
 ## 出典
 
 - [Chat Completions API reference](https://developers.openai.com/api/docs/api-reference/chat/create)（2026-11-20 確認: `response_format` の `json_schema` は `name`（「Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64」）・`description`・`schema`・`strict`（「default: false」）。「Using `json_schema` is preferred for models that support it」）
@@ -98,7 +114,13 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 - [DeepSeek: Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode)（2026-11-17 確認: 「for requests carrying the `tools` parameter, the `reasoning_content` must be fully passed back to the API in all subsequent requests」「If your code does not correctly pass back `reasoning_content`, the API will return a 400 error」、ツールがなければ「`reasoning_content` does not need to be passed back」で、送っても無視される。思考モードは既定で有効。`temperature` などは「will not trigger an error but will also have no effect」。別の履歴やモデルの切り替えについては記載なし）
 - [DeepSeek: Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion)（2026-11-17 確認: 出力の上限は `max_tokens`（`max_completion_tokens` は記載なし）、`stop` は文字列か配列、`tool_choice` は `none` / `auto` / `required` / `{"type": "function", "function": {"name"}}` で「`required` and named tool choices are not supported in thinking mode; the API returns a `400` error」、`finish_reason` は `stop` / `length` / `content_filter` / `tool_calls` / `insufficient_system_resource` / `aborted`、`stream_options.include_usage` に対応。リクエストの `reasoning_content` は「Chat Prefix Completion（Beta）用」とだけ書かれていて、Thinking Mode の文書の例（`prefix` なしで送る）と食い違う）
 - [DeepSeek: Models & Pricing](https://api-docs.deepseek.com/quick_start/pricing)（2026-11-17 確認: `deepseek-flash`（DeepSeek-V4.1-Flash-1017）と `deepseek-v4-pro`（DeepSeek-V4-Pro-0813）。どちらも思考モードが既定でツールに対応）
+- [Chat Completions API reference](https://developers.openai.com/api/docs/api-reference/chat/create)（2026-11-21 確認: `reasoning_effort` は既定 `"medium"` で「Currently supported values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`」「Not all reasoning models support every value」）
+- [DeepSeek: Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion)（2026-11-21 確認: `reasoning_effort` は「`none` disables thinking mode; `low` / `high` / `max` enable thinking mode」「The default effort is `high`」「`minimal` is accepted and mapped to `low`, and `medium` / `xhigh` are accepted and mapped to `high`」、`thinking` は「When this object is provided, `type` is required and takes precedence over `reasoning_effort` for selecting the mode」「When `thinking` is omitted or `null`, the mode follows `reasoning_effort`; if `reasoning_effort` is also omitted, thinking is enabled」、`temperature` は「Has no effect in thinking mode」、`max_tokens` の既定）
+- [DeepSeek: Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode)（2026-11-21 確認: 「Thinking mode is enabled by default, with the default effort being `high`」、`{"thinking": {"type": "enabled/disabled"}}`、段階の表は `low/high/max` で `ultra` を `max` の別名に挙げる）
+- [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)（2026-11-21 確認: `/v1/chat/completions` に「`reasoning_effort` (model-defined names and compatibility aliases)」と `reasoning` の `effort`、「Boolean-only models that support enabling thinking map recognized compatibility efforts to `true`, while `"none"` requests `false`」「`"minimal"` maps to `"low"`, and `"xhigh"` or `"ultra"` map to `"max"`」「`"none"` uses `"low"` because GPT-OSS cannot disable thinking」「supported names are applied exactly and unsupported names resolve to the model default」）
+- [Ollama: Thinking](https://docs.ollama.com/capabilities/thinking)（2026-11-21 確認: 独自 API の `think` は `true`・`false`・段階の文字列。「Models that cannot disable thinking use their lowest supported level instead」）
+- [LM Studio: Chat Completions](https://lmstudio.ai/docs/developer/openai-compat/chat-completions)（2026-11-21 確認: 受け付けるパラメータの一覧に `reasoning_effort` がない）
 
 ## 関連する未検証の前提
 
-U10、U11、U12、U15、U16、U17、U18、U21（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U10、U11、U12、U15、U16、U17、U18、U21、U23、U27（[実 API 検証](../exec-plans/active/real-api-verification.md)）

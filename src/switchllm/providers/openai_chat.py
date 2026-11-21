@@ -108,6 +108,10 @@ class OpenAIChatProvider(Provider):
                 "type": "json_schema",
                 "json_schema": {"name": schema_name(req.response_schema), "schema": req.response_schema, "strict": True},
             }
+        if req.reasoning_effort is not None:
+            # OpenAI・DeepSeek・Ollama とも同じ名前のフィールド。名前は変えない（DeepSeek と Ollama は、
+            # 文書にない段階を接続先の側で近い段階に置き換える。docs/references/openai-chat-compatible.md）
+            body["reasoning_effort"] = req.reasoning_effort
         if stream:
             body["stream"] = True
             if self.options.get("stream_usage", True):

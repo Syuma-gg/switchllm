@@ -2,7 +2,7 @@
 
 - アダプター: `providers/anthropic.py`（プリセット `anthropic`）
 - エンドポイント: `POST https://api.anthropic.com/v1/messages`
-- 認証: `x-api-key: $ANTHROPIC_API_KEY` と `anthropic-version: 2023-06-01`（`anthropic_version=` で変更できる）。beta 機能は `beta=[...]` が `anthropic-beta` ヘッダーになる
+- 認証: `x-api-key: $ANTHROPIC_API_KEY` と `anthropic-version: 2026-10-21`（`anthropic_version=` で変更できる。下の「API の版」）。beta 機能は `beta=[...]` が `anthropic-beta` ヘッダーになる
 
 ## 共通型との対応
 
@@ -16,6 +16,8 @@
 | 連続する同じ role | 1メッセージにまとめる（並列ツールの結果は1つの user メッセージに入れる） |
 | max_tokens | `max_tokens`（**必須**。指定がなければ 4096。`default_max_tokens=` で変更できる） |
 | stop | `stop_sequences` |
+| temperature | 既定の版（`2026-10-21`）では送る前に `UnsupportedFeatureError`。`anthropic_version="2023-06-01"` なら `temperature`（下の「API の版」） |
+| reasoning_effort | `output_config.effort`。`none` は `thinking: {"type": "disabled"}`、`minimal` は `UnsupportedFeatureError`（下の「推論の強さ」） |
 | ツール定義 | `{"name", "description", "input_schema"}` |
 | tool_choice | `{"type": "auto"}` / `{"type": "none"}` / `{"type": "any"}` / `{"type": "tool", "name"}`。指定がなければ送らない（ツールがあれば既定は `auto`） |
 | 画像 | `{"type": "image", "source": {"type": "base64", ...}}` か `{"type": "url", "url"}` |
@@ -46,7 +48,7 @@ Anthropic のモデルどうしで切り替えるときも、thinking ブロッ�
 - どの組み合わせで読めるかはモデルによる（例: Opus 5.5 から Fable 5.1 へは引き継ぐが、Fable 5.1 から Opus 5.5 へは捨てる）。一覧は出典の「Which model switches keep the reasoning」にあり、増え続けるので、ここには写さない
 - Sonnet 5.5・Haiku 5.5・Fable 5.2・Mythos 5.2 の thinking ブロックは、作ったアカウント（かつながったアカウント）でしか使えない。ほかのアカウントでは API がエラーにせずに捨てる
 - 再送するのは同じプロバイダーキーのときだけ。`register_provider()` で同じ `anthropic` 形式を別の名前で足した接続先には送らない
-- 切り替え先のモデルで 400 になるのは、ブロックではなく設定の違いによるもの（preserved thinking に対応するモデルは `thinking: {"type": "enabled"}` を 400 にする）。thinking の設定は利用者が `extra=` で渡すので、switchllm は変えない
+- 切り替え先のモデルで 400 になるのは、ブロックではなく設定の違いによるもの（preserved thinking に対応するモデルは `thinking: {"type": "enabled"}` を 400 にする。Opus 5.5 などは `reasoning_effort="none"` で送る `{"type": "disabled"}` を 400 にする）。switchllm は、利用者の指定と違う thinking の設定を送らない
 
 ### 前置きの検査（prefix check）
 
@@ -56,6 +58,37 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - モデル・effort・`max_tokens`・`tool_choice` などのパラメータ、JSON の書式やキーの順は比べない
 - 400 の文言は ``Invalid `signature` in `thinking` block. The block is bound to a different conversation.``。`thinking.block_binding.prefix_mismatch_behavior` を `"drop_block"` にすると、エラーにせずにブロックを捨てる（beta ヘッダー `thinking-binding-controls-2026-08-01` が要る）
 - switchllm は、同じ履歴からは毎回同じリクエストを組み立てる（system はトップレベルにまとめ、続く同じ role のメッセージは1つにまとめる）。`res.message` を加工せずに履歴に積めば、前置きは変わらない。履歴の途中を書き換えたり、`tools` を変えたりすると、この検査に当たりうる
+
+## API の版
+
+既定は `2026-10-21`（2026-11-21 に `2023-06-01` から上げた。[判断](../design-docs/anthropic-api-version.md)）。`anthropic_version=` で変えられる。以下は 2026-11-21 に文書で確かめた内容。
+
+- 公式は「Anthropic recommends using the latest API version whenever possible」とする。`2023-06-01` の提供を終える日は書かれていない
+- `2026-10-21` の、Messages API の破壊的変更は3つ
+  - `temperature`・`top_p`・`top_k` を送ると、どのモデルでも、既定の値でも 400
+  - assistant メッセージに `document` ブロックを直接置くと 400
+  - user メッセージの `text` ブロックに空でない `citations` を付けると 400
+- switchllm が組み立てるリクエストのうち、当たるのは `temperature` だけ。版が `2026-10-21` 以降なら、`temperature=` を送る前に `UnsupportedFeatureError` にする。`anthropic_version="2023-06-01"` なら今までどおり送る。assistant メッセージの再送（受け取った `content` をそのまま送る）は、assistant の citations を禁じていないので当たらない
+- 応答の形・ストリーミングのイベント・stop_reason の変更は書かれていない。キーは「The Claude API accepts a key in either header」で、`x-api-key` のままでよい（SDK は `Authorization: Bearer` に変えた）
+- 古い版でも、今のモデルは `temperature` を自由には使えない。Fable 5.2・Mythos 5.2・Fable 5.1・Mythos 5.1・Fable 5・Mythos 5・Mythos Preview・Opus 5.5・Opus 5・Opus 4.8・Opus 4.7・Sonnet 5.5・Sonnet 5・Haiku 5.5 は、既定でない `temperature`・`top_p`・`top_k` を、thinking の有無にかかわらず 400 にする（`top_p` の既定は 0.99 なので、`1` も 400。`temperature` と `top_p` を一緒に送るのも、既定の値でも 400）。それより古いモデルは、`2026-10-21` より前の版なら、thinking が有効なときだけ制限がある（`temperature` と `top_k` は thinking と一緒に使えず、`top_p` は 0.95〜1）
+
+## 推論の強さ
+
+`reasoning_effort=` は `output_config.effort` で送る。`none` は `thinking: {"type": "disabled"}` にし、`minimal` は送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/reasoning-effort.md)）。以下は 2026-11-21 に文書で確かめた形式。
+
+- 指定: `output_config: {"effort": "medium"}`。段階は `low`・`medium`・`high`・`xhigh`・`max` の5つで、`none` と `minimal` はない。`response_schema=` の `output_config.format` と同じオブジェクトに並ぶ
+- 既定: 多くのモデルは `high`。Opus 5.5 と Haiku 5.5 は `medium`。既定と同じ段階を送るのは、送らないのと同じ
+- 対応するモデル: Claude 5 系すべて（Fable・Mythos・Opus・Sonnet・Haiku）、Opus 4.8・4.7・4.6・Sonnet 4.6・Opus 4.5。Haiku 4.5 と Sonnet 4.5 は一覧にない。対応しないモデルに送ったときに 400 か無視かは書かれていない（U24）
+- 段階ごと: `max` は上の一覧のうち Opus 4.5 以外（Mythos Preview・Opus 4.6・Sonnet 4.6 を含む）。`xhigh` はそこから Mythos Preview・Opus 4.6・Sonnet 4.6 を除いたもの。「Not every model that supports `max` supports `xhigh`」
+- 効く範囲: thinking だけでなく、本文とツール呼び出しにも効く（「The effort parameter affects all tokens in the response」）。thinking がなくても効く（「it works with or without thinking」）。厳密な予算ではない（「Effort is a behavioral signal, not a strict token budget」）。`max_tokens` は thinking と本文を合わせた上限で、`high` 以上では大きく取ることを勧めている
+- 公式の勧め: 「Where adaptive thinking is available, effort is the recommended way to control thinking depth」
+- thinking の設定（`thinking.type`）: `adaptive`（Claude が考えるかと量を決める）・`enabled`（`budget_tokens` を 1024 以上で `max_tokens` 未満）・`disabled`・`between_tools`（Sonnet 5.5 だけ）
+  - `thinking` を送らないとき: Claude 5 系と Mythos Preview は adaptive で考える。Opus 4.8・4.7・4.6・Sonnet 4.6 は考えない（`{"type": "adaptive"}` を送ると考える）。4.5 系も考えない
+  - `enabled` は Claude 5 系・Opus 4.8・4.7 で 400。`adaptive` は 4.5 系で 400
+  - `disabled`: Fable・Mythos の 5 系すべて、Mythos Preview、Opus 5.5 は 400（推論を切れない）。Opus 5 と Haiku 5.5 は effort が `high` 以下なら受け付け、`xhigh`・`max` では 400。Sonnet 5.5 は 400 で、代わりに `between_tools`。Sonnet 5・Opus 4.8・4.7・4.6・Sonnet 4.6・4.5 系は受け付ける。Models API の `capabilities.thinking.types.disabled.supported` で確かめられる
+  - `disabled` にしたリクエストで、前のターンの thinking ブロックを送り返してよいかは書かれていない。ツールの往復の途中で thinking の設定を変えると、API はエラーにせず、そのリクエストの thinking を切る（U24）
+- thinking の本文: Claude 5 系と Mythos Preview は `display` の既定が `"omitted"` で、thinking ブロックの `thinking` が空で返る。`thinking: {"type": "adaptive", "display": "summarized"}` で要約が返る。Opus 4.6・Sonnet 4.6 以前は `"summarized"` が既定。返さなくても料金は同じ
+- 段階を会話の途中で変えてよい。前置きの検査は effort を比べない（上の「前置きの検査」）。ただし、effort や thinking の設定を変えると、プロンプトキャッシュが効かなくなる
 
 ## 注意点
 
@@ -76,14 +109,19 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - 結果: JSON は `text` ブロックに入る（HTTP の応答に読んだ値はない。`parsed_output` は SDK の機能）。拒否は `stop_reason: "refusal"`（200 で返り、出力はスキーマに合わないことがある）。`max_tokens` で切れたら出力が途中までのことがある。enum と const の値は、大文字・小文字が違って返ることがある
 - 併用: ストリーミングはいつもどおり。thinking とも使える（文法は thinking には効かず、最後の答えにだけ効く）。strict なツールとも同じリクエストで使える。citations を有効にすると 400。assistant の先読み（prefill）とは併用できない
 - スキーマごとに文法をコンパイルするので、初回は遅くなる。コンパイルした文法は最後に使ってから 24 時間残る。`output_config.format` を変えると、その会話のプロンプトキャッシュが無効になる
-- API の版: 文書の例は `anthropic-version: 2026-10-21` を送っている。switchllm の既定の `2023-06-01` で `output_config` を受け付けるかは書かれていない（U19）
+- API の版: 文書の例は `anthropic-version: 2026-10-21` を送っている。switchllm の既定も 2026-11-21 から `2026-10-21` にした。`2023-06-01` で `output_config` を受け付けるかは書かれていない（U19）
 
 ## 出典
 
 - [Structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)（2026-11-20 確認: 「The request carries the schema in `output_config.format` with `type: "json_schema"`」「Structured outputs are available on every model」「`required` and `additionalProperties` (must be set to `false` for objects)」「If you use an unsupported feature, you'll receive a 400 error with details」、使えるもの・使えないものの一覧、上限の表、拒否と `max_tokens` のとき、「Grammars apply only to Claude's direct output, not to tool use calls, tool results, or thinking tags」、citations は 400、「Prefilling is incompatible with JSON outputs」、「The `output_format` parameter has moved to `output_config.format`, and beta headers are no longer required」、文法のキャッシュ）
 - [Messages API](https://platform.claude.com/docs/en/api/messages)（2026-11-20 確認: `output_config.format` は `type: "json_schema"` と `schema` の2つの項目）
-- [Versioning](https://platform.claude.com/docs/en/api/versioning)（2026-11-20 確認: 版は `2026-10-21`・`2023-06-01`・`2023-01-01`。「Anthropic recommends using the latest API version whenever possible」。`2026-10-21` では「The `temperature`, `top_p`, and `top_k` request parameters are removed. A request that sends any of them returns a 400 error on every model」）
+- [Versioning](https://platform.claude.com/docs/en/api/versioning)（2026-11-21 確認: 提供を終える日は書かれていない、「if you are using the API as documented in this reference, Anthropic will not break your usage」。2026-11-20 確認: 版は `2026-10-21`・`2023-06-01`・`2023-01-01`。「Anthropic recommends using the latest API version whenever possible」。`2026-10-21` では「The `temperature`, `top_p`, and `top_k` request parameters are removed. A request that sends any of them returns a 400 error on every model」）
 - [Migrating to 2026-10-21](https://platform.claude.com/docs/en/api/migration-2026-10-21)（2026-11-20 確認: 「If you call the API without an SDK, set the `anthropic-version` header to `2026-10-21`」「If a request relies on a non-default value, either stop sending the parameter, or keep that request on `2023-06-01`」）
+- [Migrating to 2026-10-21](https://platform.claude.com/docs/en/api/migration-2026-10-21)（2026-11-21 確認: Messages API の破壊的変更は、`temperature`・`top_p`・`top_k`（「returns a 400 error, even at the parameter's default value」）、assistant メッセージの `document` ブロック、user メッセージの `citations` の3つ。「The Claude API accepts a key in either header」）
+- [Effort](https://platform.claude.com/docs/en/build-with-claude/effort)（2026-11-21 確認: 「Set `output_config.effort` on the request」、「Most Claude models default to high effort ... Claude Opus 5.5 and Claude Haiku 5.5 default to medium」、対応するモデルの一覧、`max` と `xhigh` の段階ごとの一覧、「Not every model that supports `max` supports `xhigh`」「it works with or without thinking」「The effort parameter affects all tokens in the response」「Effort is a behavioral signal, not a strict token budget」「Where adaptive thinking is available, effort is the recommended way to control thinking depth」「`adaptive` is a thinking mode, not an effort level」）
+- [Messages API](https://platform.claude.com/docs/en/api/messages)（2026-11-21 確認: `output_config.effort` は「Valid values are `low`, `medium`, `high`, `xhigh`, or `max`」、`budget_tokens` は「Must be ≥1024 and less than `max_tokens`」「Thinking tokens count toward your `max_tokens` limit」）
+- [Thinking](https://platform.claude.com/docs/en/build-with-claude/thinking)（2026-11-21 確認: 「On Claude 5 and later models and Claude Mythos Preview, thinking is already on and needs no configuration」、「On Claude Opus 4.8, Claude Opus 4.7, Claude Opus 4.6, and Claude Sonnet 4.6, thinking is off until you set `thinking: {type: "adaptive"}`」、モデルごとの `thinking.type` の表、「Thinking can't be turned off on these models」、`display` の既定、Sampling parameters の「non-default `temperature`, `top_p`, or `top_k` values return a 400 error on every request, regardless of whether thinking is used」と、古いモデルは「the restriction applies only while thinking is on」、途中で thinking を切り替えると「it silently disables thinking for that request」、effort を変えるとキャッシュが効かなくなる）
+- [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview)（2026-11-21 確認: Models API の `capabilities.thinking.types.disabled.supported` は「`false` when the model rejects `"disabled"` with a 400 error」）
 - [Streaming Messages](https://docs.anthropic.com/en/api/messages-streaming)
 - [Extended thinking](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking)
 - [OpenAI SDK compatibility](https://docs.anthropic.com/en/api/openai-sdk)
@@ -103,4 +141,4 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 
 ## 関連する未検証の前提
 
-U8、U9、U14、U19（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U8、U9、U14、U19、U24、U25（[実 API 検証](../exec-plans/active/real-api-verification.md)）

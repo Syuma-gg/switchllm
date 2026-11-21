@@ -44,12 +44,12 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_text` | テキストが返り、`stop_reason` が `end`、usage が 0 より大きい | | 1 | U12、U13 |
+| `test_text` | テキストが返り、`stop_reason` が `end`、usage が 0 より大きい | | 1 | U12、U13、U25 |
 | `test_system_prompt` | system がモデルに届く（各社で入れる場所が違う） | | 1 | |
 | `test_hand_written_history` | 手で作った assistant メッセージ（生データなし）を、共通型から変換して送れる | | 1 | U2 |
 | `test_max_tokens_lower_boundary` | `max_tokens=16` で `stop_reason` が `max_tokens` になる。16 は OpenAI の `max_output_tokens` の下限 | ○ | 1 | |
 | `test_stop_sequence` | `stop` で止まり、`stop_reason` が `end`。OpenAI Responses は送る前に `UnsupportedFeatureError`（呼ばない） | | 1 | |
-| `test_temperature_zero` | `temperature=0`（下限）を送る。thinking が既定で有効なモデルは拒否することがあり、そのときは API のエラーをそのまま返す | ○ | 1 | |
+| `test_temperature_zero` | `temperature=0`（下限）を送る。thinking が既定で有効なモデルは拒否することがあり、そのときは API のエラーをそのまま返す。Anthropic は既定の版（`2026-10-21`）で送る前に `UnsupportedFeatureError`（呼ばない） | ○ | 1 | |
 | `test_empty_user_message` | 空の入力。応答か API のエラーのどちらかで、ほかの例外（パースの失敗など）にならない | ○ | 1 | |
 
 ### ツール（`test_e2e_tools.py`）
@@ -93,6 +93,18 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 | `test_structured_output_stream` | ストリーミングでも同じ。`text` の差分をつなぐと `done` の本文（JSON）になり、`parsed` が入る | | 1 | U19、U20、U21 |
 | `test_structured_output_with_tools` | ツールと一緒に指定する。ツールを呼んだ応答の `parsed` は `None`、結果を渡したあとの答えはスキーマどおり。受け付けないモデルは API のエラーをそのまま返す | | 2 | U22 |
 
+### 推論の強さ（`test_e2e_reasoning.py`）
+
+各社の API に名前のない段階（Anthropic の `minimal`、Gemini の `none`）は、送る前に `UnsupportedFeatureError` になることを確かめる（呼ばない）。モデルが受け付けない段階は、API のエラーをそのまま返す。U25（Anthropic の既定の版）は、Anthropic のモデルで回すすべてのテストで確かめることになる。
+
+| テスト | 確かめること | 境界 | 回数 | 前提 |
+|---|---|---|---|---|
+| `test_reasoning_effort_low_stream` | どの社にもある `low` を、ストリーミングで送る。`done` が1回だけで本文が返る。クラウドの API が拒否したら失敗（送る形の誤り）。ローカルのサーバーは拒否を記録する | | 1 | U23、U24、U26、U27 |
+| `test_reasoning_effort_none` | 推論を切る。Anthropic は thinking を切る。切れないモデル（Claude Opus 5.5・Sonnet 5.5 など）は API のエラーをそのまま返す | ○ | 1 | U23、U24、U27 |
+| `test_reasoning_effort_minimal` | モデルによってない段階（gpt-5.5、Gemini 4・3.8 Flash）を送り、400 になるか、黙って受け付けるかを記録する | ○ | 1 | U23、U26、U27 |
+| `test_reasoning_effort_with_tools` | `low` を指定したまま、ツールの往復で推論情報を送り返す | | 2 | U23〜U26 |
+| `test_turn_reasoning_off_after_tool_call`（Gemini 以外） | 推論したツールの呼び出しのあと、`none` で結果を渡す。Anthropic で、thinking を切ったリクエストに前の thinking ブロックを送り返せるかを見る | ○ | 2 | U24 |
+
 ### エラー（`test_e2e_errors.py`）
 
 失敗するリクエストは、多くのプロバイダーで課金されない。
@@ -101,7 +113,7 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 |---|---|---|---|---|
 | `test_invalid_api_key`（キーの要るものだけ） | 認証の失敗が `APIError` になり、API の文言と本文をそのまま持つ。Gemini は無効なキーを 400 で返すことがあるので、`AuthenticationError` か `BadRequestError` のどちらかとし、どちらだったかを残す | | 1 | |
 | `test_unknown_model` | 存在しないモデルが `NotFoundError` か `BadRequestError` になり、API の文言を持つ | ○ | 1 | |
-| `test_temperature_above_range` | `temperature=5`（どの API の上限も超える）。API のエラーをそのまま返すか、黙って無視される（DeepSeek の思考モード） | ○ | 1 | |
+| `test_temperature_above_range` | `temperature=5`（どの API の上限も超える）。API のエラーをそのまま返すか、黙って無視される（DeepSeek の思考モード）。Anthropic は送る前に `UnsupportedFeatureError`（呼ばない） | ○ | 1 | |
 
 ### 切り替え（`test_e2e_switch.py`）
 

@@ -101,6 +101,9 @@ class OpenAIResponsesProvider(Provider):
                     "strict": True,
                 }
             }
+        if req.reasoning_effort is not None:
+            # 7段階とも同じ名前。モデルが受け付けない段階は API のエラーを返す（docs/references/openai-responses.md）
+            body["reasoning"] = {"effort": req.reasoning_effort}
         if stream:
             body["stream"] = True
         body = deep_merge(body, req.extra)

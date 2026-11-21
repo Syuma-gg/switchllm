@@ -61,7 +61,7 @@ The model string is split at the first `:`, so model names may contain colons, a
 ### Text and streaming
 
 ```python
-res = client.chat("What is the capital of Japan?", system="Answer in one word.", max_tokens=100, temperature=0)
+res = client.chat("What is the capital of Japan?", system="Answer in one word.", max_tokens=100)
 res.text          # the reply
 res.stop_reason   # "end" | "tool_use" | "max_tokens" | "content_filter" | "other"
 res.usage         # input_tokens / output_tokens / total_tokens / details (the raw breakdown)
@@ -149,13 +149,24 @@ res.text     # the same JSON as a string
 - With `stream()`, the `text` events are pieces of the JSON, and the final `done` response has `parsed`
 - DeepSeek supports only JSON mode, so `response_schema=` raises `UnsupportedFeatureError` before sending. Use `extra={"response_format": {"type": "json_object"}}` and describe the format in the prompt ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/structured-output.md), in Japanese)
 
+### Reasoning effort
+
+```python
+res = client.chat("How many r's are in 'strawberry'?", reasoning_effort="low")
+```
+
+- `reasoning_effort=` takes one of `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` (the levels OpenAI documents). The name is sent unchanged in each provider's own field (OpenAI `reasoning.effort`, Anthropic `output_config.effort`, Gemini `thinkingConfig.thinkingLevel`, Chat Completions `reasoning_effort`). Leave it out to use the model's default
+- A level that a provider's API has no name for raises `UnsupportedFeatureError` before sending: `"minimal"` on Anthropic, and `"none"` and `"max"` on Gemini. On Anthropic, `"none"` turns thinking off (`thinking: {"type": "disabled"}`)
+- Models differ in the levels they accept (gpt-5.5 has no `"max"`, and Claude Opus 5.5 cannot turn thinking off). The library keeps no list of models, so these come back from the API as `BadRequestError`
+- The levels are hints, not token budgets: the same level does not mean the same amount of reasoning on every model. Write other reasoning settings (summaries, Gemini 2.5's `thinkingBudget`) in `extra_by_provider=` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md), in Japanese)
+
 ### Provider-specific features
 
 Parameters that cannot be unified are written in each provider's own format, side by side, in `extra_by_provider=`. Only the part for the provider chosen by the model string is sent, so switching models does not change the calling code. Providers you leave out get nothing extra. The keys are the `provider:` part of the model string (use `"google"` if you write `google:`).
 
 ```python
 client.chat("...", extra_by_provider={
-    "openai": {"reasoning": {"effort": "high"}},       # OpenAI Responses
+    "openai": {"reasoning": {"summary": "auto"}},      # OpenAI Responses: return reasoning summaries
     "anthropic": {"metadata": {"user_id": "u-1"}},     # Anthropic
 })
 ```
@@ -214,7 +225,8 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` (this costs a small amount; add `--collect-only` first to see how many calls it makes without calling the APIs)
 - No async support yet
 - Image input is supported; audio, PDF, and file input are not. Image URLs are not supported for Gemini (pass base64 instead)
-- Reasoning effort is not unified yet (list each provider's settings in `extra_by_provider`)
+- Reasoning text: OpenAI, Claude 5 models, and Gemini return no reasoning summary unless you ask, so `res.thinking` is often `None`. Ask in each provider's format with `extra_by_provider=` (OpenAI `{"reasoning": {"summary": "auto"}}`, Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`, Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`)
+- Anthropic: the default API version is `2026-10-21`, which rejects `temperature` on every model, so `temperature=` raises `UnsupportedFeatureError` before sending. For older models that still accept it, use `Client(..., anthropic_version="2023-06-01")`. Current Claude models reject a non-default `temperature` even on the older version ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md), in Japanese)
 - Structured output: OpenAI requires every property to be listed in `required` (make an optional field nullable instead, for example `{"type": ["string", "null"]}`), and each provider supports a different subset of JSON Schema. Keywords a provider does not support are rejected with `BadRequestError` (Gemini ignores them)
 - Anthropic requires max_tokens, so it is sent as 4096 when you do not give one (change it with `Client(..., default_max_tokens=...)`). The other providers send no limit unless you give one, so a long answer may stop with `stop_reason="max_tokens"` on Anthropic only
 - The OpenAI Responses API has no `stop` sequences, so specifying one raises `UnsupportedFeatureError`

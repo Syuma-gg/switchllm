@@ -8,7 +8,7 @@ from e2e_support import MAX_TOKENS
 from switchllm import APIError, BadRequestError, Message, UnsupportedFeatureError
 
 
-@pytest.mark.premise("U12", "U13")
+@pytest.mark.premise("U12", "U13", "U25")
 @pytest.mark.calls(1)
 def test_text(client, note):
     res = client.chat("「ok」とだけ返して", max_tokens=MAX_TOKENS)
@@ -67,9 +67,15 @@ def test_stop_sequence(client, adapter, note):
 
 
 @pytest.mark.calls(1)
-def test_temperature_zero(client, note):
+def test_temperature_zero(client, adapter, note):
     # 下限の 0 を、0 だからと落とさずに送る。thinking が既定で有効なモデルは temperature の指定を
     # 拒否することがあり、そのときは API のエラーをそのまま返す（モデルごとの一覧は持たない）
+    if adapter == "anthropic":
+        # 既定の版（2026-10-21）は、どのモデルでも temperature を 400 にする。送る前に知らせる
+        with pytest.raises(UnsupportedFeatureError, match="anthropic_version"):
+            client.chat("「ok」とだけ返して", temperature=0, max_tokens=MAX_TOKENS)
+        note("送る前に UnsupportedFeatureError（呼ばない）")
+        return
     try:
         res = client.chat("「ok」とだけ返して", temperature=0, max_tokens=MAX_TOKENS)
     except BadRequestError as e:

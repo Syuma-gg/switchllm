@@ -18,7 +18,14 @@ import httpx
 from ._http import RetryPolicy, request_json, stream_sse
 from .errors import ConfigurationError
 from .providers import PRESETS, create_provider
-from .providers.base import ChatRequest, Provider, deep_merge, normalize_tool_choice, strict_object_schema
+from .providers.base import (
+    REASONING_EFFORTS,
+    ChatRequest,
+    Provider,
+    deep_merge,
+    normalize_tool_choice,
+    strict_object_schema,
+)
 from .tools import Tool, ToolLike, as_tool
 from .types import ImagePart, Message, Response, StreamEvent, TextPart
 
@@ -100,6 +107,17 @@ def _check_tool_choice(tool_choice: Any, tools: list[Tool]) -> None:
         )
 
 
+def _check_reasoning_effort(effort: Any) -> None:
+    """段階の名前の誤りを送る前に知らせる。大文字や空白も直さない（各社へは名前を変えずに送るため）。"""
+    if effort is None:
+        return
+    allowed = ", ".join(REASONING_EFFORTS)
+    if not isinstance(effort, str):
+        raise TypeError(f"reasoning_effort must be one of {allowed} (a str), got {effort!r}")
+    if effort not in REASONING_EFFORTS:
+        raise ConfigurationError(f"unknown reasoning_effort {effort!r}. Use one of: {allowed}")
+
+
 def _fill_parsed(res: Response) -> None:
     """構造化出力の本文を読んで ``res.parsed`` に入れる。最後まで答えたときだけ読む。
     拒否や上限で止まった本文は、JSON として読めてもスキーマに合う保証がないため。"""
@@ -170,6 +188,7 @@ class Client:
         temperature: float | None,
         stop: list[str] | None,
         response_schema: dict[str, Any] | None,
+        reasoning_effort: str | None,
         extra: dict[str, Any] | None,
         extra_by_provider: dict[str, dict[str, Any]] | None,
     ) -> ChatRequest:
@@ -183,6 +202,7 @@ class Client:
                 f"response_schema must be a JSON Schema dict, got {response_schema!r}. "
                 "For a Pydantic model, pass Model.model_json_schema()"
             )
+        _check_reasoning_effort(reasoning_effort)
         return ChatRequest(
             messages=msgs,
             tools=tool_list,
@@ -191,6 +211,7 @@ class Client:
             temperature=temperature,
             stop=stop,
             response_schema=None if response_schema is None else strict_object_schema(response_schema),
+            reasoning_effort=reasoning_effort,
             extra=_pick_extra(self.provider.key, extra, extra_by_provider),
         )
 
@@ -206,6 +227,7 @@ class Client:
         temperature: float | None = None,
         stop: list[str] | None = None,
         response_schema: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> Response:
@@ -213,6 +235,9 @@ class Client:
 
         ``response_schema`` に JSON Schema の dict を渡すと、答えをその形の JSON に縛り、
         読んだ値を ``Response.parsed`` に入れる（構造化出力。docs/design-docs/structured-output.md）。
+        ``reasoning_effort`` は推論の強さで、``"none"``・``"minimal"``・``"low"``・``"medium"``・``"high"``・
+        ``"xhigh"``・``"max"`` のどれか。各社の指定に名前を変えずに入れ、名前のない段階は送る前に
+        ``UnsupportedFeatureError`` にする（docs/design-docs/reasoning-effort.md）。
         ``extra`` はプロバイダー固有パラメータをリクエスト本体にそのままマージする。
         ``extra_by_provider`` は ``{"anthropic": {...}, "openai": {...}}`` の形で各社の分を並べ、
         モデル文字列の ``provider:`` 部分と同じ名前の分だけをマージする（``extra`` より優先）。
@@ -220,7 +245,8 @@ class Client:
         req = self._request(
             messages, system=system, tools=tools, tool_choice=tool_choice,
             max_tokens=max_tokens, temperature=temperature, stop=stop,
-            response_schema=response_schema, extra=extra, extra_by_provider=extra_by_provider,
+            response_schema=response_schema, reasoning_effort=reasoning_effort,
+            extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=False)
         data = request_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
@@ -240,6 +266,7 @@ class Client:
         temperature: float | None = None,
         stop: list[str] | None = None,
         response_schema: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> Iterator[StreamEvent]:
@@ -249,7 +276,8 @@ class Client:
         req = self._request(
             messages, system=system, tools=tools, tool_choice=tool_choice,
             max_tokens=max_tokens, temperature=temperature, stop=stop,
-            response_schema=response_schema, extra=extra, extra_by_provider=extra_by_provider,
+            response_schema=response_schema, reasoning_effort=reasoning_effort,
+            extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=True)
         events = stream_sse(self._http, http_req, provider=self.provider.key, retry=self.retry)

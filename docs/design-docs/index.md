@@ -20,3 +20,5 @@
 | [品質検査をハーネスで回し、数字のために品質を落とさない](quality-gate-harness.md) | 採用（2026-11-14）、テンプレート化（2026-11-15） | — |
 | [プロバイダー固有の指定は、各社の分を並べて渡す](provider-specific-params.md) | 採用（2026-11-15） | — |
 | [構造化出力は response_schema= で JSON Schema を受け取る](structured-output.md) | 採用（2026-11-20） | 一次情報で確認、実 API 未検証 |
+| [推論の強さは reasoning_effort= で段階の名前を受け取る](reasoning-effort.md) | 採用（2026-11-21） | 一次情報で確認、実 API 未検証 |
+| [Anthropic の API の版は 2026-10-21 を既定にし、temperature は送る前に知らせる](anthropic-api-version.md) | 採用（2026-11-21） | 一次情報で確認、実 API 未検証 |

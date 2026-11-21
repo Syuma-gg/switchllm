@@ -6,11 +6,13 @@ import json
 from typing import Any, Iterator
 
 from .._http import HTTPRequest
-from ..errors import StreamError
+from ..errors import StreamError, UnsupportedFeatureError
 from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice
 
-ANTHROPIC_VERSION = "2023-06-01"
+ANTHROPIC_VERSION = "2026-10-21"
+# この版から temperature・top_p・top_k が、どのモデルでも 400 になる（docs/design-docs/anthropic-api-version.md）
+NO_SAMPLING_VERSION = "2026-10-21"
 DEFAULT_MAX_TOKENS = 4096  # Anthropic は max_tokens が必須
 
 _STOP = {
@@ -99,7 +101,13 @@ class AnthropicProvider(Provider):
         system = self.system_text(req.messages)
         if system:
             body["system"] = system
+        version = str(self.options.get("anthropic_version", ANTHROPIC_VERSION))
         if req.temperature is not None:
+            if version >= NO_SAMPLING_VERSION:  # 版は YYYY-MM-DD なので文字列の大小で比べられる
+                raise UnsupportedFeatureError(
+                    f"Anthropic API version {version} removed temperature (every model returns 400). "
+                    "Drop temperature=, or for older models that still accept it, pass anthropic_version='2023-06-01'"
+                )
             body["temperature"] = req.temperature
         if req.stop:
             body["stop_sequences"] = req.stop
@@ -116,13 +124,24 @@ class AnthropicProvider(Provider):
         if req.response_schema is not None:
             # name はない。beta ヘッダーも要らない（docs/references/anthropic-messages.md）
             body["output_config"] = {"format": {"type": "json_schema", "schema": req.response_schema}}
+        if req.reasoning_effort == "none":
+            # effort に none はないが、thinking を切れば同じ意味になる。切れないモデル（Opus 5.5 など）は
+            # API のエラーを返す（docs/references/anthropic-messages.md の「推論の強さ」）
+            body["thinking"] = {"type": "disabled"}
+        elif req.reasoning_effort == "minimal":
+            raise UnsupportedFeatureError(
+                "Anthropic has no 'minimal' reasoning effort (levels: low, medium, high, xhigh, max). "
+                "Use reasoning_effort='low', or 'none' to turn thinking off"
+            )
+        elif req.reasoning_effort is not None:
+            body.setdefault("output_config", {})["effort"] = req.reasoning_effort  # format と並ぶ
         if stream:
             body["stream"] = True
         body = deep_merge(body, req.extra)
 
         headers = {
             "x-api-key": self.api_key or "",
-            "anthropic-version": self.options.get("anthropic_version", ANTHROPIC_VERSION),
+            "anthropic-version": version,
             "content-type": "application/json",
         }
         if self.options.get("beta"):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from e2e_support import MAX_TOKENS
 
-from switchllm import AuthenticationError, BadRequestError, NotFoundError, parse_model
+from switchllm import AuthenticationError, BadRequestError, NotFoundError, UnsupportedFeatureError, parse_model
 
 
 @pytest.mark.needs_key
@@ -33,9 +33,15 @@ def test_unknown_model(make_client, model, note):
 
 
 @pytest.mark.calls(1)
-def test_temperature_above_range(client, note):
+def test_temperature_above_range(client, adapter, note):
     # 5 はどの API の上限（OpenAI・Gemini は 2、Anthropic は 1）も超える。
     # API のエラーをそのまま返すか、黙って無視される（DeepSeek の思考モードは temperature を無視する）
+    if adapter == "anthropic":
+        # 既定の版（2026-10-21）では temperature 自体を送れない（test_temperature_zero と同じ）
+        with pytest.raises(UnsupportedFeatureError, match="anthropic_version"):
+            client.chat("「ok」とだけ返して", temperature=5, max_tokens=MAX_TOKENS)
+        note("送る前に UnsupportedFeatureError（呼ばない）")
+        return
     try:
         res = client.chat("「ok」とだけ返して", temperature=5, max_tokens=MAX_TOKENS)
     except BadRequestError as e:

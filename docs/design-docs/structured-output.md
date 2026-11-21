@@ -61,6 +61,6 @@ LLM の答えをプログラムが受け取るとき（取り出し、分類、�
 
 - `Response` に `parsed` が増える（公開 API の型の属性。`__all__` は変わらない）
 - `openai_chat` のオプションに `json_schema` が増える（[公開 API](../product-specs/public-api.md) のオプション表）
-- Anthropic の既定の API の版（`2023-06-01`）で `output_config` を受け付けるかは、文書にない（U19）。受け付けなければ、版を上げるか `anthropic_version=` を案内する。版を上げると `temperature` が 400 になる（[負債](../exec-plans/tech-debt-tracker.md)）
+- Anthropic の古い API の版（`2023-06-01`）で `output_config` を受け付けるかは、文書にない（U19）。2026-11-21 に既定の版を `2026-10-21`（文書の例と同じ版）に上げたので、古い版を選んだときだけの前提になった（[判断](anthropic-api-version.md)）
 - Gemini は文書の SDK の例の形（`responseMimeType` と `responseJsonSchema`）で送る。REST の例は別の形（`responseFormat.text`）で、どちらを受け付けるかは U20 で確かめる
 - 省略できる項目のあるスキーマ（Pydantic で既定値を持つフィールドなど）は、OpenAI では 400 になる。README の「制限」に書く

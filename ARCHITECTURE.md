@@ -64,6 +64,7 @@ providers/     Provider   parse_response() / parse_stream(): 各社の JSON → 
 | `tests/test_<adapter>.py` | アダプターごとのリクエスト形状 / ツール往復 / ストリーミング / エラー |
 | `tests/test_cross_provider.py` | 会話の途中でプロバイダーを替えたときの履歴変換 |
 | `tests/test_consistency.py` | 同じテストを4アダプターで回し、切り替えても同じ振る舞いになること（共通パラメータ、`tool_choice`、ストリームの終わりとエラー、未知のイベント） |
+| `tests/test_reasoning_effort.py` | 推論の強さ（`reasoning_effort=`）。4アダプターで各社の指定になること、段階の名前を変えないこと、名前のない段階と打ち間違いを送る前に例外にすること |
 | `tests/test_structured_output.py` | 構造化出力（`response_schema=`）。4アダプターで各社の形式になり、同じ `parsed` を返すこと、スキーマに足すもの、JSON Schema を受け付けない接続先 |
 | `tests/test_client.py` | モデル文字列、APIキー、`with_model()`、プロバイダー別のオプション、`extra_by_provider`、送る前の検査、プロバイダーの登録 |
 | `tests/test_http.py` | リトライ、`Retry-After`、例外への対応づけ、エラー本体の解釈、接続エラー |
