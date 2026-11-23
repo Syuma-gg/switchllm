@@ -183,6 +183,21 @@ res = client.chat("How many r's are in 'strawberry'?", reasoning_effort="low")
 - Models differ in the levels they accept (gpt-5.5 has no `"max"`, and Claude Opus 5.5 cannot turn thinking off). The library keeps no list of models, so these come back from the API as `BadRequestError`
 - The levels are hints, not token budgets: the same level does not mean the same amount of reasoning on every model. Write other reasoning settings (summaries, Gemini 2.5's `thinkingBudget`) in `extra_by_provider=` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md), in Japanese)
 
+### Files (PDF and more)
+
+Put a `FilePart` in a user message, before the question (Anthropic recommends putting PDFs first).
+
+```python
+from switchllm import Client, FilePart, Message, TextPart
+
+client = Client("anthropic:claude-sonnet-5-5")
+res = client.chat([Message.user([FilePart.from_file("report.pdf"), TextPart("Summarize it in three lines.")])])
+```
+
+- PDF works with every provider except the `deepseek`, `ollama` and `lmstudio` presets
+- Other file types depend on the provider. OpenAI (Responses API) and Gemini get them as they are and reject the types they don't support. Anthropic takes PDF and plain text (text files are sent as text). Chat Completions takes only PDF
+- A file that the provider is known not to accept raises `UnsupportedFeatureError` before sending. Files are sent inline as base64 (no file URLs or upload APIs). Images go in `ImagePart`; audio and video are not supported ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/file-input.md), in Japanese)
+
 ### Provider-specific features
 
 Parameters that cannot be unified are written in each provider's own format, side by side, in `extra_by_provider=`. Only the part for the provider chosen by the model string is sent, so switching models does not change the calling code. Providers you leave out get nothing extra. The keys are the `provider:` part of the model string (use `"google"` if you write `google:`).
@@ -256,7 +271,7 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 ## Known limitations
 
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` (this costs a small amount; add `--collect-only` first to see how many calls it makes without calling the APIs)
-- Image input is supported; audio, PDF, and file input are not. Image URLs are not supported for Gemini (pass base64 instead)
+- Image and file input are supported (files as base64 only); audio input is not. Image URLs are not supported for Gemini (pass base64 instead)
 - Reasoning text: OpenAI, Claude 5 models, and Gemini return no reasoning summary unless you ask, so `res.thinking` is often `None`. Ask in each provider's format with `extra_by_provider=` (OpenAI `{"reasoning": {"summary": "auto"}}`, Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`, Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`)
 - Anthropic: the default API version is `2026-10-21`, which rejects `temperature` on every model, so `temperature=` raises `UnsupportedFeatureError` before sending. For older models that still accept it, use `Client(..., anthropic_version="2023-06-01")`. Current Claude models reject a non-default `temperature` even on the older version ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md), in Japanese)
 - Structured output: OpenAI requires every property to be listed in `required` (make an optional field nullable instead, for example `{"type": ["string", "null"]}`), and each provider supports a different subset of JSON Schema. Keywords a provider does not support are rejected with `BadRequestError` (Gemini ignores them)

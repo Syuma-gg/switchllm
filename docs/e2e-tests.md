@@ -83,6 +83,15 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | `test_image_base64` | 64×64 の赤い PNG（base64）の色を答えられる | ○ | 1 | |
 | `test_image_url_is_rejected_before_sending`（Gemini だけ） | URL の画像は送る前に `UnsupportedFeatureError` | | 0 | |
 
+### ファイル（`test_e2e_files.py`）
+
+ファイルを受け付けない接続先（`deepseek`・`ollama`・`lmstudio` のプリセット）と、Chat Completions 互換の PDF 以外では、送る前に `UnsupportedFeatureError` になることを確かめる（呼ばない。[判断](design-docs/file-input.md)）。
+
+| テスト | 確かめること | 境界 | 回数 | 前提 |
+|---|---|---|---|---|
+| `test_pdf_file` | 標準ライブラリで作った1ページの PDF（`FilePart`、base64）に書いたコードを答えられる | | 1 | U28・U29・U30・U31 |
+| `test_text_file` | テキストのファイル（`text/plain`）に書いた合言葉を答えられる。Anthropic は文字に戻して送る | ○ | 1 | U28・U30・U31 |
+
 ### 構造化出力（`test_e2e_structured.py`）
 
 JSON Schema を受け付けない接続先（`deepseek` のプリセット）では、どれも送る前に `UnsupportedFeatureError` になることを確かめる（呼ばない）。

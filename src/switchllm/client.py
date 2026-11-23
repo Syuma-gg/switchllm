@@ -19,7 +19,7 @@ from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Sequence, U
 import httpx
 
 from ._http import RetryPolicy, arequest_json, astream_sse, request_json, stream_sse
-from .errors import ConfigurationError
+from .errors import ConfigurationError, UnsupportedFeatureError
 from .providers import PRESETS, create_provider
 from .providers.base import (
     REASONING_EFFORTS,
@@ -30,7 +30,7 @@ from .providers.base import (
     strict_object_schema,
 )
 from .tools import Tool, ToolLike, as_tool
-from .types import ImagePart, Message, Response, StreamEvent, TextPart
+from .types import FilePart, ImagePart, Message, Response, StreamEvent, TextPart
 
 MODEL_ENV = "SWITCHLLM_MODEL"
 
@@ -65,18 +65,37 @@ def _to_messages(messages: MessagesLike) -> list[Message]:
 
 
 def _check_content(m: Message) -> None:
-    """アダプターは TextPart / ImagePart 以外のパーツを読まない。黙って落として送らないよう、先に TypeError にする。"""
+    """アダプターは TextPart / ImagePart / FilePart 以外のパーツを読まず、user 以外のメッセージからは
+    文字しか読まない。黙って落として送らないよう、先に例外にする。"""
     if isinstance(m.content, str):
         return
-    if isinstance(m.content, list):
-        bad = [p for p in m.content if not isinstance(p, (TextPart, ImagePart))]
-        if not bad:
-            return
+    expected = f"{m.role} message content must be a str or a list of TextPart / ImagePart / FilePart"
+    if not isinstance(m.content, list):
+        raise TypeError(f"{expected}, got {m.content!r}")
+    bad = [p for p in m.content if not isinstance(p, (TextPart, ImagePart, FilePart))]
+    if bad:
+        raise TypeError(f"{expected}, got {bad[0]!r}. Wrap text in TextPart('...')")
+    media = [p for p in m.content if isinstance(p, (ImagePart, FilePart))]
+    if media and m.role != "user":
         raise TypeError(
-            f"{m.role} message content must be a str or a list of TextPart / ImagePart, got {bad[0]!r}. "
-            "Wrap text in TextPart('...')"
+            f"{m.role} message content can't include {type(media[0]).__name__}; "
+            "only user messages can carry images and files"
         )
-    raise TypeError(f"{m.role} message content must be a str or a list of TextPart / ImagePart, got {m.content!r}")
+    for p in media:
+        if isinstance(p, FilePart):
+            _check_file(p)
+
+
+def _check_file(p: FilePart) -> None:
+    """どのプロバイダーでも送れない FilePart を、送る前に知らせる（docs/design-docs/file-input.md）。"""
+    for name in ("data", "media_type"):
+        if not isinstance(getattr(p, name), str) or not getattr(p, name):
+            raise TypeError(f"FilePart.{name} must be a non-empty str; build files with FilePart.from_file(path)")
+    kind = p.media_type.split("/", 1)[0].lower()
+    if kind == "image":
+        raise UnsupportedFeatureError(f"FilePart can't send images ({p.media_type}); use ImagePart instead")
+    if kind in ("audio", "video"):
+        raise UnsupportedFeatureError(f"audio and video input is not supported ({p.media_type})")
 
 
 def _pick_extra(

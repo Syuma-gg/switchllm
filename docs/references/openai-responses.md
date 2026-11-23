@@ -10,7 +10,7 @@
 | 共通 | Responses API |
 |---|---|
 | system | トップレベルの `instructions` |
-| user | `{"role": "user", "content": 文字列 か [input_text / input_image]}` |
+| user | `{"role": "user", "content": 文字列 か [input_text / input_image / input_file]}` |
 | assistant（再送しないとき） | `{"role": "assistant", "content": 文字列}` と `function_call` アイテム |
 | ツール結果 | `{"type": "function_call_output", "call_id", "output"}`。エラーは `output` の先頭に `Error: ` |
 | max_tokens | `max_output_tokens` |
@@ -18,6 +18,7 @@
 | ツール定義 | `{"type": "function", "name", "description", "parameters", "strict": false}` |
 | tool_choice | `"auto"` / `"none"` / `"required"` / `{"type": "function", "name"}`。指定がなければ送らない（既定は `auto`） |
 | 画像 | `{"type": "input_image", "image_url": URL か data URL}` |
+| ファイル | `{"type": "input_file", "file_data": data URL, "filename"}`（`filename` は `FilePart` にあるときだけ）。種類は確かめずに送る（下の「ファイルの入力」） |
 
 ## レスポンス
 
@@ -72,6 +73,17 @@
 - `temperature`・`top_p` を推論モデルで使えるか、段階によるかは書かれていない（U23）
 - GPT-6 以降の一部のモデルは、会話の途中で `configuration_update` のアイテムで段階を変えられる。switchllm は使わない
 
+## ファイルの入力
+
+`FilePart` は `input_file` の `file_data` で送る（[判断](../design-docs/file-input.md)）。以下は 2026-11-23 に文書で確かめた形式。
+
+- 形: `{"type": "input_file", "file_data": ..., "filename": ...}`。ほかに `file_id`（Files API でアップロードしたもの）、`file_url`（外部の URL）、`detail`（PDF のページの画像の細かさ。`auto`・`low`・`high`）がある。スキーマではどれも省略でき、`filename` が要るとは書かれていない（ガイドの例はいつも付けている）。switchllm は `file_data` と `filename` だけを使う
+- `file_data` の形: ガイドのコードの例は data URL（`data:application/pdf;base64,...`）。curl の例は「...base64 encoded PDF bytes here...」で、スキーマも base64 とだけ書く。switchllm は例に合わせて data URL で送る（U28）
+- 種類: PDF、テキストとコード（.txt・.md・.json・.html・.xml など）、文書（.doc・.docx・.rtf・.odt）、プレゼンテーション（.ppt・.pptx）、表計算（.csv・.xls・.xlsx など）。一覧が長く拡張子で書かれているので、switchllm は種類を確かめずに送り、受け付けないものは API のエラーにする。PDF 以外の種類を、`filename` の拡張子と data URL の種類のどちらで見分けるかは書かれていない（U28）
+- 読み方: PDF は「the API extracts both text and page images」で、画像を読めるモデルには文字とページの画像の両方を渡す。PDF 以外は文字だけを取り出し、埋め込まれた画像や図は渡さない。表計算は、シートごとに先頭の 1,000 行まで読み、モデルが作った要約と見出しを足す
+- 上限: 「each file must be under 50 MB. The combined limit across all files in the request is 50 MB」。ページ数の上限は書かれていない
+- PDF は文字とページの画像の両方が文脈に入るので、トークンが増える
+
 ## 出典
 
 - [Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs)（2026-11-20 確認: 「all fields or function parameters must be specified as `required`」「we require developers to set `additionalProperties: false` to opt into Structured Outputs」「the root level object of a schema must be an object, and not use `anyOf`」「If you turn on Structured Outputs by supplying `strict: true` and call the API with an unsupported JSON Schema, you will receive an error」、上限と使えるキーワードの一覧、拒否の例（`"type": "refusal"` で `"status": "completed"`）、JSON モードの「the API will throw an error if the string "JSON" does not appear somewhere in the context」、初回の遅れ）
@@ -87,7 +99,9 @@
 - [Reasoning models](https://developers.openai.com/api/docs/guides/reasoning)（2026-11-21 確認: 「Supported values are model-dependent and can include `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`」「Some models support only a subset of these values, so check the relevant model page before choosing a setting」、GPT-6 Astra は「Setting `reasoning.effort` (Responses) or `reasoning_effort` (Chat Completions) to `none` returns HTTP 400」、GPT-6.1 Sol は「does not support `none` or `minimal`」、要約は opt-in、「OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs」、`mode` と `context`）
 - [Create a response](https://developers.openai.com/api/docs/api-reference/responses/create)（2026-11-21 確認: `reasoning.effort` は「Currently supported values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`」で既定は `"medium"`、`summary` は「One of `auto`, `concise`, or `detailed`」、`max_output_tokens` は「including visible output tokens and reasoning tokens」、`temperature` は「We generally recommend altering this or `top_p` but not both」だけで推論との関係はない）
 - [GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5)（2026-11-21 確認: 「Reasoning.effort supports: none, low, medium (default), high and xhigh」）
+- [File inputs](https://developers.openai.com/api/docs/guides/pdf-files)（2026-11-23 確認: 対応する種類の表、「For **PDF files**, the API extracts both text and page images」、PDF 以外は文字だけ、表計算の 1,000 行、「each file must be under 50 MB」、`file_data` のコードの例が data URL で curl の例は base64 とだけ書く、Chat Completions は「accepts only PDF files as `file` content parts」）
+- [Create a response](https://developers.openai.com/api/reference/resources/responses/methods/create)（2026-11-23 確認: `input_file` の `file_data`・`file_id`・`file_url`・`filename`・`detail`。どれも optional）
 
 ## 関連する未検証の前提
 
-U1〜U3、U22、U23（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U1〜U3、U22、U23、U28（[実 API 検証](../exec-plans/active/real-api-verification.md)）

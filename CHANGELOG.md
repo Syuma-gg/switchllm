@@ -23,9 +23,10 @@
 - `Client` に `httpx.AsyncClient` を、`AsyncClient` に `httpx.Client` を渡すと、作った時点で `TypeError`
 - 会話の途中でのプロバイダーの切り替え（履歴の変換）。Anthropic のモデルどうしの切り替えでは、thinking ブロックを捨てずにそのまま送る
 - 画像入力（`ImagePart`）
+- ファイルの入力（`FilePart`。`FilePart.from_file()`）。PDF などを base64 で送る。OpenAI（Responses）と Gemini には種類を確かめずに送り、Anthropic は PDF とテキスト、Chat Completions 互換は PDF だけ。DeepSeek・Ollama・LM Studio のプリセットと、受け付けないと分かっている種類は、送る前に `UnsupportedFeatureError`
 - 共通の例外（基底は `SwitchLLMError`）と自動リトライ。プロバイダーが返したエラーは、文言（`message`）と本文の全体（`body`）をそのまま持つ
 - `extra=` による、各社固有のパラメータの受け渡し
 - `extra_by_provider=` で、各社固有のパラメータをプロバイダーごとに並べて書ける。選んだプロバイダーの分だけを送るので、モデルを切り替えても呼び出し側のコードは変わらない
 - `with_model()` で、接続を共有したまま別のモデルに切り替える。同じプロバイダーなら APIキー・base_url・オプションを引き継ぐ
-- 送る前に分かる誤り（知らないオプション名、`tools` にない `tool_choice`、`TextPart` / `ImagePart` 以外のパーツ）は、リクエストを送らずに例外にする
+- 送る前に分かる誤り（知らないオプション名、`tools` にない `tool_choice`、`TextPart` / `ImagePart` / `FilePart` 以外のパーツ、user 以外のメッセージに入れた画像とファイル）は、リクエストを送らずに例外にする
 - 型情報（`py.typed`）

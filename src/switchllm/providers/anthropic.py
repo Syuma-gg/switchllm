@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any
 
 from .._http import HTTPRequest
 from ..errors import StreamError, UnsupportedFeatureError
-from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
+from ..types import FilePart, ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice
 
 ANTHROPIC_VERSION = "2026-10-21"
@@ -62,7 +63,33 @@ class AnthropicProvider(Provider):
                     else {"type": "base64", "media_type": p.media_type, "data": p.data}
                 )
                 blocks.append({"type": "image", "source": src})
+            elif isinstance(p, FilePart):
+                blocks.append({"type": "document", "source": self._document_source(p)})
         return blocks
+
+    @staticmethod
+    def _document_source(p: FilePart) -> dict[str, str]:
+        """PDF は base64 のまま、テキストは文字に戻して送る。.docx などは文書が受け付けないと書くので、
+        送る前に止める（docs/references/anthropic-messages.md の「ファイルの入力」）。"""
+        media_type = p.media_type.lower()
+        if media_type == "application/pdf":
+            return {"type": "base64", "media_type": "application/pdf", "data": p.data}
+        if not (media_type.startswith("text/") or media_type in ("application/json", "application/xml")):
+            raise UnsupportedFeatureError(
+                f"Anthropic document blocks accept PDF and plain text files, got {p.media_type}. "
+                "Convert the file to PDF or text first"
+            )
+        try:
+            raw = base64.b64decode(p.data, validate=True)
+        except ValueError:  # binascii.Error と、ASCII でない文字のとき
+            raise ValueError(f"FilePart.data is not valid base64 ({p.media_type})") from None
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise UnsupportedFeatureError(
+                f"Anthropic needs text files in UTF-8; this {p.media_type} file is not valid UTF-8"
+            ) from None
+        return {"type": "text", "media_type": "text/plain", "data": text}
 
     def build_request(self, req: ChatRequest, *, stream: bool) -> HTTPRequest:
         msgs: list[dict[str, Any]] = []

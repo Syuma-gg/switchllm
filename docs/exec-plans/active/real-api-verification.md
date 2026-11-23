@@ -50,6 +50,10 @@ ID はほかの文書から参照しているので変えない。
 | U25 | Anthropic（API の版） | 既定の `anthropic-version` を `2026-10-21` にする | 移行ガイドの破壊的変更（`temperature` など）に当たるものは送らないが、ツール・画像・ストリーミング・thinking の再送がすべて今までどおり通るかは、実リクエストでは未確認 | |
 | U26 | Gemini（推論の強さ） | `generationConfig.thinkingConfig.thinkingLevel` に小文字の段階を送る | ガイドの例は小文字だが、API リファレンスの列挙は大文字。モデルが使えない段階（Gemini 4 の `minimal` など）や、Gemini 2.5 に送ったときの挙動も書かれていない | |
 | U27 | Ollama・LM Studio（推論の強さ） | `reasoning_effort` をそのまま送る | Ollama は知らない段階をモデルの既定に置き換える（エラーにしない）。LM Studio は Chat Completions のパラメータの一覧に `reasoning_effort` がなく、受け付けるか、無視するか、拒否するかが分からない | |
+| U28 | OpenAI Responses（ファイル） | `input_file` に `file_data`（data URL）と、あれば `filename` を送る。種類は確かめずに送る | ガイドのコードの例は data URL だが、curl の例とスキーマは base64 とだけ書く。`filename` は省略できるとされるが、例はいつも付けている。PDF 以外の種類を拡張子と data URL のどちらで見分けるかが書かれていない | |
+| U29 | Chat Completions 互換（ファイル） | `{"type": "file", "file": {"file_data": data URL, "filename"}}` を送る。PDF 以外は送る前に `UnsupportedFeatureError` | Chat Completions の `file_data` の形（data URL か base64 だけか）は、例がなく書かれていない | |
+| U30 | Anthropic（ファイル） | PDF は base64 の document。テキスト（`text/*`・`application/json`・`application/xml`）は UTF-8 に戻して `text/plain` の text の document で送る | text の document の例は引用の文書にある。Markdown・CSV・JSON を `text/plain` として送ってよいかは、PDF のガイドの「.txt, .csv, or .md can be used directly in document blocks」と Files API の説明から推した | |
+| U31 | Gemini（ファイル） | `inlineData` に `mimeType` と base64 を送る。種類は確かめずに送る | 今の文書の例は Interactions API の形で、generateContent で PDF を送る例がない（Part のスキーマの `mimeType` の例に `application/pdf` があることからの推定）。Office のファイルの扱いは要約でしか読めていない | |
 
 ## 進捗ログ
 

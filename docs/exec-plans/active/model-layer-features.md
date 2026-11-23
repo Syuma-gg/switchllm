@@ -47,15 +47,17 @@ LLM をコードで呼ぶときによく使うのに、今は各社の書き方�
   - 今の問題: Chat Completions 互換だけにある。ゲートウェイを経由すると、ほかのアダプターへ切り替えられない
   - 決めること: 認証のヘッダー（`Authorization`、`x-api-key`、`x-goog-api-key`）と重なったときにどちらを優先するか
   - テスト: 4アダプターで、足したヘッダーが送られること（`tests/test_consistency.py`）
-- [ ] **6. PDF・ファイルの入力**
+- [x] **6. PDF・ファイルの入力**（2026-11-23。[判断](../../design-docs/file-input.md)）
   - 今の問題: 画像しか送れない
   - 決めること: パーツの型（例: `FilePart` / `DocumentPart`）と作り方（`from_file()`）、最初に対応する種類（PDF から始めるか）、対応しない接続先の扱い（送る前に `UnsupportedFeatureError`）
   - 一次情報で確かめる: OpenAI Responses の `input_file`、Anthropic の `document`、Gemini の `inlineData`、Chat Completions 互換
   - 音声の入力は、この計画に入れない（[スコープ](../../product-specs/scope.md) の「未定」のまま）
-- [ ] 6つの E2E のケースを足し、[E2E テスト](../../e2e-tests.md) の一覧を更新する
+- [x] 6つの E2E のケースを足し、[E2E テスト](../../e2e-tests.md) の一覧を更新する（2026-11-23。機能ごとに足した）
 - [ ] [実 API 検証](real-api-verification.md) の実行（`--record`）に、6つのケースも含める
 
 ## 進捗ログ
+
+- 2026-11-23: 6（PDF・ファイルの入力）を終えた。各社の公式文書（OpenAI の File inputs と Responses・Chat Completions のリファレンス、Anthropic の PDF support・Citations・Files・Messages、Gemini の Document understanding・File input methods・Files・Generating content、DeepSeek の Create Chat Completion・Files API・File Parsing、Ollama の OpenAI compatibility、LM Studio の OpenAI Compatibility Endpoints）を読み、`docs/references/` の4つの文書に「ファイルの入力」を書いた。分かったこと: base64 のまま4つすべてで送れるのは PDF だけ。OpenAI の Chat Completions は PDF だけで、Responses は文書・表計算・テキストなどの長い一覧。Anthropic は PDF とテキストで、.docx・.xlsx は受け付けない。Gemini の今の文書の例は Interactions API の形だけで、generateContent で PDF を送る例がない。DeepSeek は文書を `file_id` でしか受け付けず形も違い、Ollama・LM Studio の文書にはファイルの記述がない。文書で決めきれないものを U28〜U31 として [実 API 検証](real-api-verification.md) に足した。テスト（`tests/test_file_input.py`、`tests/test_history.py` の2つ）を先に書き、変更前のコードで `FilePart` を import できずに失敗することを確かめた。調べる途中で、どのアダプターも、user 以外のメッセージ（system・assistant）に入れた画像を黙って落としていることを見つけた（実際に送る本文で確かめた）。`FilePart` も同じになるので、送る前に `TypeError` にした（先にテストを書き、変更前のコードで 16 件が例外にならずに失敗するのを確かめた）。実装のあと、filename を送らない・PDF 以外も Chat Completions に送る・プリセットの指定を忘れる・テキストを base64 のまま Anthropic に送る・.docx を Anthropic に送る・UTF-8 でないテキストを置き換えて送る・Gemini でファイルを落とす・user 以外のメッセージの画像を通す・`FilePart` の画像を通す・中身を確かめない・`mimetypes` を先に引く・保存で filename を落とす・復元で読まない、という誤り（14）をわざと入れ、テストがどれも見つけることを確かめた。この環境（Windows の Python 3.12）の `mimetypes` は、`.csv` に `application/vnd.ms-excel` を返し、`.md` は判定できなかった。E2E に `test_e2e_files.py`（2つ、1モデル最大 2 回）を足し、PDF は標準ライブラリで作る（pypdf で読めることを確かめた）
 
 - 2026-11-23: 5（すべてのアダプターに `headers=`）を終えた。調べている途中で、Chat Completions 互換の `headers=` の不具合を見つけた。ヘッダーを dict の `update` で重ねていたので、`authorization` のように大文字と小文字が違うと、ライブラリの `Authorization`（プロバイダーのキー入り）と2本送っていた（実際に送られるヘッダーで確かめた）。RFC 9110 で、ヘッダーの名前は大文字と小文字を区別しないこと（5.1）、同じ名前のヘッダーを複数送ってはいけないこと（5.3）、`Authorization` はリストの形でないこと（11.6.2）を確かめた。テスト（`tests/test_consistency.py` の2つ、`tests/test_anthropic.py`、`tests/test_client.py`）を先に書き、変更前のコードで、Chat Completions 互換では認証のヘッダーが2本送られること、ほかのアダプターでは知らないオプションとして弾かれること、認証のヘッダーを渡してもキーを求められることで失敗するのを確かめてから実装した。実装のあと、大文字と小文字を区別して重ねる・ライブラリの値を優先する・認証でないヘッダーでもキーを求めない・1つのアダプターだけ重ねない、という誤りをわざと入れ、テストがどれも見つけることを確かめた。`tests/test_client.py` の、Responses に `headers` を渡すと弾かれることを例にしていたケースは、Anthropic 用の `beta` に替えた。E2E に `test_e2e_headers.py`（1つ、キーの要るモデルで 1 回）を足した。読み直して、`headers=` の型の誤りを知らせる `TypeError` が、渡された dict を丸ごとメッセージに入れていた（認証のヘッダーのキーがログに出る）のを見つけ、名前と型だけを出すように直した（テストを先に書き、キーがメッセージに出ることで失敗するのを確かめた）
 - 2026-11-23: 作者に頼まれ、公式 SDK（openai 3.57.0・anthropic 2.12.0・google-genai 3.6.1）が利用者のヘッダーをどう重ねるかを、ローカルの HTTP サーバーで実際に送られたヘッダーを受けて確かめた（結果は [判断](../../design-docs/custom-headers.md) の比較の表）。openai・anthropic は利用者の値が大文字と小文字を区別せずに勝ち、google-genai は大文字と小文字が違うと2本送る。比べる中で、ゲートウェイがライブラリと違う名前の認証のヘッダーを求めると、プロバイダーのキーも送ることが分かった（SDK も同じ。SDK には `Omit()` で消す方法がある）。そこで、値の `None` でライブラリのヘッダーを止められるようにした。テスト（`tests/test_consistency.py` の2つ、`tests/test_client.py`・`tests/test_anthropic.py` のケース）を先に書き、変更前のコードで、`None` が `TypeError` になって失敗するのを確かめてから実装した。実装のあと、`None` をそのまま送る・止めるときに大文字と小文字を区別する・ライブラリのヘッダーを止めない・`None` ではキーを求める・`None` なら版のヘッダーの検査を飛ばす、という誤りをわざと入れ、テストがどれも見つけることを確かめた
@@ -68,6 +70,8 @@ LLM をコードで呼ぶときによく使うのに、今は各社の書き方�
 - 2026-11-18: できることとできないことを整理し、基本方針に「機能を足すか絞るかの基準」を足した。この基準に照らして6つを選び、作者がすべて必要と判断したので、この計画を作った
 
 ## 判断ログ
+
+- 2026-11-23: ファイルの入力は `FilePart`。種類は各社が受け付けるものをそのまま送り、受け付けないと分かっているものだけ送る前に止める。URL は受け付けず base64 だけ。Chat Completions 互換は OpenAI の形で送り、DeepSeek・Ollama・LM Studio のプリセットでは送る前に止める（作者の判断。種類だけは推奨の「PDF だけ」ではなく「各社が受け付けるものすべて」を選んだ。[判断](../../design-docs/file-input.md)）
 
 - 2026-11-23: `headers=` は、ライブラリが付けるヘッダーと同じ名前なら、大文字と小文字を区別せずに利用者の値で置き換える。認証のヘッダーも置き換えられ、渡せば APIキーは要らない（作者の判断。推奨の案。[判断](../../design-docs/custom-headers.md)）
 - 2026-11-23: `headers=` の値に `None` を渡すと、ライブラリが付けるそのヘッダーを送らない（作者の判断。SDK との比較のあとで提案した）。知っている認証のヘッダーの名前が渡されたら自動で外す案は、両方のキーを求めるゲートウェイで困るので採らない

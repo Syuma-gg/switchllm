@@ -12,7 +12,7 @@ from typing import Any
 
 from .._http import HTTPRequest
 from ..errors import StreamError, UnsupportedFeatureError
-from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
+from ..types import FilePart, ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice, schema_name
 
 
@@ -42,6 +42,13 @@ class OpenAIResponsesProvider(Provider):
                 out.append({"type": "input_text", "text": p.text})
             elif isinstance(p, ImagePart):
                 out.append({"type": "input_image", "image_url": p.as_data_url()})
+            elif isinstance(p, FilePart):
+                # 種類は確かめずに送る。受け付ける種類の一覧が長く、拡張子で書かれているため
+                # （docs/references/openai-responses.md の「ファイルの入力」）
+                item = {"type": "input_file", "file_data": p.as_data_url()}
+                if p.filename:
+                    item["filename"] = p.filename
+                out.append(item)
         return out
 
     def build_request(self, req: ChatRequest, *, stream: bool) -> HTTPRequest:

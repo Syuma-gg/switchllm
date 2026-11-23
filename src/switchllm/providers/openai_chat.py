@@ -15,7 +15,7 @@ from typing import Any
 
 from .._http import HTTPRequest
 from ..errors import StreamError, UnsupportedFeatureError
-from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
+from ..types import FilePart, ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice, schema_name
 from .openai_responses import _parse_args
 
@@ -34,7 +34,7 @@ class OpenAIChatProvider(Provider):
     adapter = "openai_chat"
     default_base_url = OPENAI_BASE_URL
     api_key_env = ("OPENAI_API_KEY",)
-    option_names = frozenset({"max_tokens_field", "stream_usage", "json_schema"})
+    option_names = frozenset({"max_tokens_field", "stream_usage", "json_schema", "file_input"})
     auth_header = "Authorization"
 
     def _max_tokens_field(self) -> str:
@@ -54,7 +54,27 @@ class OpenAIChatProvider(Provider):
                 out.append({"type": "text", "text": p.text})
             elif isinstance(p, ImagePart):
                 out.append({"type": "image_url", "image_url": {"url": p.as_data_url()}})
+            elif isinstance(p, FilePart):
+                out.append({"type": "file", "file": self._file(p)})
         return out
+
+    def _file(self, p: FilePart) -> dict[str, str]:
+        """OpenAI の形で送る。受け付けないと分かっているサーバーと、PDF 以外は送る前に止める
+        （docs/references/openai-chat-compatible.md の「ファイルの入力」）。"""
+        if not self.options.get("file_input", True):
+            raise UnsupportedFeatureError(
+                f"{self.key!r} does not support file input (FilePart). Send files with the 'openai:', "
+                "'anthropic:' or 'gemini:' provider, or put the file's text in a TextPart"
+            )
+        if p.media_type != "application/pdf":
+            raise UnsupportedFeatureError(
+                f"Chat Completions accepts only PDF files, got {p.media_type}. "
+                "Use the 'openai:' provider (Responses API) for other file types"
+            )
+        file = {"file_data": p.as_data_url()}
+        if p.filename:
+            file["filename"] = p.filename
+        return file
 
     def build_request(self, req: ChatRequest, *, stream: bool) -> HTTPRequest:
         msgs: list[dict[str, Any]] = []

@@ -21,7 +21,7 @@ from .errors import (
 )
 from .providers import register_provider
 from .tools import Tool, arun_tool_calls, run_tool_calls, tool
-from .types import ImagePart, Message, Response, StreamEvent, TextPart, ToolCall, Usage
+from .types import FilePart, ImagePart, Message, Response, StreamEvent, TextPart, ToolCall, Usage
 
 __version__ = "0.1.0"  # 版の正本。pyproject.toml はここを読む
 
@@ -33,6 +33,7 @@ __all__ = [
     "BadRequestError",
     "Client",
     "ConfigurationError",
+    "FilePart",
     "ImagePart",
     "MODEL_ENV",
     "Message",

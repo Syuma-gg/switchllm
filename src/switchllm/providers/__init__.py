@@ -44,11 +44,15 @@ PRESETS: dict[str, ProviderPreset] = {
     # OpenAI Chat Completions 形式（base_url= を渡せば任意の互換サーバーにも使える）
     "openai-chat": ProviderPreset("openai_chat", "https://api.openai.com/v1", ("OPENAI_API_KEY",)),
     # クラウドの互換 API。base_url は docs/references/openai-chat-compatible.md の出典で確認済み。
-    # DeepSeek の response_format は json_object（JSON モード）だけで、JSON Schema を受け付けない
-    "deepseek": ProviderPreset("openai_chat", "https://api.deepseek.com", ("DEEPSEEK_API_KEY",), {"json_schema": False}),
-    # ローカル実行（APIキー不要）。base_url は docs/references/openai-chat-compatible.md の出典で確認済み
-    "ollama": ProviderPreset("openai_chat", "http://localhost:11434/v1", ()),
-    "lmstudio": ProviderPreset("openai_chat", "http://localhost:1234/v1", ()),
+    # DeepSeek の response_format は json_object（JSON モード）だけで、JSON Schema を受け付けない。
+    # 文書（PDF など）は Files API でアップロードした file_id でしか受け付けない（docs/design-docs/file-input.md）
+    "deepseek": ProviderPreset(
+        "openai_chat", "https://api.deepseek.com", ("DEEPSEEK_API_KEY",), {"json_schema": False, "file_input": False}
+    ),
+    # ローカル実行（APIキー不要）。base_url は docs/references/openai-chat-compatible.md の出典で確認済み。
+    # どちらも文書にファイルの入力の記述がない
+    "ollama": ProviderPreset("openai_chat", "http://localhost:11434/v1", (), {"file_input": False}),
+    "lmstudio": ProviderPreset("openai_chat", "http://localhost:1234/v1", (), {"file_input": False}),
 }
 
 

@@ -10,7 +10,7 @@ import json
 import pytest
 from sample_tools import WEATHER_TOOL
 
-from switchllm import ImagePart, Message, TextPart, ToolCall
+from switchllm import FilePart, ImagePart, Message, TextPart, ToolCall
 from switchllm.types import ProviderState
 
 
@@ -27,7 +27,8 @@ def test_to_dict_omits_defaults():
 def test_every_field_survives_the_round_trip():
     messages = [
         Message.user([TextPart("比べて"), ImagePart(data="iVBORw0KGgo=", media_type="image/png"),
-                      ImagePart(url="https://example.com/a.jpg", media_type="image/jpeg")]),
+                      ImagePart(url="https://example.com/a.jpg", media_type="image/jpeg"),
+                      FilePart("JVBERi0=", "application/pdf", filename="report.pdf"), FilePart("YQ==", "text/plain")]),
         Message(
             role="assistant",
             content="調べます",
@@ -41,6 +42,15 @@ def test_every_field_survives_the_round_trip():
     ]
     restored = [Message.from_dict(d) for d in _json_round_trip(messages)]
     assert restored == messages
+
+
+def test_file_parts_are_saved_with_type_file():
+    # 保存の形は公開後に変えにくい（docs/design-docs/file-input.md）。filename がなければ書かない
+    m = Message.user([FilePart("JVBERi0=", "application/pdf", filename="report.pdf"), FilePart("YQ==", "text/plain")])
+    assert m.to_dict()["content"] == [
+        {"type": "file", "data": "JVBERi0=", "media_type": "application/pdf", "filename": "report.pdf"},
+        {"type": "file", "data": "YQ==", "media_type": "text/plain"},
+    ]
 
 
 def test_from_dict_still_accepts_the_simple_forms():

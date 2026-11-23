@@ -62,7 +62,54 @@ class ImagePart:
         return f"data:{self.media_type};base64,{self.data}"
 
 
-Part = Union[TextPart, ImagePart]
+# from_file() が先に引く表。mimetypes の結果は OS で変わる（例: Windows では .csv が
+# application/vnd.ms-excel になることがある）ので、各社の文書に出てくる種類はここで決める
+_FILE_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".markdown": "text/markdown",
+    ".csv": "text/csv",
+    ".tsv": "text/tab-separated-values",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".xml": "text/xml",
+    ".json": "application/json",
+    ".rtf": "text/rtf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".odt": "application/vnd.oasis.opendocument.text",
+}
+
+
+@dataclass
+class FilePart:
+    """ファイル（PDF など）の入力。``data`` は base64。受け付ける種類はプロバイダーで違う
+    （docs/design-docs/file-input.md）。画像は ``ImagePart`` で送る。"""
+
+    data: str
+    media_type: str
+    filename: str | None = None
+    type: Literal["file"] = "file"
+
+    @classmethod
+    def from_file(cls, path: str | Path, media_type: str | None = None) -> "FilePart":
+        p = Path(path)
+        if media_type is None:
+            media_type = (
+                _FILE_MEDIA_TYPES.get(p.suffix.lower()) or mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+            )
+        return cls(data=base64.b64encode(p.read_bytes()).decode("ascii"), media_type=media_type, filename=p.name)
+
+    def as_data_url(self) -> str:
+        return f"data:{self.media_type};base64,{self.data}"
+
+
+Part = Union[TextPart, ImagePart, FilePart]
 
 
 # --------------------------------------------------------------------------- #
@@ -218,6 +265,11 @@ def _part_to_dict(p: Any) -> Any:
         if p.url is not None:
             out["url"] = p.url
         return out
+    if isinstance(p, FilePart):
+        out = {"type": "file", "data": p.data, "media_type": p.media_type}
+        if p.filename is not None:
+            out["filename"] = p.filename
+        return out
     return p  # 知らないものは変えずに残す（送る前の検査が TypeError にする）
 
 
@@ -226,6 +278,9 @@ def _part_from_dict(p: Any) -> Any:
         return TextPart(p.get("text", ""))
     if isinstance(p, dict) and p.get("type") == "image":
         return ImagePart(data=p.get("data"), url=p.get("url"), media_type=p.get("media_type", "image/png"))
+    if isinstance(p, dict) and p.get("type") == "file":
+        # data と media_type がなくても作り、送る前の検査が TypeError にする（黙って落とさない）
+        return FilePart(data=p.get("data"), media_type=p.get("media_type"), filename=p.get("filename"))
     return p
 
 

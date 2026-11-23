@@ -16,15 +16,14 @@
 - 構造化出力（`response_schema=` に JSON Schema の dict を渡し、`Response.parsed` に読んだ値を入れる。2026-11-20。[判断](../design-docs/structured-output.md)）。スキーマのない JSON モードは共通化しない（`extra=` で渡す）
 - 推論の強さ（`reasoning_effort=` に段階の名前を渡し、各社の指定に名前を変えずに入れる。2026-11-21。[判断](../design-docs/reasoning-effort.md)）。推論の要約を返させる指定や、数での予算（Gemini 2.5 の `thinkingBudget`）は共通化しない（`extra=` で渡す）
 - すべてのアダプターで `headers=`（ゲートウェイなどに足すヘッダー。同じ名前はライブラリの値を置き換え、値の `None` で止める。2026-11-23。[判断](../design-docs/custom-headers.md)）
+- ファイルの入力（`FilePart`。PDF などを base64 で送る。種類は各社が受け付けるものをそのまま送り、受け付けないと分かっているものは送る前に `UnsupportedFeatureError`。ファイルの URL とアップロードの API は扱わない。2026-11-23。[判断](../design-docs/file-input.md)）
 - 非同期のクライアント（`AsyncClient`。引数とメソッドの名前は `Client` と同じ）と、`async def` のツールを並行に実行する `arun_tool_calls`（2026-11-23。[判断](../design-docs/async-client.md)）
 
 ## 足すと決めたもの
 
 2026-11-18 に作者が決めた。選んだ基準は [基本方針](../design-docs/core-beliefs.md) の「機能を足すか絞るかの基準」で、進め方は [計画](../exec-plans/active/model-layer-features.md) にある。できたものから「やること」に移す。
 
-| 機能 | 理由 |
-|---|---|
-| PDF・ファイルの入力 | 文書を読ませる用途は多い。対応しない接続先には、送る前に `UnsupportedFeatureError` |
+2026-11-23 に、6つすべてを「やること」に移した。
 
 ## やらないこと
 
@@ -43,4 +42,5 @@
 ## 未定（要望があれば検討）
 
 - 音声入力
+- ファイルの URL（OpenAI Responses の `file_url`、Anthropic の `url`）と、各社のアップロードの API（Files API）
 - Gemini の Interactions API への移行（[負債](../exec-plans/tech-debt-tracker.md)）

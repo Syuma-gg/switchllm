@@ -9,7 +9,7 @@
 | 共通 | Messages API |
 |---|---|
 | system | トップレベルの `system`（system メッセージが複数あれば空行で連結） |
-| user | `content` ブロック（`text` / `image`）。空の text ブロックは拒否されるので送らない |
+| user | `content` ブロック（`text` / `image` / `document`）。空の text ブロックは拒否されるので送らない |
 | assistant（同じプロバイダーキーのとき） | 受け取った `content` ブロックをそのまま送る。モデルが違っても送る（下の「モデルの切り替え」） |
 | assistant（再送しないとき） | `text` と `tool_use`（`input` はオブジェクト） |
 | ツール結果 | user メッセージ内の `tool_result`（`tool_use_id`。エラーは `is_error: true`） |
@@ -21,6 +21,7 @@
 | ツール定義 | `{"name", "description", "input_schema"}` |
 | tool_choice | `{"type": "auto"}` / `{"type": "none"}` / `{"type": "any"}` / `{"type": "tool", "name"}`。指定がなければ送らない（ツールがあれば既定は `auto`） |
 | 画像 | `{"type": "image", "source": {"type": "base64", ...}}` か `{"type": "url", "url"}` |
+| ファイル | PDF は `{"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data"}}`。テキスト（`text/*`・`application/json`・`application/xml`）は base64 を UTF-8 に戻し、`{"type": "text", "media_type": "text/plain", "data"}` の document。ほかの種類は送る前に `UnsupportedFeatureError`（下の「ファイルの入力」） |
 
 ## レスポンス
 
@@ -111,6 +112,19 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - スキーマごとに文法をコンパイルするので、初回は遅くなる。コンパイルした文法は最後に使ってから 24 時間残る。`output_config.format` を変えると、その会話のプロンプトキャッシュが無効になる
 - API の版: 文書の例は `anthropic-version: 2026-10-21` を送っている。switchllm の既定も 2026-11-21 から `2026-10-21` にした。`2023-06-01` で `output_config` を受け付けるかは書かれていない（U19）
 
+## ファイルの入力
+
+`FilePart` は `document` ブロックで送る（[判断](../design-docs/file-input.md)）。以下は 2026-11-23 に文書で確かめた形式。
+
+- PDF: `{"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": ...}}`。`data` は data URL ではなく base64。ほかの source は `url`（PDF の URL）、`text`（テキストをそのまま）、`content`（ブロックの配列）、`file`（Files API の `file_id`）
+- テキスト: `{"type": "document", "source": {"type": "text", "media_type": "text/plain", "data": "..."}}`（引用の文書の例）。PDF のガイドは「Plain text files such as .txt, .csv, or .md can be used directly in document blocks」とし、Files API には `text/plain` で上げるとする。switchllm は、テキストの種類（Markdown・CSV・JSON など）も、base64 を UTF-8 に戻して `text/plain` の `text` で送る（U30）。UTF-8 として読めなければ、送る前に `UnsupportedFeatureError`
+- 受け付けない種類: 「Binary formats such as .xlsx or .docx are not supported in document blocks, so convert them to text or PDF first」。switchllm は送る前に `UnsupportedFeatureError` にする
+- 省略できる項目: `title`・`context`・`citations`・`cache_control`。switchllm は送らない（`filename` を `title` に入れない）
+- PDF の読み方: 「The system converts each page of the document into an image」で、ページごとの文字も一緒に渡す。1ページで文字が 1,500〜3,000 トークン、画像が最大 1,568 トークン
+- 上限: リクエストは 128 MB まで。ページはリクエストあたり 600（文脈の長さが 100 万トークン未満のときは 100）。パスワードや暗号化のある PDF は読めない
+- 順番: 「Place PDFs before text in your requests」。switchllm はパーツの順を変えないので、`FilePart` を先に置く
+- beta のヘッダーは要らない（PDF のガイドの例は `anthropic-version: 2026-10-21` だけを送る）
+
 ## 出典
 
 - [Structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)（2026-11-20 確認: 「The request carries the schema in `output_config.format` with `type: "json_schema"`」「Structured outputs are available on every model」「`required` and `additionalProperties` (must be set to `false` for objects)」「If you use an unsupported feature, you'll receive a 400 error with details」、使えるもの・使えないものの一覧、上限の表、拒否と `max_tokens` のとき、「Grammars apply only to Claude's direct output, not to tool use calls, tool results, or thinking tags」、citations は 400、「Prefilling is incompatible with JSON outputs」、「The `output_format` parameter has moved to `output_config.format`, and beta headers are no longer required」、文法のキャッシュ）
@@ -138,7 +152,9 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - [Preserved thinking](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking) の「Switch models and back」（2026-11-17 確認: 「A thinking block that the new model or account can't use never causes an error. The API drops it for that request and doesn't bill it」「A dropped block doesn't count as a change to the conversation, so both models' blocks stay valid.」、モデルの組み合わせごとの一覧、preserved thinking のモデルは `thinking: {"type": "enabled"}` を 400 にする）
 - [Prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)（2026-11-17 確認: 「A prefix check fails if system, tools, or an earlier message changed after Claude produced a block. It also fails if a thinking block between others was left out or moved.」、400 になるかはモデルによる、比べないパラメータ、`prefix_mismatch_behavior`）
 - [Fix: bound to a different conversation](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/fix-bound-to-a-different-conversation)（2026-11-17 確認: 400 の文言）
+- [PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support)（2026-11-23 確認: base64 と URL の document の例、「Maximum request size: 128 MB」「Maximum pages per request: 600 (100 when the request's context window is under 1M tokens)」、「Plain text files such as .txt, .csv, or .md can be used directly in document blocks」「Binary formats such as .xlsx or .docx are not supported in document blocks」、ページの文字と画像のトークン、「Place PDFs before text in your requests」、例に beta のヘッダーがない）
+- [Citations](https://platform.claude.com/docs/en/build-with-claude/citations)（2026-11-23 確認: `{"type": "text", "media_type": "text/plain", "data": ...}` の document の例、「`title` and `context` are optional fields」）
 
 ## 関連する未検証の前提
 
-U8、U9、U14、U19、U24、U25（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U8、U9、U14、U19、U24、U25、U30（[実 API 検証](../exec-plans/active/real-api-verification.md)）

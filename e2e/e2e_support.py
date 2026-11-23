@@ -53,6 +53,13 @@ def requires_key(model: str) -> bool:
     return PRESETS[key].api_key_env != ()
 
 
+def file_input_supported(model: str) -> bool:
+    """``FilePart`` を送るか。送らない接続先（DeepSeek・Ollama・LM Studio のプリセット）は、送る前に
+    UnsupportedFeatureError にする。モデルごとの一覧ではなく、ライブラリのプリセットの設定を見る。"""
+    key, _ = parse_model(model)
+    return bool(PRESETS[key].options.get("file_input", True))
+
+
 def json_schema_supported(model: str) -> bool:
     """``response_schema=`` を送るか。送らない接続先（DeepSeek のプリセット）は、送る前に UnsupportedFeatureError にする。
     モデルごとの一覧ではなく、ライブラリのプリセットの設定を見る。"""
@@ -99,6 +106,10 @@ SCOPE: dict[str, frozenset[str]] = {
     "U25": frozenset({"anthropic"}),
     "U26": frozenset({"gemini"}),
     "U27": frozenset({"ollama", "lmstudio"}),
+    "U28": frozenset({"openai"}),
+    "U29": frozenset({"openai-chat"}),
+    "U30": frozenset({"anthropic"}),
+    "U31": frozenset({"gemini"}),
 }
 
 
@@ -200,3 +211,26 @@ def solid_png(rgb: tuple[int, int, int], size: int = 64) -> bytes:
     row = b"\x00" + bytes(rgb) * size  # 各行の先頭はフィルターの種類（0 = なし）
     header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)  # 8bit・RGB
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(row * size)) + chunk(b"IEND", b"")
+
+
+def text_pdf(text: str) -> bytes:
+    """1ページに text を書いた PDF を作る（標準ライブラリだけで。PDF の依存を増やさないため）。
+    標準の Type1 フォント（Helvetica）で書くので、text は ASCII にする。"""
+    content = f"BT /F1 24 Tf 72 700 Td ({text}) Tj ET".encode("ascii")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        b"/Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(content) + content + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    xref = len(out)  # 読み手は、ここに書いた各オブジェクトの位置（バイト）で本文を探す
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+    return out + b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)

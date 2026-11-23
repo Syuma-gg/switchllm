@@ -15,7 +15,7 @@ from typing import Any
 
 from .._http import HTTPRequest
 from ..errors import ConfigurationError, StreamError, UnsupportedFeatureError
-from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
+from ..types import FilePart, ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice
 
 SYNTHETIC_ID_PREFIX = "switchllm_"  # Gemini が id を返さなかった呼び出しに付ける仮 ID
@@ -42,6 +42,10 @@ class GeminiProvider(Provider):
                         "Gemini generateContent does not accept arbitrary image URLs inline; "
                         "use ImagePart.from_file() / base64 data instead"
                     )
+                parts.append({"inlineData": {"mimeType": p.media_type, "data": p.data}})
+            elif isinstance(p, FilePart):
+                # 種類は確かめずに送る。文書の一覧は「not comprehensive」とされる
+                # （docs/references/gemini-generate-content.md の「ファイルの入力」）
                 parts.append({"inlineData": {"mimeType": p.media_type, "data": p.data}})
         return parts
 

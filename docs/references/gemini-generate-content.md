@@ -16,6 +16,7 @@
 | max_tokens / temperature / stop | `generationConfig` の `maxOutputTokens` / `temperature` / `stopSequences` |
 | ツール定義 | `tools[].functionDeclarations[]`。スキーマは `parameters` に入れる（`schema_field="parametersJsonSchema"` で変更できる、U4） |
 | tool_choice | `toolConfig.functionCallingConfig.mode` の `AUTO` / `NONE` / `ANY`（特定のツールは `ANY` と `allowedFunctionNames`）。指定がなければ `toolConfig` を送らない（既定は `AUTO`） |
+| ファイル | `{"inlineData": {"mimeType", "data"}}`（`data` は base64）。種類は確かめずに送る（下の「ファイルの入力」） |
 
 ## レスポンス
 
@@ -65,6 +66,16 @@
 - `maxOutputTokens` は推論トークンを含む（「including thought tokens」）。推論の途中で上限に達すると `MAX_TOKENS` で止まり、推論の分も課金される
 - `temperature`: 「This field is no longer supported and is silently ignored on Gemini 3.6 Flash and newer models」。エラーにはならず、効かない
 
+## ファイルの入力
+
+`FilePart` は、画像と同じ `inlineData` で送る（[判断](../design-docs/file-input.md)）。以下は 2026-11-23 に文書で確かめた。
+
+- 形: Part の `inlineData`（Blob）は `mimeType` と `data`（「Raw bytes for media formats」。JSON では base64 の文字列で、data URL にしない）。API リファレンスの `mimeType` の例に `application/pdf` がある
+- 今の文書の例（Document understanding・File input methods）は、どれも Interactions API（`/v1beta/interactions` の `{"type": "document", "data", "mime_type"}`）の形で、generateContent で PDF を送る例はない。switchllm は Part のスキーマから推して `inlineData` で送る（U31）
+- 種類: 「Gemini models can process documents in PDF format, using native vision」。TXT・Markdown・HTML などは「processed as plain text」。対応する種類の一覧（「not comprehensive」とされる）は text/html・text/css・text/plain・text/xml・text/csv・text/rtf・text/javascript・application/json・application/pdf と、画像・音声・動画。Office と OpenDocument のファイルも渡せると書かれている。一覧が網羅的でないので、switchllm は種類を確かめずに送る
+- 上限: インラインは「100 MB per request or payload (50 MB for PDFs)」。それより大きいときは Files API（switchllm は扱わない）。1つのリクエストで、合わせて 1000 ページまでの PDF を読める（文脈の長さに収まる限り）
+- URL: `fileData` の `fileUri` は Files API の URI。公開された HTTPS の URL を渡す方法は Interactions の形の例しかなく、generateContent で使えるかは書かれていない（switchllm はファイルの URL を扱わない）
+
 ## 出典
 
 - [Structured output（generateContent）](https://ai.google.dev/gemini-api/docs/generate-content/structured-output)（2026-11-20 確認。aistudio.google.com/docs/structured-output?generate-content=true へ転送される: SDK の例は `responseMimeType` と `responseJsonSchema`、REST の例は `responseFormat.text`、使えるキーワードの一覧、「The model ignores unsupported properties」、モデルの表、ツールとの併用、ストリーミング、保証の範囲。転送されない https://ai.google.dev/gemini-api/docs/structured-output は Interactions API の版）
@@ -79,7 +90,10 @@
 - [Thinking（generateContent）](https://ai.google.dev/gemini-api/docs/generate-content/thinking)（2026-11-21 確認。aistudio.google.com/docs/thinking?generate-content=true へ転送される: `{"thinkingConfig": {"thinkingLevel": "xhigh"}}` などの例、モデルごとの既定と段階の表、「If you don't specify a thinking level, Gemini will use the model's default thinking level」「The `thinkingLevel` parameter, required for Gemini 4 and recommended for Gemini 3 models」「You cannot disable thinking for Gemini 4 Carbon, Gemini 4 Argon, Gemini 4 Neon, or Gemini 4 Hydrogen」、`minimal` は「the model likely will not think (though it still potentially can)」、`thinkingBudget` の範囲の表（2.5 だけ）、「sending `thinkingBudget` and `thinkingLevel` together returns a `400` error」「Gemini 2.5 series models don't support `thinkingLevel`; use `thinkingBudget` instead」、`includeThoughts`）
 - [API reference: generateContent](https://ai.google.dev/api/generate-content) の GenerationConfig（2026-11-21 確認: `temperature` は「This field is no longer supported and is silently ignored on Gemini 3.6 Flash and newer models」、`maxOutputTokens` は「including thought tokens」。ThinkingConfig の項目と列挙は自動取得の要約でしか読めなかった）
 - [Models](https://ai.google.dev/gemini-api/docs/models)（2026-11-21 確認: `gemini-2.5-flash` と `gemini-2.5-pro` は「Effective December 1, 2026, all API requests ... will automatically route to」それぞれ `gemini-3.5-flash-lite` と `gemini-3.8-flash`。`gemini-3-pro-preview` は提供終了）
+- [Document understanding](https://aistudio.google.com/docs/document-processing)（2026-11-23 確認。ai.google.dev から移った: 「Gemini models can process documents in PDF format, using native vision」「Other non-PDF documents, such as TXT, Markdown, or HTML files, are processed as plain text」、Office と OpenDocument のファイル、1000 ページ。例は Interactions API の形）
+- [File input methods](https://aistudio.google.com/docs/file-input-methods)（2026-11-23 確認: インラインは「100 MB per request or payload (50 MB for PDFs)」、対応する種類の一覧、公開 URL は 15 MB まで）
+- [Generating content](https://aistudio.google.com/api-reference/generate-content)（2026-11-23 確認: Part の `inlineData`（Blob の `mimeType`・`data`）。`mimeType` の例に `application/pdf`。リクエストの例はない）
 
 ## 関連する未検証の前提
 
-U4〜U7、U14、U16、U20、U26（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U4〜U7、U14、U16、U20、U26、U31（[実 API 検証](../exec-plans/active/real-api-verification.md)）

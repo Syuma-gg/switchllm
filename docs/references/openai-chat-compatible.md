@@ -9,7 +9,7 @@
 | 共通 | Chat Completions |
 |---|---|
 | system | `{"role": "system", "content": ...}` |
-| user | `{"role": "user", "content": 文字列 か [text / image_url]}` |
+| user | `{"role": "user", "content": 文字列 か [text / image_url / file]}` |
 | assistant | `{"role": "assistant", "content": 文字列 か null, "tool_calls": [...]}`。同じプロバイダー・同じモデルが返した `reasoning_content` があれば、それも足す（下の「推論テキストの送り返し」） |
 | ツール結果 | `{"role": "tool", "tool_call_id", "content"}`。エラーは先頭に `Error: ` |
 | max_tokens | 接続先が OpenAI 本家（`https://api.openai.com/v1`）なら `max_completion_tokens`、それ以外は `max_tokens`。`max_tokens_field=` で変更できる。OpenAI は `max_tokens` を非推奨とし、o-series とは互換性がないと記載している。Ollama の文書には `max_tokens` しかない |
@@ -17,6 +17,7 @@
 | ツール定義 | `{"type": "function", "function": {"name", "description", "parameters"}}` |
 | tool_choice | `"auto"` / `"none"` / `"required"` / `{"type": "function", "function": {"name"}}`。指定がなければ送らない（ツールがあれば既定は `auto`） |
 | 画像 | `{"type": "image_url", "image_url": {"url": URL か data URL}}` |
+| ファイル | `{"type": "file", "file": {"file_data": data URL, "filename"}}`。PDF だけで、ほかの種類は送る前に `UnsupportedFeatureError`。DeepSeek・Ollama・LM Studio のプリセットは `file_input: False` で、送る前に `UnsupportedFeatureError`（下の「ファイルの入力」） |
 
 ## レスポンス
 
@@ -98,6 +99,16 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 - LM Studio: Chat Completions のページが挙げるパラメータは `model`・`top_p`・`top_k`・`messages`・`temperature`・`max_tokens`・`stream`・`stop`・`presence_penalty`・`frequency_penalty`・`logit_bias`・`repeat_penalty`・`seed` だけ。`reasoning_effort` を送ると、受け付けるのか、無視するのか、拒否するのかは分からない（U27）
 - switchllm は、どの接続先でも名前を置き換えない。DeepSeek と Ollama は、文書にない段階を接続先の側で近い段階に置き換える
 
+## ファイルの入力
+
+`FilePart` は OpenAI の形（`{"type": "file", "file": {...}}`）で送る（[判断](../design-docs/file-input.md)）。以下は 2026-11-23 に文書で確かめた。
+
+- OpenAI: `file` の中に `file_data`・`file_id`・`filename`（どれも optional）。`file_data` は「The base64 encoded file data」とだけ書かれ、Chat Completions の例はない。switchllm は Responses の例に合わせて data URL で送る（U29）。種類は「Chat Completions accepts only PDF files as `file` content parts」なので、PDF 以外は送る前に `UnsupportedFeatureError` にする。`file_url` と `detail` はない
+- DeepSeek: `file` のパーツはあるが形が違い、`file_id`・`file_data`・`filename` をパーツに直接置く（`file` で包まない）。文書を読ませるのは「can be referenced only by `file_id`. Passing the file content or a file URL in the request is not supported」で、Files API でのアップロードが要る。switchllm はアップロードを扱わないので、プリセットを `file_input: False` にした
+- Ollama: OpenAI 互換の文書の対応表は、本文が文字列・画像（base64。URL は非対応）・パーツの配列だけで、ファイルの記述がない。プリセットを `file_input: False` にした
+- LM Studio: 文書は Chat Completions を「text and images」とし、ファイルの記述がない。プリセットを `file_input: False` にした
+- ほかの互換サーバー（`register_provider()` や `base_url=`）には OpenAI の形で送る。受け付けないサーバーなら API のエラーになる。受け付けないと分かっているなら `file_input=False` を渡すと、送る前に `UnsupportedFeatureError` にする
+
 ## 出典
 
 - [Chat Completions API reference](https://developers.openai.com/api/docs/api-reference/chat/create)（2026-11-20 確認: `response_format` の `json_schema` は `name`（「Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64」）・`description`・`schema`・`strict`（「default: false」）。「Using `json_schema` is preferred for models that support it」）
@@ -120,7 +131,12 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 - [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)（2026-11-21 確認: `/v1/chat/completions` に「`reasoning_effort` (model-defined names and compatibility aliases)」と `reasoning` の `effort`、「Boolean-only models that support enabling thinking map recognized compatibility efforts to `true`, while `"none"` requests `false`」「`"minimal"` maps to `"low"`, and `"xhigh"` or `"ultra"` map to `"max"`」「`"none"` uses `"low"` because GPT-OSS cannot disable thinking」「supported names are applied exactly and unsupported names resolve to the model default」）
 - [Ollama: Thinking](https://docs.ollama.com/capabilities/thinking)（2026-11-21 確認: 独自 API の `think` は `true`・`false`・段階の文字列。「Models that cannot disable thinking use their lowest supported level instead」）
 - [LM Studio: Chat Completions](https://lmstudio.ai/docs/developer/openai-compat/chat-completions)（2026-11-21 確認: 受け付けるパラメータの一覧に `reasoning_effort` がない）
+- [OpenAI: File inputs](https://developers.openai.com/api/docs/guides/pdf-files)（2026-11-23 確認: 「Chat Completions accepts only PDF files as `file` content parts」、表で `file_url` は Chat Completions では「Not supported」、Chat Completions の例はない）
+- [OpenAI: Create chat completion](https://developers.openai.com/api/reference/resources/chat)（2026-11-23 確認: `file: object { file_data, file_id, filename }`、`file_data` は「The base64 encoded file data, used when passing the file to the model as a string」）
+- [DeepSeek: Create Chat Completion](https://api-docs.deepseek.com/api/create-chat-completion)・[File Parsing](https://api-docs.deepseek.com/guides/document_parsing/)（2026-11-23 確認: パーツは text・image_url・file。file は `file_id` か `file_data`（と `filename`）を直接置く。「A document that needs parsing can be referenced only by `file_id`. Passing the file content or a file URL in the request is not supported.」）
+- [Ollama: OpenAI compatibility](https://docs.ollama.com/openai)（2026-11-23 確認: messages は Text `content`、Image `content`（Base64 encoded image は対応、Image URL は非対応）、Array of `content` parts。ファイルの記述はない）
+- [LM Studio: OpenAI Compatibility Endpoints](https://lmstudio.ai/docs/developer/openai-compat)（2026-11-23 確認: 「Chat Completions (text and images)」。ファイルの記述はない）
 
 ## 関連する未検証の前提
 
-U10、U11、U12、U15、U16、U17、U18、U21、U23、U27（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U10、U11、U12、U15、U16、U17、U18、U21、U23、U27、U29（[実 API 検証](../exec-plans/active/real-api-verification.md)）

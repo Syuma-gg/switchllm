@@ -183,6 +183,21 @@ res = client.chat("「strawberry」に r はいくつある？", reasoning_effor
 - 使える段階はモデルによって違う（gpt-5.5 に `"max"` はなく、Claude Opus 5.5 は推論を切れない）。ライブラリはモデルの一覧を持たないので、API の `BadRequestError` で返る
 - 段階は目安で、トークンの予算ではない。同じ段階でも、モデルによって考える量は違う。ほかの推論の指定（要約、Gemini 2.5 の `thinkingBudget`）は `extra_by_provider=` に書く（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md)）
 
+### ファイル（PDF など）
+
+`FilePart` を user のメッセージに入れる。質問より先に置く（Anthropic は PDF を先に置くよう勧める）。
+
+```python
+from switchllm import Client, FilePart, Message, TextPart
+
+client = Client("anthropic:claude-sonnet-5-5")
+res = client.chat([Message.user([FilePart.from_file("report.pdf"), TextPart("3行で要約して")])])
+```
+
+- PDF は、`deepseek`・`ollama`・`lmstudio` のプリセットを除くすべてのプロバイダーで送れる
+- ほかの種類は、プロバイダーによって違う。OpenAI（Responses API）と Gemini には種類を確かめずに送り、受け付けない種類は API が拒否する。Anthropic は PDF とテキスト（テキストのファイルは文字として送る）。Chat Completions は PDF だけ
+- 受け付けないと分かっているファイルは、送る前に `UnsupportedFeatureError`。ファイルは base64 でリクエストに入れて送る（ファイルの URL やアップロードの API は使わない）。画像は `ImagePart` で送る。音声と動画は未対応（[判断](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/file-input.md)）
+
 ### プロバイダー固有の機能
 
 共通化できないパラメータは、各社の形式のまま `extra_by_provider=` に並べて書く。送るのはモデル文字列で選んだプロバイダーの分だけなので、モデルを切り替えても呼び出し側のコードは変わらない。書いていないプロバイダーには何も足さない。キーはモデル文字列の `provider:` 部分（`google:` で指定するなら `"google"`）。
@@ -256,7 +271,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 ## 既知の制限
 
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
-- 画像入力は対応、音声・PDF・ファイル入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
+- 画像とファイルの入力は対応（ファイルは base64 だけ）、音声入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
 - 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`extra_by_provider=` で各社の形式で頼む（OpenAI `{"reasoning": {"summary": "auto"}}`、Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`、Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`）
 - Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md)）
 - 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）
