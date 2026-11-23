@@ -34,7 +34,8 @@ class OpenAIChatProvider(Provider):
     adapter = "openai_chat"
     default_base_url = OPENAI_BASE_URL
     api_key_env = ("OPENAI_API_KEY",)
-    option_names = frozenset({"max_tokens_field", "stream_usage", "headers", "json_schema"})
+    option_names = frozenset({"max_tokens_field", "stream_usage", "json_schema"})
+    auth_header = "Authorization"
 
     def _max_tokens_field(self) -> str:
         """OpenAI 本家は ``max_tokens`` を非推奨とし、o-series とは互換性がないと記載している。
@@ -121,8 +122,7 @@ class OpenAIChatProvider(Provider):
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        headers.update(self.options.get("headers", {}))
-        return HTTPRequest(url=f"{self.base_url}/chat/completions", headers=headers, body=body)
+        return HTTPRequest(url=f"{self.base_url}/chat/completions", headers=self.request_headers(headers), body=body)
 
     def parse_response(self, data: dict[str, Any]) -> Response:
         choice = (data.get("choices") or [{}])[0]

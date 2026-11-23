@@ -30,6 +30,7 @@ class OpenAIResponsesProvider(Provider):
     adapter = "openai"
     default_base_url = "https://api.openai.com/v1"
     api_key_env = ("OPENAI_API_KEY",)
+    auth_header = "Authorization"
 
     # ------------------------------------------------------------------ #
     def _user_content(self, m: Message) -> str | list[dict[str, Any]]:
@@ -108,11 +109,10 @@ class OpenAIResponsesProvider(Provider):
             body["stream"] = True
         body = deep_merge(body, req.extra)
 
-        return HTTPRequest(
-            url=f"{self.base_url}/responses",
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-            body=body,
-        )
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return HTTPRequest(url=f"{self.base_url}/responses", headers=self.request_headers(headers), body=body)
 
     # ------------------------------------------------------------------ #
     def parse_response(self, data: dict[str, Any]) -> Response:

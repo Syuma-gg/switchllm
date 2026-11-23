@@ -198,6 +198,16 @@ client.chat("...", extra_by_provider={
 
 `client.with_model("anthropic:claude-haiku-5-5")` creates a client for another model that shares the connection (useful for fallbacks and comparisons). For the same provider it keeps `api_key` / `base_url` / options; for a different provider it does not, so keys and auth headers are never sent to another server.
 
+`headers=` adds HTTP headers to every request, for every provider (for example, for a gateway in front of the APIs). A header with the same name as one the library sets, including the API key header (`Authorization`, `x-api-key`, `x-goog-api-key`), replaces it; names are compared case-insensitively. If you pass the API key header this way, you need no `api_key=` or environment variable. To stop a header the library sets, pass `None` as its value. For example, when the gateway takes its key in a different header, set the library's API key header to `None` so that your provider key is not sent to the gateway. On Anthropic, set the API version and beta features with `anthropic_version=` and `beta=` instead.
+
+```python
+Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
+       headers={"x-api-key": "<gateway key>", "X-Team": "search"})
+# The gateway takes its key in Authorization: do not send x-api-key
+Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
+       headers={"Authorization": "Bearer <gateway key>", "x-api-key": None})
+```
+
 ### Errors
 
 Every provider raises the same exception classes: `AuthenticationError` (401/403) / `RateLimitError` (429) / `BadRequestError` (4xx) / `NotFoundError` (404) / `ServerError` (5xx) / `StreamError` / `APIConnectionError` / `ConfigurationError` / `UnsupportedFeatureError`.

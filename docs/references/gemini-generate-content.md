@@ -2,7 +2,7 @@
 
 - アダプター: `providers/gemini.py`（プリセット `gemini` / `google`）
 - エンドポイント: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`（ストリーミングは `:streamGenerateContent?alt=sse`）
-- 認証: `x-goog-api-key: $GEMINI_API_KEY`（または `GOOGLE_API_KEY`）
+- 認証: `x-goog-api-key: $GEMINI_API_KEY`（または `GOOGLE_API_KEY`）（`headers=` に同じ名前のヘッダーを渡すと、大文字と小文字を区別せずに置き換える。[判断](../design-docs/custom-headers.md)）
 
 ## 共通型との対応
 

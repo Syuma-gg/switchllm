@@ -29,6 +29,7 @@ class GeminiProvider(Provider):
     default_base_url = "https://generativelanguage.googleapis.com/v1beta"
     api_key_env = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
     option_names = frozenset({"schema_field", "inject_dummy_signatures"})
+    auth_header = "x-goog-api-key"
 
     def _user_parts(self, m: Message) -> list[dict[str, Any]]:
         parts: list[dict[str, Any]] = []
@@ -153,10 +154,11 @@ class GeminiProvider(Provider):
         body = deep_merge(body, req.extra)
 
         method = "streamGenerateContent?alt=sse" if stream else "generateContent"
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["x-goog-api-key"] = self.api_key
         return HTTPRequest(
-            url=f"{self.base_url}/models/{self.model}:{method}",
-            headers={"x-goog-api-key": self.api_key or "", "Content-Type": "application/json"},
-            body=body,
+            url=f"{self.base_url}/models/{self.model}:{method}", headers=self.request_headers(headers), body=body
         )
 
     def parse_response(self, data: dict[str, Any]) -> Response:

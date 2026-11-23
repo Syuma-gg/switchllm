@@ -4,6 +4,7 @@
 
 - 環境変数（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` など）か `Client(api_key=...)` で渡す。コードやリポジトリ内のファイルには書かない。`.env` は `.gitignore` 済み
 - キーは HTTP ヘッダー（`Authorization` / `x-api-key` / `x-goog-api-key`）にだけ載せる。URL のクエリには載せない
+- ゲートウェイを経由するときなどは、キーを `headers=` で渡せる（ライブラリの認証のヘッダーを置き換える）。ゲートウェイがキーを別の名前のヘッダーで受けるときは、ライブラリの認証のヘッダーを値の `None` で止めないと、プロバイダーのキー（環境変数にあるものも）がゲートウェイに届く。`headers=` の誤りを知らせる例外のメッセージには、ヘッダーの名前と型だけを出し、値は出さない（[判断](design-docs/custom-headers.md)）
 - `Client.with_model()` は、別のプロバイダーへ切り替えるときは `api_key`・`base_url`・プロバイダー別のオプション（`headers=` など）を引き継がない。別のサーバーにキーや認証ヘッダーを誤って送らないため。同じプロバイダーの別モデルへは、送り先が変わらないので引き継ぐ（[判断](design-docs/provider-specific-params.md)）
 - ライブラリはログを出さず、外部への送信（テレメトリ）もしない
 

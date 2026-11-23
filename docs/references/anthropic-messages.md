@@ -2,7 +2,7 @@
 
 - アダプター: `providers/anthropic.py`（プリセット `anthropic`）
 - エンドポイント: `POST https://api.anthropic.com/v1/messages`
-- 認証: `x-api-key: $ANTHROPIC_API_KEY` と `anthropic-version: 2026-10-21`（`anthropic_version=` で変更できる。下の「API の版」）。beta 機能は `beta=[...]` が `anthropic-beta` ヘッダーになる
+- 認証: `x-api-key: $ANTHROPIC_API_KEY` と `anthropic-version: 2026-10-21`（`anthropic_version=` で変更できる。下の「API の版」）。beta 機能は `beta=[...]` が `anthropic-beta` ヘッダーになる。`x-api-key` は `headers=` で置き換えられるが、`anthropic-version` と `anthropic-beta` は `headers=` では渡せない（専用のオプションを使う。[判断](../design-docs/custom-headers.md)）
 
 ## 共通型との対応
 

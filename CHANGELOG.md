@@ -17,6 +17,7 @@
 - 構造化出力（`chat(response_schema=...)` / `stream(response_schema=...)`）。JSON Schema の dict を各社の形式で送り、答えをその形に縛る。読んだ値は `Response.parsed` に入る。JSON Schema を受け付けない DeepSeek では、送る前に `UnsupportedFeatureError`
 - 推論の強さ（`chat(reasoning_effort=...)` / `stream(reasoning_effort=...)`）。`none`〜`max` の7段階の名前を、各社の指定（OpenAI `reasoning.effort`、Anthropic `output_config.effort`、Gemini `thinkingLevel`、Chat Completions `reasoning_effort`）に変えずに入れる。各社の API に名前のない段階（Anthropic の `minimal`、Gemini の `none`・`max`）は、送る前に `UnsupportedFeatureError`
 - Anthropic の API の版は、最新の `2026-10-21` を送る（`anthropic_version=` で変えられる）。この版はどのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`
+- `headers=` を、すべてのプロバイダーで受け付ける（ゲートウェイなどに足すヘッダー）。ライブラリが付けるヘッダー（APIキーのヘッダーを含む）と同じ名前なら、大文字と小文字を区別せずに置き換え、同じヘッダーを2本送らない。APIキーのヘッダーを渡せば、`api_key=` も環境変数もなくてよい。値に `None` を渡すと、ライブラリが付けるそのヘッダーを送らない（ゲートウェイがキーを別の名前のヘッダーで受けるとき、プロバイダーのキーを送らないため）
 - 非同期のクライアント `AsyncClient`。引数とメソッドの名前は `Client` と同じで、`await client.chat(...)`、`async for ev in client.stream(...)`、`async with` / `aclose()`。アダプターは同期版と同じものを使う
 - `arun_tool_calls()`。`async def` のツールを await し、呼び出しを並行に実行して、結果を呼び出しの順に返す。`run_tool_calls()` は `async def` のツールを実行せず、`arun_tool_calls()` を使うようエラーの結果を返す
 - `Client` に `httpx.AsyncClient` を、`AsyncClient` に `httpx.Client` を渡すと、作った時点で `TypeError`

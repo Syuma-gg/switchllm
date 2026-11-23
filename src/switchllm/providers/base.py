@@ -29,6 +29,9 @@ ToolChoice = Any  # None | "auto" | "none" | "required" | {"name": str}
 #: （docs/design-docs/reasoning-effort.md）。アダプターは名前を変えずに送り、名前のない段階は UnsupportedFeatureError
 REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
+#: すべてのアダプターで受け付けるオプション（基底クラスで読む）。アダプターごとのものは ``Provider.option_names``
+COMMON_OPTIONS = frozenset({"headers"})
+
 
 @dataclass
 class ChatRequest:
@@ -140,9 +143,15 @@ class Provider(ABC):
     default_base_url: str = ""
     api_key_env: tuple[str, ...] = ()
     requires_api_key: bool = True
-    #: ``Client(..., **options)`` で受け付けるオプション名。読むオプションを足したらここにも足す
-    #: （``tests/test_client.py`` がソースと照合する）
+    #: ``Client(..., **options)`` で受け付けるオプション名（``COMMON_OPTIONS`` のほかに）。読むオプションを
+    #: 足したらここにも足す（``tests/test_client.py`` がソースと照合する）
     option_names: frozenset[str] = frozenset()
+    #: APIキーを入れるヘッダー。``headers=`` にこの名前があれば（値が None でも）、APIキーがなくてもよい
+    #: （docs/design-docs/custom-headers.md）
+    auth_header: str = ""
+    #: ``headers=`` で渡させないヘッダー（小文字の名前, 代わりに使うオプション）。専用のオプションがあり、
+    #: ライブラリがその値を見て検査するもの
+    reserved_headers: tuple[tuple[str, str], ...] = ()
     #: True なら、同じプロバイダーキーの別のモデルが生成した生データも再送する。
     #: プロバイダーが「モデルを替えても推論情報を捨てるな」と文書で求めているときだけ True にする
     #: （docs/design-docs/provider-state-resend.md）
@@ -152,12 +161,42 @@ class Provider(ABC):
     def check_options(cls, key: str, options: dict[str, Any]) -> None:
         """知らないオプション名を ConfigurationError にする。打ち間違いや、
         別のアダプター用のオプションを黙って無視しないため。"""
-        unknown = sorted(set(options) - cls.option_names)
+        accepted = cls.option_names | COMMON_OPTIONS
+        unknown = sorted(set(options) - accepted)
         if unknown:
-            allowed = ", ".join(sorted(cls.option_names)) or "(none)"
             raise ConfigurationError(
-                f"unknown option(s) for {key!r}: {', '.join(unknown)}. Options for this provider: {allowed}"
+                f"unknown option(s) for {key!r}: {', '.join(unknown)}. Options for this provider: {', '.join(sorted(accepted))}"
             )
+        if "headers" in options:
+            cls._check_headers(options["headers"])
+
+    @classmethod
+    def _check_headers(cls, headers: Any) -> None:
+        """送る前に分かる ``headers=`` の誤りを知らせる。名前は大文字と小文字を区別しない（RFC 9110 の 5.1）。
+
+        認証のヘッダーにキーが入っていることがあるので、メッセージにはヘッダーの値を出さない（docs/SECURITY.md）。"""
+        expected = "headers must be a dict of str to str or None"
+        if not isinstance(headers, dict):
+            raise TypeError(f"{expected}, got {type(headers).__name__}")
+        for name, value in headers.items():
+            if not isinstance(name, str):
+                raise TypeError(f"{expected}; got the name {name!r}")
+            if value is not None and not isinstance(value, str):
+                raise TypeError(f"{expected}; {name!r} has a {type(value).__name__} value")
+        seen: dict[str, str] = {}
+        reserved = dict(cls.reserved_headers)
+        for name in headers:
+            lowered = name.lower()
+            if lowered in reserved:
+                raise ConfigurationError(
+                    f"{lowered!r} is set by the {reserved[lowered]}= option; pass it there instead of headers="
+                )
+            first = seen.setdefault(lowered, name)
+            if first != name:
+                raise ConfigurationError(
+                    f"{first!r} and {name!r} are the same header (header names are case-insensitive); "
+                    "pass only one in headers="
+                )
 
     def __init__(
         self,
@@ -176,7 +215,7 @@ class Provider(ABC):
         self.options = dict(options or {})
         envs = self.api_key_env if api_key_env is None else api_key_env
         self.api_key = api_key or next((os.environ[e] for e in envs if os.environ.get(e)), None)
-        if self.requires_api_key and envs and not self.api_key:
+        if self.requires_api_key and envs and not self.api_key and not self._user_sets(self.auth_header):
             raise ConfigurationError(
                 f"API key for {key!r} not found. Set {' or '.join(envs)} or pass api_key=..."
             )
@@ -191,6 +230,21 @@ class Provider(ABC):
         if st.model != self.model and not self.resend_across_models:
             return None
         return copy.deepcopy(st.raw)
+
+    def _user_sets(self, header: str) -> bool:
+        """``headers=`` にこの名前のヘッダーがあるか（大文字と小文字を区別しない。値が None で止めるときも）。"""
+        return bool(header) and header.lower() in {name.lower() for name in self.options.get("headers") or {}}
+
+    def request_headers(self, own: dict[str, str]) -> dict[str, str]:
+        """アダプターが付けるヘッダーに、利用者の ``headers=`` を重ねる。
+
+        同じ名前（大文字と小文字を区別しない。RFC 9110 の 5.1）は利用者の値で置き換え、
+        同じヘッダーを2本送らない（5.3）。認証のヘッダーも置き換えられる。値が None なら、
+        ライブラリのそのヘッダーを送らない（docs/design-docs/custom-headers.md）。"""
+        extra: dict[str, str | None] = self.options.get("headers") or {}
+        replaced = {name.lower() for name in extra}
+        kept = {k: v for k, v in own.items() if k.lower() not in replaced}
+        return {**kept, **{k: v for k, v in extra.items() if v is not None}}
 
     @staticmethod
     def system_text(messages: list[Message]) -> str:

@@ -1,7 +1,9 @@
+import re
+
 import pytest
 
 from sample_tools import WEATHER_TOOL
-from switchllm import ImagePart, Message, StreamError, TextPart, UnsupportedFeatureError
+from switchllm import Client, ConfigurationError, ImagePart, Message, StreamError, TextPart, UnsupportedFeatureError
 
 
 def test_request_shape(api):
@@ -225,3 +227,11 @@ def test_empty_assistant_message_from_another_provider_is_not_sent(api):
     assert api.body()["messages"] == [
         {"role": "user", "content": [{"type": "text", "text": "1つ目"}, {"type": "text", "text": "2つ目"}]}
     ]
+
+
+@pytest.mark.parametrize("value", ["x", None])
+@pytest.mark.parametrize("name, option", [("Anthropic-Version", "anthropic_version="), ("anthropic-beta", "beta=")])
+def test_version_and_beta_headers_point_to_their_options(name, option, value):
+    # temperature= を送る前の検査は anthropic_version= の版を見るので、ヘッダーで版を変えさせない（None で止めることも）
+    with pytest.raises(ConfigurationError, match=re.escape(f"'{name.lower()}' is set by the {option} option")):
+        Client("anthropic:claude-sonnet-5-5", api_key="k", headers={name: value})

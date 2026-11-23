@@ -2,7 +2,7 @@
 
 - アダプター: `providers/openai_responses.py`（プリセット `openai`）
 - エンドポイント: `POST https://api.openai.com/v1/responses`
-- 認証: `Authorization: Bearer $OPENAI_API_KEY`
+- 認証: `Authorization: Bearer $OPENAI_API_KEY`（`headers=` に同じ名前のヘッダーを渡すと、大文字と小文字を区別せずに置き換える。[判断](../design-docs/custom-headers.md)）
 - このアダプターを使う理由: [判断](../design-docs/openai-responses-api.md)
 
 ## 共通型との対応

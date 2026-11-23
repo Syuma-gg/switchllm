@@ -64,7 +64,7 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 | `tests/conftest.py` | `FakeAPI`（httpx.MockTransport）。応答を積み、送られたリクエストを記録する。`api` を使うテストは、`Client` と `AsyncClient`（`AsyncDriver` で包んだもの）の2通りで回る |
 | `tests/test_<adapter>.py` | アダプターごとのリクエスト形状 / ツール往復 / ストリーミング / エラー |
 | `tests/test_cross_provider.py` | 会話の途中でプロバイダーを替えたときの履歴変換 |
-| `tests/test_consistency.py` | 同じテストを4アダプターで回し、切り替えても同じ振る舞いになること（共通パラメータ、`tool_choice`、ストリームの終わりとエラー、未知のイベント、同じクライアントの複数のストリームが混ざらないこと） |
+| `tests/test_consistency.py` | 同じテストを4アダプターで回し、切り替えても同じ振る舞いになること（共通パラメータ、`tool_choice`、ストリームの終わりとエラー、未知のイベント、同じクライアントの複数のストリームが混ざらないこと、`headers=` が足され、同じ名前のヘッダーを置き換え、`None` で止めること） |
 | `tests/test_reasoning_effort.py` | 推論の強さ（`reasoning_effort=`）。4アダプターで各社の指定になること、段階の名前を変えないこと、名前のない段階と打ち間違いを送る前に例外にすること |
 | `tests/test_structured_output.py` | 構造化出力（`response_schema=`）。4アダプターで各社の形式になり、同じ `parsed` を返すこと、スキーマに足すもの、JSON Schema を受け付けない接続先 |
 | `tests/test_async_client.py` | 非同期にしかないこと（引数が `Client` と同じこと、並行の送信、リトライの待ちでイベントループを止めないこと、取り消したら再送せずに応答を閉じること、途中で抜けたら閉じること、`aclose()`、`http_client=` の取り違え） |
@@ -87,4 +87,4 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 - **OpenAI 互換サーバーをプリセットに足す**: base_url を公式ドキュメントで確認する → `PRESETS` に1行足す → [Chat Completions 互換](docs/references/openai-chat-compatible.md) に出典を書く → [public-api.md](docs/product-specs/public-api.md) のプリセット表に足す → テストを書く。公式ドキュメントで確認できないものはプリセットにせず、利用者に `register_provider()` を案内する（[判断](docs/design-docs/verified-presets.md)）
 - **新しい形式の API を足す**: `Provider` を継承して3メソッド（ストリームは `StreamParser` の `feed()` / `finish()`）を実装する → `ADAPTERS` と `PRESETS` に登録する → 既存に倣って `tests/test_<name>.py` を足す（リクエスト形状 / ツール往復 / ストリーミング / エラー）→ `tests/test_consistency.py` の `CASES` に1件足す → `docs/references/` に仕様メモを書く
 - **共通パラメータを足す**: まず [scope.md](docs/product-specs/scope.md) で共通化してよいか確認する → `ChatRequest` と `Client` / `AsyncClient` の `chat()` / `stream()` に足す（引数が同じことは `tests/test_async_client.py` が検査する） → 4アダプターすべてで対応する（対応できないアダプターは `UnsupportedFeatureError`）
-- **プロバイダー別のオプションを足す**: アダプターの `option_names` に名前を足す → [public-api.md](docs/product-specs/public-api.md) のオプション表に1行足す（ソースとの一致は `tests/test_client.py`、文書との一致は `tests/test_docs.py` が検査する）
+- **プロバイダー別のオプションを足す**: アダプターの `option_names` に名前を足す（すべてのアダプターで受け付けるものは、`providers/base.py` の `COMMON_OPTIONS` に足して基底クラスで読む）→ [public-api.md](docs/product-specs/public-api.md) のオプション表に1行足す（ソースとの一致は `tests/test_client.py`、文書との一致は `tests/test_docs.py` が検査する）

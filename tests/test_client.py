@@ -20,6 +20,7 @@ from switchllm import (
 )
 from switchllm._http import iter_sse
 from switchllm.providers import ADAPTERS, PRESETS
+from switchllm.providers import base as providers_base
 
 OK = {"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": {}}
 
@@ -218,7 +219,7 @@ def test_with_model_overrides_win(api):
     [
         ("openai-chat:gpt-x", {"stream_usge": False}),  # 打ち間違い
         ("anthropic:claude-sonnet-5-5", {"schema_field": "parametersJsonSchema"}),  # Gemini 用
-        ("openai:gpt-5.5", {"headers": {"X": "1"}}),  # Responses にはオプションがない
+        ("openai:gpt-5.5", {"beta": ["b1"]}),  # Anthropic 用（Responses には共通のオプションしかない）
     ],
 )
 def test_unknown_option_is_rejected(model, options):
@@ -235,10 +236,37 @@ def test_register_provider_rejects_unknown_option():
 def test_option_names_match_the_options_each_adapter_reads():
     # 読むオプションを足したのに option_names に足し忘れると、利用者が渡したときに ConfigurationError になる
     pattern = re.compile(r'self\.options(?:\.get\(|\[)"(\w+)"|"(\w+)" in self\.options')
+
+    def used(module_file: str) -> set[str]:
+        return {a or b for a, b in pattern.findall(Path(module_file).read_text(encoding="utf-8"))}
+
     for cls in ADAPTERS.values():
-        source = Path(inspect.getfile(cls)).read_text(encoding="utf-8")
-        used = {a or b for a, b in pattern.findall(source)}
-        assert used == set(cls.option_names), f"{cls.__name__}.option_names を、読んでいるオプション {sorted(used)} にそろえる"
+        reads = used(inspect.getfile(cls))
+        assert reads == set(cls.option_names), f"{cls.__name__}.option_names を、読んでいるオプション {sorted(reads)} にそろえる"
+    # 基底クラスで読むオプションは、すべてのアダプターで受け付ける（headers= など）
+    assert used(providers_base.__file__) == set(providers_base.COMMON_OPTIONS)
+
+
+def test_headers_errors_do_not_show_header_values(api):
+    # 認証のヘッダーにキーを入れていても、例外のメッセージ（ログに残りやすい）にキーを出さない（docs/SECURITY.md）
+    with pytest.raises(TypeError) as e:
+        api.client("anthropic:claude-sonnet-5-5", headers={"x-api-key": "sk-ant-secret-value", "X-Retry": 3})
+    assert "sk-ant-secret-value" not in str(e.value)
+    assert "'X-Retry' has a int value" in str(e.value)  # どれが誤りかは分かる
+
+
+@pytest.mark.parametrize("headers, error, message", [
+    ([("X-Team", "a")], TypeError, "headers must be a dict of str to str or None, got list"),
+    ({"X-Team": 1}, TypeError, "headers must be a dict of str to str or None; 'X-Team' has a int value"),
+    ({1: "a"}, TypeError, "headers must be a dict of str to str or None; got the name 1"),
+    ({"X-Team": "a", "x-team": "b"}, ConfigurationError, "'X-Team' and 'x-team' are the same header"),
+    ({"X-Team": "a", "x-team": None}, ConfigurationError, "'X-Team' and 'x-team' are the same header"),  # 送るか止めるか
+])
+def test_invalid_headers_are_rejected_before_sending(api, headers, error, message):
+    # 以前は Chat Completions 互換で、送るときに httpx の分かりにくいエラーになるか、同じヘッダーを2本送っていた
+    with pytest.raises(error, match=re.escape(message)):
+        api.client("anthropic:claude-sonnet-5-5", headers=headers)
+    assert api.requests == []
 
 
 # --------------------------------------------------------------------------- #

@@ -42,6 +42,8 @@ class AnthropicProvider(Provider):
     default_base_url = "https://api.anthropic.com"
     api_key_env = ("ANTHROPIC_API_KEY",)
     option_names = frozenset({"default_max_tokens", "anthropic_version", "beta"})
+    auth_header = "x-api-key"
+    reserved_headers = (("anthropic-version", "anthropic_version"), ("anthropic-beta", "beta"))
     # Anthropic は、モデルを切り替えるときも thinking ブロックを捨てずにそのまま送ることを求める。
     # 新しいモデルが読めないブロックは、API がエラーにせず、料金もかけずに捨てる
     # （docs/references/anthropic-messages.md の「モデルの切り替え」）
@@ -139,14 +141,12 @@ class AnthropicProvider(Provider):
             body["stream"] = True
         body = deep_merge(body, req.extra)
 
-        headers = {
-            "x-api-key": self.api_key or "",
-            "anthropic-version": version,
-            "content-type": "application/json",
-        }
+        headers = {"anthropic-version": version, "content-type": "application/json"}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
         if self.options.get("beta"):
             headers["anthropic-beta"] = ",".join(self.options["beta"])
-        return HTTPRequest(url=f"{self.base_url}/v1/messages", headers=headers, body=body)
+        return HTTPRequest(url=f"{self.base_url}/v1/messages", headers=self.request_headers(headers), body=body)
 
     def parse_response(self, data: dict[str, Any]) -> Response:
         blocks = data.get("content") or []

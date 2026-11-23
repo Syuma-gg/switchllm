@@ -15,6 +15,7 @@
 - 履歴の JSON 保存・復元（`Message.to_dict()` / `from_dict()`。推論情報を含む。2026-11-18）
 - 構造化出力（`response_schema=` に JSON Schema の dict を渡し、`Response.parsed` に読んだ値を入れる。2026-11-20。[判断](../design-docs/structured-output.md)）。スキーマのない JSON モードは共通化しない（`extra=` で渡す）
 - 推論の強さ（`reasoning_effort=` に段階の名前を渡し、各社の指定に名前を変えずに入れる。2026-11-21。[判断](../design-docs/reasoning-effort.md)）。推論の要約を返させる指定や、数での予算（Gemini 2.5 の `thinkingBudget`）は共通化しない（`extra=` で渡す）
+- すべてのアダプターで `headers=`（ゲートウェイなどに足すヘッダー。同じ名前はライブラリの値を置き換え、値の `None` で止める。2026-11-23。[判断](../design-docs/custom-headers.md)）
 - 非同期のクライアント（`AsyncClient`。引数とメソッドの名前は `Client` と同じ）と、`async def` のツールを並行に実行する `arun_tool_calls`（2026-11-23。[判断](../design-docs/async-client.md)）
 
 ## 足すと決めたもの
@@ -23,7 +24,6 @@
 
 | 機能 | 理由 |
 |---|---|
-| すべてのアダプターに `headers=` | 今は Chat Completions 互換だけにあり、ゲートウェイを経由するとほかのアダプターへ切り替えられない |
 | PDF・ファイルの入力 | 文書を読ませる用途は多い。対応しない接続先には、送る前に `UnsupportedFeatureError` |
 
 ## やらないこと

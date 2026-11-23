@@ -198,6 +198,16 @@ client.chat("...", extra_by_provider={
 
 `client.with_model("anthropic:claude-haiku-5-5")` で、接続を共有したまま別のモデルのクライアントを作れる（フォールバックや比較に使う）。同じプロバイダーなら `api_key` / `base_url` / オプションを引き継ぎ、別のプロバイダーへは引き継がない（キーや認証ヘッダーを別のサーバーへ送らないため）。
 
+`headers=` で、どのプロバイダーにも HTTP ヘッダーを足せる（API の前にゲートウェイを置くときなど）。ライブラリが付けるヘッダーと同じ名前なら、APIキーのヘッダー（`Authorization`、`x-api-key`、`x-goog-api-key`）も含めて置き換える。名前は大文字と小文字を区別せずに比べる。APIキーのヘッダーをこれで渡せば、`api_key=` も環境変数も要らない。ライブラリが付けるヘッダーを止めるときは、値に `None` を渡す。たとえば、ゲートウェイがキーを別の名前のヘッダーで受けるときは、ライブラリのAPIキーのヘッダーを `None` にすれば、プロバイダーのキーをゲートウェイへ送らない。Anthropic の API の版と beta 機能は、`anthropic_version=` と `beta=` で指定する。
+
+```python
+Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
+       headers={"x-api-key": "<ゲートウェイのキー>", "X-Team": "search"})
+# ゲートウェイがキーを Authorization で受ける。x-api-key は送らない
+Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
+       headers={"Authorization": "Bearer <ゲートウェイのキー>", "x-api-key": None})
+```
+
 ### 例外
 
 どのプロバイダーでも同じ例外クラスになる: `AuthenticationError`(401/403) / `RateLimitError`(429) / `BadRequestError`(400系) / `NotFoundError`(404) / `ServerError`(5xx) / `StreamError` / `APIConnectionError` / `ConfigurationError` / `UnsupportedFeatureError`。

@@ -113,6 +113,14 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 |---|---|---|---|---|
 | `test_async_chat_and_stream` | `await chat()` が本文を返す。`async for` の `stream()` で、`done` が最後に1回だけ来て、`text` の差分をつなぐと `done` の本文になる | | 2 | |
 
+### ヘッダー（`test_e2e_headers.py`）
+
+ゲートウェイを経由するときのように、APIキーを `headers=` で渡す（[判断](design-docs/custom-headers.md)）。同じ名前のヘッダーを2本送らないことは、`tests/` のモックで確かめる。
+
+| テスト | 確かめること | 境界 | 回数 | 前提 |
+|---|---|---|---|---|
+| `test_api_key_in_headers`（キーの要るものだけ） | 各社の認証のヘッダーを、名前を大文字にして `headers=` で渡し、知らないヘッダーも一緒に送っても受け付ける | ○ | 1 | |
+
 ### エラー（`test_e2e_errors.py`）
 
 失敗するリクエストは、多くのプロバイダーで課金されない。

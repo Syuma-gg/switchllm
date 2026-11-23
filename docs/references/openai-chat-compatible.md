@@ -2,7 +2,7 @@
 
 - アダプター: `providers/openai_chat.py`（プリセット `openai-chat` / `deepseek` / `ollama` / `lmstudio`、`register_provider()` で足したもの）
 - エンドポイント: `POST {base_url}/chat/completions`
-- 認証: `Authorization: Bearer <key>`。キーのないとき（ローカルのプリセット）はヘッダーを付けない。`headers=` で任意のヘッダーを足せる
+- 認証: `Authorization: Bearer <key>`。キーのないとき（ローカルのプリセット）はヘッダーを付けない。`headers=` で任意のヘッダーを足せる。同じ名前のヘッダーは、大文字と小文字を区別せずに置き換える（以前は `authorization` のように大文字と小文字が違うと2本送っていた。[判断](../design-docs/custom-headers.md)）
 
 ## 共通型との対応
 

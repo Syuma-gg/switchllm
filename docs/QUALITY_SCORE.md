@@ -4,7 +4,7 @@
 
 テストは GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確認した）。
 
-カバレッジ（分岐を含む）は 99.07%（2026-11-23、Python 3.12。テスト 709 件）。基準は `pyproject.toml` の `fail_under = 99` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）。到達していない行は1つだけで、`types.py` の `_part_to_dict` の、知らないパーツを変えずに返す行（2026-11-18 の履歴の保存で足した。テストがない）。残りは分岐の一部で、多くはパーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）。
+カバレッジ（分岐を含む）は 99.10%（2026-11-23、Python 3.12。テスト 757 件）。基準は `pyproject.toml` の `fail_under = 99` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）。到達していない行は1つだけで、`types.py` の `_part_to_dict` の、知らないパーツを変えずに返す行（2026-11-18 の履歴の保存で足した。テストがない）。残りは分岐の一部で、多くはパーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）。
 
 実 API に対する E2E テストは `e2e/` にあり、`--models` を渡したときだけ実 API を呼ぶ（料金が発生するため。[E2E テスト](e2e-tests.md)）。渡さなければ、実 API で記録したやりとりを再生し、既定の実行と CI にも入る（[テストの方針](testing.md)）。まだ実 API では回しておらず、記録は 0 件。
 
@@ -30,7 +30,7 @@
 
 | 領域 | 評価 | テスト | メモ |
 |---|---|---|---|
-| Client、モデル文字列、APIキー、オプション | B | `tests/test_client.py` | 知らないオプション名・`tool_choice` の誤り・読めないパーツを、送る前に例外にする |
+| Client、モデル文字列、APIキー、オプション | B | `tests/test_client.py`、`tests/test_consistency.py` | 知らないオプション名・`tool_choice` の誤り・読めないパーツ・`headers=` の誤りを、送る前に例外にする。`headers=` は4アダプターで足され、同じ名前（大文字と小文字を区別しない）のヘッダーを置き換えて2本送らないこと、認証のヘッダーを渡せばキーが要らないこと、値の `None` でライブラリのヘッダー（認証のヘッダーを含む）を止められること。実 API では未確認（E2E の `test_e2e_headers.py`） |
 | リトライ、例外 | B | `tests/test_http.py` | 接続エラー、`Retry-After`、エラー本体の解釈、ストリームの途中の切断。実際の 429 / 5xx / 切断での挙動は未確認 |
 | プロバイダーの切り替え | B | `tests/test_cross_provider.py`、`tests/test_consistency.py`、`tests/test_client.py` | 履歴の変換、4アダプターで同じ振る舞いになること（同じクライアントで読む複数のストリームが混ざらないことを含む）、`with_model()`、`extra_by_provider`。U5、U8、U16、U17 |
 | 共通型 | B | `tests/test_types.py` | `Message.from_dict`、`ToolCall.arguments_json`、`ImagePart` |

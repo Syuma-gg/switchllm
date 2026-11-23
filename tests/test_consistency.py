@@ -12,7 +12,7 @@ from typing import Any, Callable
 import pytest
 
 from sample_tools import WEATHER_TOOL
-from switchllm import StreamError
+from switchllm import ConfigurationError, StreamError
 
 
 @dataclass
@@ -26,6 +26,7 @@ class Case:
     unknown_event: tuple[str | None, Any]  # 将来足されるかもしれない、知らないイベント
     common_params: Callable[[dict[str, Any]], tuple[Any, Any, Any]]  # 本体から (max_tokens, temperature, system) を取り出す
     has_stop: Callable[[dict[str, Any]], bool]  # 本体に stop の指定があるか
+    auth_header: str  # APIキーを入れるヘッダー
     # temperature を送るときのクライアントのオプション。Anthropic の既定の版（2026-10-21）は temperature を
     # 送る前に UnsupportedFeatureError にするので、古い版を選ぶ（docs/design-docs/anthropic-api-version.md）
     temperature_options: dict[str, Any] = field(default_factory=dict)
@@ -74,6 +75,7 @@ CASES = [
         unknown_event=("response.something_new", {"type": "response.something_new"}),
         common_params=lambda b: (b["max_output_tokens"], b["temperature"], b["instructions"]),
         has_stop=lambda b: "stop" in b,
+        auth_header="Authorization",
     ),
     Case(
         model="openai-chat:gpt-x",
@@ -90,6 +92,7 @@ CASES = [
         # 接続先が OpenAI 本家なので max_completion_tokens（S11）
         common_params=lambda b: (b["max_completion_tokens"], b["temperature"], b["messages"][0]["content"]),
         has_stop=lambda b: "stop" in b,
+        auth_header="Authorization",
     ),
     Case(
         model="anthropic:claude-sonnet-5-5",
@@ -101,6 +104,7 @@ CASES = [
         unknown_event=("something_new", {"type": "something_new"}),
         common_params=lambda b: (b["max_tokens"], b["temperature"], b["system"]),
         has_stop=lambda b: "stop_sequences" in b,
+        auth_header="x-api-key",
         temperature_options={"anthropic_version": "2023-06-01"},
     ),
     Case(
@@ -120,6 +124,7 @@ CASES = [
             b["systemInstruction"]["parts"][0]["text"],
         ),
         has_stop=lambda b: "stopSequences" in b["generationConfig"],
+        auth_header="x-goog-api-key",
     ),
 ]
 
@@ -180,6 +185,62 @@ def test_streams_on_one_client_do_not_mix(api, case):
     for events, text in ((first, "一つ目"), (second, "二つ目"), (third, "三つ目")):
         assert [e.type for e in events] == ["text", "done"], [e.type for e in events]
         assert (events[0].text, events[-1].response.text) == (text, text)
+
+
+def _header_values(request: Any, name: str) -> list[str]:
+    """送ったヘッダーのうち、名前が同じもの（大文字と小文字を区別しない）の値をすべて返す。"""
+    return [v.decode() for k, v in request.headers.raw if k.decode().lower() == name.lower()]
+
+
+def test_headers_are_added_and_replace_the_librarys_own(api, case):
+    # ゲートウェイを経由するときのヘッダーを、どのアダプターにも同じ書き方で渡せる。ライブラリが付ける
+    # ヘッダー（認証など）と同じ名前なら、大文字と小文字が違っても置き換え、2本送らない（RFC 9110 の 5.1・5.3）
+    api.reply_json(case.ok)
+    api.reply_sse(case.text_stream("hi"))
+    headers = {"X-Team": "a", case.auth_header.swapcase(): "gateway-key", "content-type": "application/json"}
+    client = api.client(case.model, headers=headers)
+    client.chat("hi")
+    list(client.stream("hi"))
+    for req in api.requests:
+        assert _header_values(req, "x-team") == ["a"]
+        assert _header_values(req, case.auth_header) == ["gateway-key"]  # プロバイダーのキー（test-key）は送らない
+        assert _header_values(req, "content-type") == ["application/json"]
+
+
+def test_auth_header_in_headers_needs_no_api_key(api, case, monkeypatch):
+    # キーを持つのがゲートウェイで、利用者はゲートウェイのキーだけを持つとき
+    for env in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(env, raising=False)
+    api.reply_json(case.ok)
+    api.raw_client(case.model, headers={case.auth_header.upper(): "gateway-key"}).chat("hi")
+    assert _header_values(api.requests[0], case.auth_header) == ["gateway-key"]
+    with pytest.raises(ConfigurationError, match="API key"):  # 認証のヘッダーでなければ、今までどおりキーが要る
+        api.raw_client(case.model, headers={"X-Team": "a"})
+
+
+def test_none_in_headers_stops_the_librarys_header(api, case):
+    # ゲートウェイがライブラリと違う名前の認証のヘッダーを求めるとき、プロバイダーのキーを送らない
+    # （requests の None、公式 SDK の Omit() と同じ考え方。docs/design-docs/custom-headers.md）
+    api.reply_json(case.ok)
+    api.reply_sse(case.text_stream("hi"))
+    headers = {case.auth_header.swapcase(): None, "X-Gateway-Key": "gateway-key", "X-Not-Set": None}
+    client = api.client(case.model, api_key="provider-key", headers=headers)
+    client.chat("hi")
+    list(client.stream("hi"))
+    for req in api.requests:
+        assert _header_values(req, case.auth_header) == []
+        assert _header_values(req, "x-gateway-key") == ["gateway-key"]
+        assert _header_values(req, "x-not-set") == []  # ライブラリが付けないヘッダーなら、何も起きない
+        assert not any(b"provider-key" in value for _, value in req.headers.raw)
+
+
+def test_none_for_the_auth_header_needs_no_api_key(api, case, monkeypatch):
+    for env in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(env, raising=False)
+    api.reply_json(case.ok)
+    api.raw_client(case.model, headers={case.auth_header: None, "X-Gateway-Key": "gateway-key"}).chat("hi")
+    assert _header_values(api.requests[0], case.auth_header) == []
+    assert _header_values(api.requests[0], "x-gateway-key") == ["gateway-key"]
 
 
 def test_truncated_stream_raises_instead_of_looking_complete(api, case):

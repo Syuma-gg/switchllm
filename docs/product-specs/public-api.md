@@ -86,9 +86,9 @@
 <!-- options:start -->
 | 名前 | アダプター | 意味 |
 |---|---|---|
+| `headers` | `openai`、`openai_chat`、`anthropic`、`gemini` | リクエストに足すヘッダー（`str` から `str` か `None` への dict）。ライブラリが付けるヘッダー（認証の `Authorization`・`x-api-key`・`x-goog-api-key` を含む）と同じ名前なら、大文字と小文字を区別せずに比べて、こちらの値で置き換える。値が `None` なら、ライブラリが付けるそのヘッダーを送らない（httpx が自分で付けるヘッダーは止められない）。認証のヘッダーを渡せば（`None` でも）、APIキーがなくてもよい。Anthropic の `anthropic-version`・`anthropic-beta` は `anthropic_version`・`beta` で渡す（`headers` で渡すと `ConfigurationError`。[判断](../design-docs/custom-headers.md)） |
 | `max_tokens_field` | `openai_chat` | max_tokens を送るフィールド名。既定は、接続先が OpenAI 本家なら `max_completion_tokens`、それ以外は `max_tokens` |
 | `stream_usage` | `openai_chat` | `False` にすると、ストリーミングで `stream_options.include_usage` を送らない（既定 `True`、U10） |
-| `headers` | `openai_chat` | リクエストに足すヘッダー（dict） |
 | `json_schema` | `openai_chat` | `False` にすると、`response_schema=` を送る前に `UnsupportedFeatureError` にする。JSON Schema を受け付けない接続先のため（既定 `True`、`deepseek` のプリセットは `False`） |
 | `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 4096。Anthropic は必須） |
 | `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2026-10-21`）。`2026-10-21` 以降の版では、`temperature=` を送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/anthropic-api-version.md)） |
