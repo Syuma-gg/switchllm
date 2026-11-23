@@ -4,7 +4,9 @@
 
 - ``build_request``: 共通の ChatRequest → プロバイダー固有の HTTP リクエスト
 - ``parse_response``: プロバイダー固有のレスポンス JSON → 共通の Response
-- ``parse_stream``: SSE イベント列 → 共通の StreamEvent 列（最後に done）
+- ``stream_parser``: SSE のイベントを1つずつ StreamEvent にする ``StreamParser``（最後に done）
+
+どれも通信をしないので、同期の ``Client`` と非同期の ``AsyncClient`` が同じものを使う。
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
 from .._http import HTTPRequest
 from ..errors import ConfigurationError
@@ -112,6 +114,26 @@ def normalize_tool_choice(choice: ToolChoice) -> tuple[str, str | None]:
     raise ConfigurationError(f"invalid tool_choice: {choice!r}")
 
 
+class StreamParser(ABC):
+    """SSE のイベントを1つずつ受け取って ``StreamEvent`` にする。
+
+    イベントを取り出すのが同期でも非同期でも、解析は同じコードで行うため、引き出す形（イテレーター）ではなく
+    渡される形にしている（docs/design-docs/async-client.md）。``Provider.parse_stream`` /
+    ``aparse_stream`` が、``feed()`` を繰り返してから ``finish()`` を1回呼ぶ。"""
+
+    #: 終わりの合図（``[DONE]``、``message_stop`` など）を受け取ったら True にする。残りのイベントは読まない
+    closed: bool = False
+
+    @abstractmethod
+    def feed(self, event: str, data: str) -> list[StreamEvent]:
+        """イベント1つを読み、そこから作った StreamEvent を返す（なければ空）。"""
+
+    @abstractmethod
+    def finish(self) -> list[StreamEvent]:
+        """ストリームが終わったら呼ぶ。まだ返していなければ最後の ``done`` を返す。
+        終わりの合図が届かずに切れていたら ``StreamError``。``done`` は全体で1回だけ返す。"""
+
+
 class Provider(ABC):
     #: アダプター種別（"openai" / "openai_chat" / "anthropic" / "gemini"）
     adapter: str = ""
@@ -182,4 +204,26 @@ class Provider(ABC):
     def parse_response(self, data: dict[str, Any]) -> Response: ...
 
     @abstractmethod
-    def parse_stream(self, events: Iterator[tuple[str, str]]) -> Iterator[StreamEvent]: ...
+    def stream_parser(self) -> StreamParser:
+        """ストリーム1本ぶんの解析器を作る。"""
+
+    # ---- ストリームの解析を回す（同期・非同期） ---- #
+    def parse_stream(self, events: Iterator[tuple[str, str]]) -> Iterator[StreamEvent]:
+        """SSE イベント列 → StreamEvent 列（最後に done）。"""
+        parser = self.stream_parser()
+        for event, data in events:
+            yield from parser.feed(event, data)
+            if parser.closed:
+                break
+        yield from parser.finish()
+
+    async def aparse_stream(self, events: AsyncIterator[tuple[str, str]]) -> AsyncIterator[StreamEvent]:
+        """``parse_stream`` の非同期版。解析は同じ ``StreamParser`` が行う。"""
+        parser = self.stream_parser()
+        async for event, data in events:
+            for ev in parser.feed(event, data):
+                yield ev
+            if parser.closed:
+                break
+        for ev in parser.finish():
+            yield ev

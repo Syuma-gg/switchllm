@@ -34,7 +34,7 @@ def test_parse_model():
 def test_model_from_env(monkeypatch, api):
     monkeypatch.setenv("SWITCHLLM_MODEL", "anthropic:claude-sonnet-5-5")
     api.reply_json(OK)
-    client = Client(api_key="k", http_client=httpx.Client(transport=httpx.MockTransport(api.handler)))
+    client = api.raw_client(api_key="k")
     assert client.model == "anthropic:claude-sonnet-5-5"
     assert client.chat("hi").text == "ok"
 
@@ -50,7 +50,7 @@ def test_missing_key_and_unknown_provider(monkeypatch):
 def test_api_key_from_env(monkeypatch, api):
     monkeypatch.setenv("GEMINI_API_KEY", "from-env")
     api.reply_json({"candidates": [{"content": {"parts": [{"text": "x"}]}}]})
-    Client("gemini:m", http_client=httpx.Client(transport=httpx.MockTransport(api.handler))).chat("hi")
+    api.raw_client("gemini:m").chat("hi")
     assert api.requests[0].headers["x-goog-api-key"] == "from-env"
 
 

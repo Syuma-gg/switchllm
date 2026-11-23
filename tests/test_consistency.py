@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -19,7 +20,7 @@ class Case:
     model: str
     ok: dict[str, Any]  # 「hi」とだけ返す非ストリーミングの応答
     has_tool_choice: Callable[[dict[str, Any]], bool]
-    complete_stream: list[tuple[str | None, Any]]  # 「hi」を返して正しく終わるストリーム
+    text_stream: Callable[[str], list[tuple[str | None, Any]]]  # 受け取った本文を返して正しく終わるストリーム
     truncated_stream: list[tuple[str | None, Any]]  # 「途中」まで送って、完了の合図なしに閉じる
     error_stream: list[tuple[str | None, Any]]  # 途中で「boom」というエラーイベントが届く
     unknown_event: tuple[str | None, Any]  # 将来足されるかもしれない、知らないイベント
@@ -46,20 +47,24 @@ def _anthropic_end() -> list[tuple[str | None, Any]]:
     ]
 
 
-_RESPONSES_OK = {
-    "status": "completed",
-    "output": [{"type": "message", "content": [{"type": "output_text", "text": "hi"}]}],
-    "usage": {},
-}
+def _responses_ok(text: str) -> dict[str, Any]:
+    return {
+        "status": "completed",
+        "output": [{"type": "message", "content": [{"type": "output_text", "text": text}]}],
+        "usage": {},
+    }
+
+
+_RESPONSES_OK = _responses_ok("hi")
 
 CASES = [
     Case(
         model="openai:gpt-5.5",
         ok=_RESPONSES_OK,
         has_tool_choice=lambda body: "tool_choice" in body,
-        complete_stream=[
-            ("response.output_text.delta", {"type": "response.output_text.delta", "delta": "hi"}),
-            ("response.completed", {"type": "response.completed", "response": _RESPONSES_OK}),
+        text_stream=lambda text: [
+            ("response.output_text.delta", {"type": "response.output_text.delta", "delta": text}),
+            ("response.completed", {"type": "response.completed", "response": _responses_ok(text)}),
         ],
         truncated_stream=[("response.output_text.delta", {"type": "response.output_text.delta", "delta": "途中"})],
         error_stream=[
@@ -74,8 +79,8 @@ CASES = [
         model="openai-chat:gpt-x",
         ok={"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}]},
         has_tool_choice=lambda body: "tool_choice" in body,
-        complete_stream=[
-            (None, {"choices": [{"delta": {"content": "hi"}}]}),
+        text_stream=lambda text: [
+            (None, {"choices": [{"delta": {"content": text}}]}),
             (None, {"choices": [{"delta": {}, "finish_reason": "stop"}]}),
             (None, "[DONE]"),
         ],
@@ -90,7 +95,7 @@ CASES = [
         model="anthropic:claude-sonnet-5-5",
         ok={"content": [{"type": "text", "text": "hi"}], "stop_reason": "end_turn", "usage": {}},
         has_tool_choice=lambda body: "tool_choice" in body,
-        complete_stream=[*_anthropic_text("hi"), *_anthropic_end()],
+        text_stream=lambda text: [*_anthropic_text(text), *_anthropic_end()],
         truncated_stream=_anthropic_text("途中"),
         error_stream=[*_anthropic_text("途中"), ("error", {"type": "error", "error": {"type": "overloaded_error", "message": "boom"}})],
         unknown_event=("something_new", {"type": "something_new"}),
@@ -102,7 +107,7 @@ CASES = [
         model="gemini:gemini-flash-latest",
         ok={"candidates": [{"content": {"parts": [{"text": "hi"}]}, "finishReason": "STOP"}]},
         has_tool_choice=lambda body: "toolConfig" in body,
-        complete_stream=[(None, {"candidates": [{"content": {"parts": [{"text": "hi"}]}, "finishReason": "STOP"}]})],
+        text_stream=lambda text: [(None, {"candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": "STOP"}]})],
         truncated_stream=[(None, {"candidates": [{"content": {"parts": [{"text": "途中"}]}}]})],
         error_stream=[
             (None, {"candidates": [{"content": {"parts": [{"text": "途中"}]}}]}),
@@ -152,13 +157,29 @@ def test_tool_choice_is_sent_only_when_given(api, case):
 
 def test_stream_ends_with_one_done_matching_chat(api, case):
     api.reply_json(case.ok)
-    api.reply_sse(case.complete_stream)
+    api.reply_sse(case.text_stream("hi"))
     client = api.client(case.model)
     res = client.chat("hi")
     events = list(client.stream("hi"))
     assert [e.type for e in events].count("done") == 1 and events[-1].type == "done"
     assert "".join(e.text for e in events if e.type == "text") == "hi"
     assert (events[-1].response.text, events[-1].response.stop_reason) == (res.text, res.stop_reason) == ("hi", "end")
+
+
+def test_streams_on_one_client_do_not_mix(api, case):
+    # エージェントのループのように、同じクライアントで stream() を何度も呼ぶ。2本を交互に読んでも、
+    # 読み終えたあとにもう1本読んでも、前のストリームの本文や終わりの合図が混ざらない
+    for text in ("一つ目", "二つ目", "三つ目"):
+        api.reply_sse(case.text_stream(text))
+    client = api.client(case.model)
+    first, second = [], []
+    for a, b in itertools.zip_longest(client.stream("1"), client.stream("2")):
+        first += [a] if a is not None else []
+        second += [b] if b is not None else []
+    third = list(client.stream("3"))
+    for events, text in ((first, "一つ目"), (second, "二つ目"), (third, "三つ目")):
+        assert [e.type for e in events] == ["text", "done"], [e.type for e in events]
+        assert (events[0].text, events[-1].response.text) == (text, text)
 
 
 def test_truncated_stream_raises_instead_of_looking_complete(api, case):
@@ -181,6 +202,6 @@ def test_error_event_raises_stream_error(api, case):
 
 def test_unknown_stream_events_are_ignored(api, case):
     # プロバイダーは新しいイベントを足すので、知らないイベントで失敗しない（CLAUDE.md の不変条件 3）
-    api.reply_sse([case.unknown_event, *case.complete_stream])
+    api.reply_sse([case.unknown_event, *case.text_stream("hi")])
     events = list(api.client(case.model).stream("hi"))
     assert events[-1].type == "done" and events[-1].response.text == "hi"

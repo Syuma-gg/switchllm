@@ -9,7 +9,8 @@
 <!-- public-api:start -->
 | 名前 | 種類 | 説明 |
 |---|---|---|
-| `Client` | クラス | 唯一の入口。`chat()` / `stream()` / `with_model()` / `close()` |
+| `Client` | クラス | 同期の入口。`chat()` / `stream()` / `with_model()` / `close()` |
+| `AsyncClient` | クラス | 非同期の入口。引数とメソッドの名前は `Client` と同じで、`await chat()`、`async for ev in stream()`、`with_model()`、`await aclose()`・`async with`。`http_client=` には `httpx.AsyncClient` を渡す（[判断](../design-docs/async-client.md)） |
 | `parse_model` | 関数 | `"provider:model"` を最初の `:` で分解する |
 | `MODEL_ENV` | 定数 | モデル文字列を読む環境変数の名前（`"SWITCHLLM_MODEL"`） |
 | `register_provider` | 関数 | OpenAI 互換サーバーなどを名前付きで登録する |
@@ -22,7 +23,8 @@
 | `StreamEvent` | クラス | `stream()` のイベント（`text` / `thinking` / `done`） |
 | `Tool` | クラス | ツール定義（名前・説明・JSON Schema・関数） |
 | `tool` | デコレーター | 関数から `Tool` を作る。対応外の型には `parameters=` |
-| `run_tool_calls` | 関数 | ツール呼び出しをまとめて実行し、結果のメッセージを返す |
+| `run_tool_calls` | 関数 | ツール呼び出しをまとめて実行し、結果のメッセージを返す。`async def` のツールは実行せず、`arun_tool_calls` を使うよう `is_error=True` の結果で知らせる |
+| `arun_tool_calls` | 関数 | `run_tool_calls` の非同期版（`await` する）。`async def` のツールは await し、普通の関数はそのまま呼ぶ。呼び出しを並行に実行し、結果は呼び出しの順に返す |
 | `SwitchLLMError` | 例外 | このライブラリの例外の基底クラス |
 | `ConfigurationError` | 例外 | 設定の誤り（モデル文字列、APIキー未設定など） |
 | `UnsupportedFeatureError` | 例外 | 選んだプロバイダーが対応していない指定 |
@@ -75,11 +77,11 @@
 |---|---|
 | `chat(extra=...)` / `stream(extra=...)` | どのプロバイダーにも、リクエスト本体にそのままマージする |
 | `chat(extra_by_provider=...)` / `stream(extra_by_provider=...)` | `{"anthropic": {...}, "openai": {...}}` の形。モデル文字列の `provider:` 部分と同じ名前の分だけを `extra` に深くマージする（同じキーはこちらが優先）。知らない名前は `ConfigurationError`（[判断](../design-docs/provider-specific-params.md)） |
-| `Client.with_model(model, **overrides)` | 接続を共有したまま別モデルのクライアントを作る。同じプロバイダーなら api_key / base_url / オプションを引き継ぎ、別のプロバイダーへは timeout / max_retries / retry_backoff だけを引き継ぐ |
+| `Client.with_model(model, **overrides)` | 接続を共有したまま別モデルのクライアントを作る。同じプロバイダーなら api_key / base_url / オプションを引き継ぎ、別のプロバイダーへは timeout / max_retries / retry_backoff だけを引き継ぐ。`AsyncClient.with_model()` も同じで、`AsyncClient` を返す |
 
 ### プロバイダー別のオプション
 
-`Client(..., **options)` と `register_provider(..., **options)` で渡す。アダプターごとに下の名前だけを受け付け、それ以外は `ConfigurationError` にする。
+`Client(..., **options)`・`AsyncClient(..., **options)` と `register_provider(..., **options)` で渡す。アダプターごとに下の名前だけを受け付け、それ以外は `ConfigurationError` にする。
 
 <!-- options:start -->
 | 名前 | アダプター | 意味 |

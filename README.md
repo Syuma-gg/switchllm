@@ -115,6 +115,29 @@ def place_order(order: dict) -> str:
 - Parallel tool calls are supported (for Anthropic and Gemini, the results are sent together in one message)
 - `run_tool_calls` runs your functions with arguments chosen by the model. Validate the arguments in functions that do anything dangerous ([SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md), in Japanese)
 
+### Async
+
+`AsyncClient` takes the same arguments and has the same methods as `Client`. Await `chat()`, and iterate `stream()` with `async for` (without `await`).
+
+```python
+import asyncio
+from switchllm import AsyncClient
+
+async def main():
+    async with AsyncClient("anthropic:claude-sonnet-5-5") as client:
+        res = await client.chat("What is the capital of Japan?")
+        async for ev in client.stream("Write a haiku"):
+            if ev.type == "text":
+                print(ev.text, end="")
+
+asyncio.run(main())
+```
+
+- Requests can run concurrently (`asyncio.gather(client.chat(a), client.chat(b))`). Waits between retries do not block the event loop
+- To use your own connection, pass `http_client=httpx.AsyncClient(...)`. Clients made with `with_model()` share it. Close the client with `await client.aclose()` or `async with`
+- A stream closes its connection when you read it to the end. If you `break` out early and want the connection closed at once, wrap it: `async with contextlib.aclosing(client.stream(...)) as events:`
+- `await arun_tool_calls(tools, res.tool_calls)` awaits `async def` tools and calls plain functions as they are. It runs the calls concurrently and returns the results in the order of the calls. `run_tool_calls` does not run `async def` tools: it returns an error result that says to use `arun_tool_calls`
+
 ### Saving and restoring history
 
 ```python
@@ -223,7 +246,6 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 ## Known limitations
 
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` (this costs a small amount; add `--collect-only` first to see how many calls it makes without calling the APIs)
-- No async support yet
 - Image input is supported; audio, PDF, and file input are not. Image URLs are not supported for Gemini (pass base64 instead)
 - Reasoning text: OpenAI, Claude 5 models, and Gemini return no reasoning summary unless you ask, so `res.thinking` is often `None`. Ask in each provider's format with `extra_by_provider=` (OpenAI `{"reasoning": {"summary": "auto"}}`, Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`, Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`)
 - Anthropic: the default API version is `2026-10-21`, which rejects `temperature` on every model, so `temperature=` raises `UnsupportedFeatureError` before sending. For older models that still accept it, use `Client(..., anthropic_version="2023-06-01")`. Current Claude models reject a non-default `temperature` even on the older version ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md), in Japanese)

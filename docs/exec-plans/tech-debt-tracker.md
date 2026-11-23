@@ -5,7 +5,6 @@
 | 負債 | 影響 | 対応方針 |
 |---|---|---|
 | 実 API で検証していない | 実際には動かない箇所があるかもしれない | [実 API 検証](active/real-api-verification.md) |
-| 非同期クライアントがない | async のアプリから使いにくい | [モデルの層の機能を足す](active/model-layer-features.md) の 4 |
 | 推論の本文（要約）を返させる指定が共通でない | OpenAI の推論モデル・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`Response.thinking` は多くのモデルで `None` になる。頼むには各社の形式を書き分ける（OpenAI `reasoning.summary`、Anthropic `thinking.display`、Gemini `includeThoughts`）。DeepSeek は常に返す | 共通の指定（例: `Client.chat(..., reasoning_summary=True)`）を足すか、要望が出たら決める。Anthropic は `thinking: {"type": "adaptive"}` も一緒に送る必要があり、4.5 系は 400、Opus 4.6〜4.8 では考えるようになる。2026-11-21 に推論の強さを調べていて見つけた（[判断](../design-docs/reasoning-effort.md)） |
 | Gemini が generateContent を使っている | Google はレガシー扱いで、Interactions API を勧めている | 当面は動く見込み。移行するかは要望と Google の動向で決める（U7） |
 | 設計文書・CHANGELOG・コメントが日本語だけ（README は英語版がある） | 海外の利用者は、設計の理由や変更履歴を読めない | 要望が出たら、利用者が直接読む CHANGELOG から英語化を検討する |

@@ -11,12 +11,12 @@ DeepSeek 形式の ``reasoning_content`` を返したときだけ、メッセー
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from typing import Any
 
 from .._http import HTTPRequest
 from ..errors import StreamError, UnsupportedFeatureError
 from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
-from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice, schema_name
+from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice, schema_name
 from .openai_responses import _parse_args
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -153,62 +153,73 @@ class OpenAIChatProvider(Provider):
             thinking=thinking if isinstance(thinking, str) and thinking else None,
         )
 
-    def parse_stream(self, events: Iterator[tuple[str, str]]) -> Iterator[StreamEvent]:
-        text: list[str] = []
+    def stream_parser(self) -> StreamParser:
+        return _ChatStream(self)
+
+
+class _ChatStream(StreamParser):
+    """Chat Completions の SSE。差分を集め、最後に非ストリーミングと同じ形に組み直す。"""
+
+    def __init__(self, provider: OpenAIChatProvider) -> None:
+        self.provider = provider
+        self.text: list[str] = []
         # 推論テキストは、来たフィールド名（reasoning_content / reasoning）ごとに分けて集める。
         # 名前を変えずに組み直さないと、送り返さない reasoning まで送り返すことになる
-        thinking: dict[str, list[str]] = {}
-        calls: dict[int, dict[str, str]] = {}
-        finish: str | None = None
-        usage: dict[str, Any] | None = None
-        model: str | None = None
-        got_done = False
-        for _event, data in events:
-            if data.strip() == "[DONE]":
-                got_done = True
-                break
-            obj = json.loads(data)
-            if obj.get("error"):
-                err = obj["error"]
-                raise StreamError(err.get("message", str(err)) if isinstance(err, dict) else str(err), provider=self.key, body=obj)
-            model = obj.get("model") or model
-            if obj.get("usage"):
-                usage = obj["usage"]
-            for choice in obj.get("choices") or []:
-                delta = choice.get("delta") or {}
-                if delta.get("content"):
-                    text.append(delta["content"])
-                    yield StreamEvent("text", text=delta["content"])
-                for field_name in ("reasoning_content", "reasoning"):
-                    r = delta.get(field_name)
-                    if isinstance(r, str) and r:
-                        thinking.setdefault(field_name, []).append(r)
-                        yield StreamEvent("thinking", text=r)
-                        break
-                for tc in delta.get("tool_calls") or []:
-                    slot = calls.setdefault(tc.get("index", len(calls)), {"id": "", "name": "", "arguments": ""})
-                    if tc.get("id"):
-                        slot["id"] = tc["id"]
-                    fn = tc.get("function") or {}
-                    if fn.get("name") and not slot["name"]:
-                        slot["name"] = fn["name"]
-                    if fn.get("arguments"):
-                        slot["arguments"] += fn["arguments"]
-                if choice.get("finish_reason"):
-                    finish = choice["finish_reason"]
+        self.thinking: dict[str, list[str]] = {}
+        self.calls: dict[int, dict[str, str]] = {}
+        self.finish_reason: str | None = None
+        self.usage: dict[str, Any] | None = None
+        self.model: str | None = None
 
-        if not got_done and finish is None:
+    def feed(self, event: str, data: str) -> list[StreamEvent]:
+        if data.strip() == "[DONE]":
+            self.closed = True
+            return []
+        obj = json.loads(data)
+        if obj.get("error"):
+            err = obj["error"]
+            raise StreamError(err.get("message", str(err)) if isinstance(err, dict) else str(err), provider=self.provider.key, body=obj)
+        self.model = obj.get("model") or self.model
+        if obj.get("usage"):
+            self.usage = obj["usage"]
+        out: list[StreamEvent] = []
+        for choice in obj.get("choices") or []:
+            delta = choice.get("delta") or {}
+            if delta.get("content"):
+                self.text.append(delta["content"])
+                out.append(StreamEvent("text", text=delta["content"]))
+            for field_name in ("reasoning_content", "reasoning"):
+                r = delta.get(field_name)
+                if isinstance(r, str) and r:
+                    self.thinking.setdefault(field_name, []).append(r)
+                    out.append(StreamEvent("thinking", text=r))
+                    break
+            for tc in delta.get("tool_calls") or []:
+                slot = self.calls.setdefault(tc.get("index", len(self.calls)), {"id": "", "name": "", "arguments": ""})
+                if tc.get("id"):
+                    slot["id"] = tc["id"]
+                fn = tc.get("function") or {}
+                if fn.get("name") and not slot["name"]:
+                    slot["name"] = fn["name"]
+                if fn.get("arguments"):
+                    slot["arguments"] += fn["arguments"]
+            if choice.get("finish_reason"):
+                self.finish_reason = choice["finish_reason"]
+        return out
+
+    def finish(self) -> list[StreamEvent]:
+        if not self.closed and self.finish_reason is None:
             # 完了の合図なしに閉じた。途中までを正常終了として返すと、切れたことに気づけない
-            raise StreamError("stream ended before finish_reason or [DONE]", provider=self.key)
+            raise StreamError("stream ended before finish_reason or [DONE]", provider=self.provider.key)
 
         # 非ストリーミングと同じ形に組み直して parse_response を再利用する
-        message: dict[str, Any] = {"role": "assistant", "content": "".join(text)}
-        if calls:
+        message: dict[str, Any] = {"role": "assistant", "content": "".join(self.text)}
+        if self.calls:
             message["tool_calls"] = [
                 {"id": s["id"] or f"call_{i}", "type": "function", "function": {"name": s["name"], "arguments": s["arguments"]}}
-                for i, s in sorted(calls.items())
+                for i, s in sorted(self.calls.items())
             ]
-        for field_name, pieces in thinking.items():
+        for field_name, pieces in self.thinking.items():
             message[field_name] = "".join(pieces)
-        final = {"model": model, "choices": [{"message": message, "finish_reason": finish}], "usage": usage or {}}
-        yield StreamEvent("done", response=self.parse_response(final))
+        final = {"model": self.model, "choices": [{"message": message, "finish_reason": self.finish_reason}], "usage": self.usage or {}}
+        return [StreamEvent("done", response=self.provider.parse_response(final))]

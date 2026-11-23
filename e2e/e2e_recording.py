@@ -1,6 +1,6 @@
 """実 API の応答の記録と再生（docs/testing.md）。
 
-- 記録（``Recorder``）: E2E テストを実 API で回したときに、HTTP のやりとりをそのまま残す。
+- 記録（``Recorder``、非同期のクライアント用は ``AsyncRecorder``）: E2E テストを実 API で回したときに、HTTP のやりとりをそのまま残す。
   リクエストのヘッダー（APIキーが入る）と URL の ``key`` は残さない。応答のヘッダーは
   ``content-type`` と ``retry-after`` だけを残す。保存するときは、キーの値を ``<redacted>`` に置き換える
 - 再生（``Replayer``）: 記録した応答を順に返す。ライブラリが送るリクエストが記録と違えば失敗する。
@@ -80,15 +80,40 @@ class Recorder(httpx.BaseTransport):
             content = response.read()  # content-encoding（gzip など）を解いた本文
         finally:
             response.close()
-        self.exchanges.append({
-            "request": _describe_request(request),
-            "response": _describe_response(response.status_code, response.headers, content),
-        })
-        headers = {k: v for k, v in response.headers.items() if k.lower() in KEEP_RESPONSE_HEADERS}
-        return httpx.Response(response.status_code, headers=headers, content=content, request=request)
+        return _keep(self.exchanges, request, response, content)
 
     def close(self) -> None:
         self.inner.close()
+
+
+class AsyncRecorder(httpx.AsyncBaseTransport):
+    """``Recorder`` の非同期版（``AsyncClient`` の E2E テスト用）。記録の形は同じ。"""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self.inner = inner
+        self.exchanges: list[dict[str, Any]] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await self.inner.handle_async_request(request)
+        try:
+            content = await response.aread()
+        finally:
+            await response.aclose()
+        return _keep(self.exchanges, request, response, content)
+
+    async def aclose(self) -> None:
+        await self.inner.aclose()
+
+
+def _keep(exchanges: list[dict[str, Any]], request: httpx.Request, response: httpx.Response,
+          content: bytes) -> httpx.Response:
+    """やりとりを記録し、読み終えた本文で応答を作り直して返す。"""
+    exchanges.append({
+        "request": _describe_request(request),
+        "response": _describe_response(response.status_code, response.headers, content),
+    })
+    headers = {k: v for k, v in response.headers.items() if k.lower() in KEEP_RESPONSE_HEADERS}
+    return httpx.Response(response.status_code, headers=headers, content=content, request=request)
 
 
 def _canonical(value: Any) -> str:

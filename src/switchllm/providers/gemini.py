@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, Iterator
+from typing import Any
 
 from .._http import HTTPRequest
 from ..errors import ConfigurationError, StreamError, UnsupportedFeatureError
 from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
-from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice
+from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice
 
 SYNTHETIC_ID_PREFIX = "switchllm_"  # Gemini が id を返さなかった呼び出しに付ける仮 ID
 DUMMY_THOUGHT_SIGNATURE = "skip_thought_signature_validator"
@@ -222,47 +222,61 @@ class GeminiProvider(Provider):
             thinking="".join(thinking) or None,
         )
 
-    def parse_stream(self, events: Iterator[tuple[str, str]]) -> Iterator[StreamEvent]:
-        parts: list[dict[str, Any]] = []
-        finish: str | None = None
-        usage: dict[str, Any] = {}
-        last: dict[str, Any] = {}
-        for _event, data in events:
-            obj = json.loads(data)
-            if obj.get("error"):
-                err = obj["error"]
-                raise StreamError(err.get("message", str(err)), provider=self.key, body=obj)
-            last = obj
-            usage = obj.get("usageMetadata") or usage
-            for cand in (obj.get("candidates") or [])[:1]:
-                finish = cand.get("finishReason") or finish
-                for p in (cand.get("content") or {}).get("parts") or []:
-                    if "text" in p and "functionCall" not in p:
-                        if p["text"]:
-                            yield StreamEvent("thinking" if p.get("thought") else "text", text=p["text"])
-                        prev = parts[-1] if parts else None
-                        # 署名付きパート同士は結合できない（公式ドキュメントの注意）ので、
-                        # どちらにも署名がない連続テキストだけを結合する
-                        if (
-                            prev is not None
-                            and "text" in prev
-                            and "functionCall" not in prev
-                            and bool(prev.get("thought")) == bool(p.get("thought"))
-                            and "thoughtSignature" not in prev
-                            and "thoughtSignature" not in p
-                        ):
-                            prev["text"] += p["text"]
-                            continue
-                    parts.append(dict(p))
-        blocked = bool((last.get("promptFeedback") or {}).get("blockReason"))
-        if finish is None and not blocked:
+    def stream_parser(self) -> StreamParser:
+        return _GenerateStream(self)
+
+
+class _GenerateStream(StreamParser):
+    """streamGenerateContent の SSE。チャンクごとのパートを集め、最後に1つの応答に組み直す。
+    終わりの合図のイベントはないので、``closed`` は立てずに本文の終わりまで読む。"""
+
+    def __init__(self, provider: GeminiProvider) -> None:
+        self.provider = provider
+        self.parts: list[dict[str, Any]] = []
+        self.finish_reason: str | None = None
+        self.usage: dict[str, Any] = {}
+        self.last: dict[str, Any] = {}
+
+    def feed(self, event: str, data: str) -> list[StreamEvent]:
+        obj = json.loads(data)
+        if obj.get("error"):
+            err = obj["error"]
+            raise StreamError(err.get("message", str(err)), provider=self.provider.key, body=obj)
+        self.last = obj
+        self.usage = obj.get("usageMetadata") or self.usage
+        out: list[StreamEvent] = []
+        for cand in (obj.get("candidates") or [])[:1]:
+            self.finish_reason = cand.get("finishReason") or self.finish_reason
+            for p in (cand.get("content") or {}).get("parts") or []:
+                if "text" in p and "functionCall" not in p:
+                    if p["text"]:
+                        out.append(StreamEvent("thinking" if p.get("thought") else "text", text=p["text"]))
+                    prev = self.parts[-1] if self.parts else None
+                    # 署名付きパート同士は結合できない（公式ドキュメントの注意）ので、
+                    # どちらにも署名がない連続テキストだけを結合する
+                    if (
+                        prev is not None
+                        and "text" in prev
+                        and "functionCall" not in prev
+                        and bool(prev.get("thought")) == bool(p.get("thought"))
+                        and "thoughtSignature" not in prev
+                        and "thoughtSignature" not in p
+                    ):
+                        prev["text"] += p["text"]
+                        continue
+                self.parts.append(dict(p))
+        return out
+
+    def finish(self) -> list[StreamEvent]:
+        blocked = bool((self.last.get("promptFeedback") or {}).get("blockReason"))
+        if self.finish_reason is None and not blocked:
             # 最後のチャンクに finishReason が入る（U16）。なければ途中で切れている
-            raise StreamError("stream ended before finishReason", provider=self.key)
+            raise StreamError("stream ended before finishReason", provider=self.provider.key)
         final = {
-            "candidates": [{"content": {"role": "model", "parts": parts}, "finishReason": finish}],
-            "usageMetadata": usage,
-            "modelVersion": last.get("modelVersion"),
+            "candidates": [{"content": {"role": "model", "parts": self.parts}, "finishReason": self.finish_reason}],
+            "usageMetadata": self.usage,
+            "modelVersion": self.last.get("modelVersion"),
         }
-        if not parts and blocked:
-            final = {"candidates": [], "promptFeedback": last["promptFeedback"], "usageMetadata": usage}
-        yield StreamEvent("done", response=self.parse_response(final))
+        if not self.parts and blocked:
+            final = {"candidates": [], "promptFeedback": self.last["promptFeedback"], "usageMetadata": self.usage}
+        return [StreamEvent("done", response=self.provider.parse_response(final))]

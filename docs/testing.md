@@ -12,6 +12,8 @@ switchllm はテスト駆動で開発する（2026-11-17 に作者が決めた�
 | 記録の再生 | `e2e/`（`--models` なし） | 使わない | 既定の `python -m pytest`、Stop フック、CI | 実 API で通ったやりとりを再生し、ライブラリが今も同じリクエストを送り、同じ応答を同じように読むこと |
 | 実 API | `e2e/`（`--models` あり） | 使う（料金が発生する） | 手で回したときだけ | 各社が本当にその形式を受け付け、その形で返すこと（[E2E テスト](e2e-tests.md)） |
 
+`tests/` で `FakeAPI`（fixture の `api`）を使うテストは、同期の `Client` と非同期の `AsyncClient` の2通りで回る（テスト名の `[sync]` / `[async]`）。非同期のときの `api.client()` は、`AsyncClient` を同期のテストから呼べるように包んだもの（`AsyncDriver`）を返すので、同じテストのまま両方を確かめられる（[判断](design-docs/async-client.md)）。非同期にしかないこと（並行の送信、待つ間にイベントループを止めないこと）は `tests/test_async_client.py` で確かめる。テストのための依存（pytest-asyncio など）は入れない
+
 モックの層は、文書を読んで作った応答に頼っている。文書と実際の API が違っていても通ってしまう。記録の再生の層は、本物の応答を使うのでこの穴を埋める。さらに、実 API で確かめたリクエストからずれたら失敗するので、確かめた状態を守れる。
 
 ## 手順（テスト駆動）
@@ -55,5 +57,5 @@ python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" --rec
 ## 実装
 
 - 記録と再生: `e2e/e2e_recording.py`（テストは `tests/test_recording.py`）
-- E2E の設定（実 API と再生の切り替え）: `e2e/conftest.py`
+- E2E の設定（実 API と再生の切り替え）: `e2e/conftest.py`。`AsyncClient` のテストは `open_async_client` で、接続をテストの中のイベントループで作って閉じる
 - `tests/` のテストは `conftest` から import しない。共有するものは `tests/sample_tools.py` のような名前の違うモジュールに置く（`e2e/` にも `conftest.py` があり、両方を一度に回すと `import conftest` がどちらを指すか決まらない）

@@ -105,6 +105,14 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 | `test_reasoning_effort_with_tools` | `low` を指定したまま、ツールの往復で推論情報を送り返す | | 2 | U23〜U26 |
 | `test_turn_reasoning_off_after_tool_call`（Gemini 以外） | 推論したツールの呼び出しのあと、`none` で結果を渡す。Anthropic で、thinking を切ったリクエストに前の thinking ブロックを送り返せるかを見る | ○ | 2 | U24 |
 
+### 非同期（`test_e2e_async.py`）
+
+送るリクエストと応答の解析は同期の `Client` と同じものを使う（[判断](design-docs/async-client.md)）。ここでは、本物の HTTP の上で `AsyncClient` の非同期の送信と SSE の読み取りが最後まで動くことを確かめる。並行の送信は、記録の順序が決まらないので E2E では試さない（`tests/test_async_client.py` で確かめる）。
+
+| テスト | 確かめること | 境界 | 回数 | 前提 |
+|---|---|---|---|---|
+| `test_async_chat_and_stream` | `await chat()` が本文を返す。`async for` の `stream()` で、`done` が最後に1回だけ来て、`text` の差分をつなぐと `done` の本文になる | | 2 | |
+
 ### エラー（`test_e2e_errors.py`）
 
 失敗するリクエストは、多くのプロバイダーで課金されない。

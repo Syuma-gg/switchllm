@@ -5,7 +5,7 @@
     print(client.chat("こんにちは").text)
 """
 
-from .client import MODEL_ENV, Client, parse_model
+from .client import MODEL_ENV, AsyncClient, Client, parse_model
 from .errors import (
     APIConnectionError,
     APIError,
@@ -20,7 +20,7 @@ from .errors import (
     UnsupportedFeatureError,
 )
 from .providers import register_provider
-from .tools import Tool, run_tool_calls, tool
+from .tools import Tool, arun_tool_calls, run_tool_calls, tool
 from .types import ImagePart, Message, Response, StreamEvent, TextPart, ToolCall, Usage
 
 __version__ = "0.1.0"  # 版の正本。pyproject.toml はここを読む
@@ -28,6 +28,7 @@ __version__ = "0.1.0"  # 版の正本。pyproject.toml はここを読む
 __all__ = [
     "APIConnectionError",
     "APIError",
+    "AsyncClient",
     "AuthenticationError",
     "BadRequestError",
     "Client",
@@ -47,6 +48,7 @@ __all__ = [
     "ToolCall",
     "UnsupportedFeatureError",
     "Usage",
+    "arun_tool_calls",
     "parse_model",
     "register_provider",
     "run_tool_calls",

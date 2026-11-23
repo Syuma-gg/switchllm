@@ -1,12 +1,18 @@
-"""HTTP 送信・リトライ・SSE パースの共通処理。"""
+"""HTTP 送信・リトライ・SSE パースの共通処理。
+
+同期（``httpx.Client``）と非同期（``httpx.AsyncClient``）の両方を持つ。リトライの判断と SSE の分解は共有し、
+違うのは ``await`` するところだけにする（docs/design-docs/async-client.md）。
+"""
 
 from __future__ import annotations
 
+import inspect
 import math
 import random
 import time
+from contextlib import aclosing
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Union
 
 import httpx
 
@@ -28,7 +34,8 @@ class HTTPRequest:
 class RetryPolicy:
     max_retries: int = 2
     backoff: float = 0.5  # 秒。0 にするとテスト時に待たない
-    sleep: Callable[[float], None] = field(default=time.sleep)
+    #: 待つ関数。``AsyncClient`` は ``asyncio.sleep`` を使い、非同期の送信は戻り値が awaitable なら await する
+    sleep: Callable[[float], Union[None, Awaitable[None]]] = field(default=time.sleep)
 
     def delay(self, attempt: int, response: httpx.Response | None) -> float:
         retry_after = _retry_after(response) if response is not None else None
@@ -114,6 +121,16 @@ def _success_json(provider: str, response: httpx.Response) -> dict[str, Any]:
     )
 
 
+def _can_retry(resp: httpx.Response, attempt: int, retry: RetryPolicy) -> bool:
+    return resp.status_code in RETRYABLE_STATUS and attempt < retry.max_retries
+
+
+async def _asleep(retry: RetryPolicy, seconds: float) -> None:
+    waited = retry.sleep(seconds)
+    if inspect.isawaitable(waited):
+        await waited
+
+
 def request_json(
     client: httpx.Client, req: HTTPRequest, *, provider: str, retry: RetryPolicy
 ) -> dict[str, Any]:
@@ -130,38 +147,91 @@ def request_json(
 
         if resp.status_code < 400:
             return _success_json(provider, resp)
-        if resp.status_code in RETRYABLE_STATUS and attempt < retry.max_retries:
+        if _can_retry(resp, attempt, retry):
             retry.sleep(retry.delay(attempt, resp))
             attempt += 1
             continue
         raise make_api_error(provider, resp)
 
 
-def iter_sse(lines: Iterator[str]) -> Iterator[tuple[str, str]]:
-    """Server-Sent Events を ``(event名, data文字列)`` に分解する。
+async def arequest_json(
+    client: httpx.AsyncClient, req: HTTPRequest, *, provider: str, retry: RetryPolicy
+) -> dict[str, Any]:
+    """``request_json`` の非同期版。リトライの条件と待ち時間は同じ。"""
+    attempt = 0
+    while True:
+        try:
+            resp = await client.request(req.method, req.url, headers=req.headers, json=req.body)
+        except httpx.TransportError as e:
+            if attempt < retry.max_retries:
+                await _asleep(retry, retry.delay(attempt, None))
+                attempt += 1
+                continue
+            raise APIConnectionError(f"[{provider}] {e!r}") from e
 
-    仕様: 空行でイベント区切り、``data:`` が複数行なら改行で連結、``:`` で始まる行はコメント。
-    """
-    event = ""
-    data: list[str] = []
-    for raw in lines:
+        if resp.status_code < 400:
+            return _success_json(provider, resp)
+        if _can_retry(resp, attempt, retry):
+            await _asleep(retry, retry.delay(attempt, resp))
+            attempt += 1
+            continue
+        raise make_api_error(provider, resp)
+
+
+class _SSEDecoder:
+    """Server-Sent Events を1行ずつ受け取り、``(event名, data文字列)`` にまとめる。
+
+    仕様: 空行でイベント区切り、``data:`` が複数行なら改行で連結、``:`` で始まる行はコメント。"""
+
+    def __init__(self) -> None:
+        self._event = ""
+        self._data: list[str] = []
+
+    def line(self, raw: str) -> tuple[str, str] | None:
+        """1行を読む。イベントが1つ揃ったら返す。"""
         line = raw.rstrip("\r")
         if line == "":
-            if data:
-                yield event, "\n".join(data)
-            event, data = "", []
-            continue
+            return self.end()
         if line.startswith(":"):
-            continue
+            return None
         name, _, value = line.partition(":")
         if value.startswith(" "):
             value = value[1:]
         if name == "event":
-            event = value
+            self._event = value
         elif name == "data":
-            data.append(value)
-    if data:
-        yield event, "\n".join(data)
+            self._data.append(value)
+        return None
+
+    def end(self) -> tuple[str, str] | None:
+        """区切りの空行、または本文の終わり。``data:`` がなかったイベントは返さない。"""
+        item = (self._event, "\n".join(self._data)) if self._data else None
+        self._event, self._data = "", []
+        return item
+
+
+def iter_sse(lines: Iterator[str]) -> Iterator[tuple[str, str]]:
+    """Server-Sent Events を ``(event名, data文字列)`` に分解する。"""
+    decoder = _SSEDecoder()
+    for raw in lines:
+        item = decoder.line(raw)
+        if item is not None:
+            yield item
+    item = decoder.end()
+    if item is not None:
+        yield item
+
+
+async def aiter_sse(lines: AsyncIterator[str]) -> AsyncIterator[tuple[str, str]]:
+    """``iter_sse`` の非同期版。"""
+    decoder = _SSEDecoder()
+    async for raw in lines:
+        item = decoder.line(raw)
+        if item is not None:
+            yield item
+    item = decoder.end()
+    if item is not None:
+        yield item
 
 
 def stream_sse(
@@ -175,7 +245,7 @@ def stream_sse(
             with client.stream(req.method, req.url, headers=req.headers, json=req.body) as resp:
                 if resp.status_code >= 400:
                     resp.read()
-                    if resp.status_code in RETRYABLE_STATUS and attempt < retry.max_retries:
+                    if _can_retry(resp, attempt, retry):
                         retry.sleep(retry.delay(attempt, resp))
                         attempt += 1
                         continue
@@ -188,6 +258,36 @@ def stream_sse(
             # 途中まで受信済みなら再送すると重複するので、そのまま失敗させる
             if not started and attempt < retry.max_retries:
                 retry.sleep(retry.delay(attempt, None))
+                attempt += 1
+                continue
+            raise APIConnectionError(f"[{provider}] {e!r}") from e
+
+
+async def astream_sse(
+    client: httpx.AsyncClient, req: HTTPRequest, *, provider: str, retry: RetryPolicy
+) -> AsyncIterator[tuple[str, str]]:
+    """``stream_sse`` の非同期版。リトライは同じく「最初のバイトを受け取る前」だけ行う。"""
+    attempt = 0
+    started = False
+    while True:
+        try:
+            async with client.stream(req.method, req.url, headers=req.headers, json=req.body) as resp:
+                if resp.status_code >= 400:
+                    await resp.aread()
+                    if _can_retry(resp, attempt, retry):
+                        await _asleep(retry, retry.delay(attempt, resp))
+                        attempt += 1
+                        continue
+                    raise make_api_error(provider, resp)
+                # 途中で閉じられたとき、内側のジェネレーターもその場で閉じる（GC での後片づけに任せない）
+                async with aclosing(aiter_sse(resp.aiter_lines())) as items:
+                    async for item in items:
+                        started = True
+                        yield item
+                return
+        except httpx.TransportError as e:
+            if not started and attempt < retry.max_retries:
+                await _asleep(retry, retry.delay(attempt, None))
                 attempt += 1
                 continue
             raise APIConnectionError(f"[{provider}] {e!r}") from e

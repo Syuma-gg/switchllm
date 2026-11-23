@@ -11,19 +11,20 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import os
 from pathlib import Path
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import httpx
 import pytest
-from e2e_recording import RECORDINGS, Recorder, Replayer, load, recording_path, save
+from e2e_recording import RECORDINGS, AsyncRecorder, Recorder, Replayer, load, recording_path, save
 from e2e_support import VISION_ADAPTERS, adapter_of, pairs, relevant, requires_key, split_models, switch_premises
 
 import switchllm
-from switchllm import Client, SwitchLLMError
+from switchllm import AsyncClient, Client, SwitchLLMError
 from switchllm.providers import ADAPTERS, PRESETS
 
 LIVE = pytest.StashKey[bool]()
@@ -208,50 +209,98 @@ def _secrets(extra: list[str]) -> list[str]:
     return [os.environ[e] for e in envs if os.environ.get(e)] + extra
 
 
-@pytest.fixture
-def make_client(request: pytest.FixtureRequest) -> Iterator[Callable[..., Client]]:
-    """このテスト用のクライアントを作る。実 API なら記録し、再生なら記録した応答を返す。"""
-    config = request.config
-    live = config.stash[LIVE]
-    path = _recording_of(request.node)
-    recorder = replayer = None
-    if live:
-        recorder = Recorder(httpx.HTTPTransport())
-        transport: httpx.BaseTransport = recorder
-    else:
-        _, exchanges = load(path)
-        replayer = Replayer(exchanges)
-        transport = httpx.MockTransport(replayer)
-    http = httpx.Client(transport=transport, timeout=httpx.Timeout(120.0, connect=10.0))
-    passed_keys: list[str] = []
+TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 
-    def make(model: str, **kw: Any) -> Client:
-        if not live:
+
+class _Exchanges:
+    """1つのテストのやりとり。実 API なら記録し、再生なら記録した応答を返す。同期と非同期で共有する。"""
+
+    def __init__(self, request: pytest.FixtureRequest) -> None:
+        self.request = request
+        self.live: bool = request.config.stash[LIVE]
+        self.path = _recording_of(request.node)
+        self.recorder: Recorder | AsyncRecorder | None = None
+        self.replayer: Replayer | None = None
+        self.passed_keys: list[str] = []
+        if not self.live:
+            _, exchanges = load(self.path)
+            self.replayer = Replayer(exchanges)
+
+    def transport(self) -> httpx.BaseTransport:
+        if self.replayer is not None:
+            return httpx.MockTransport(self.replayer)
+        self.recorder = Recorder(httpx.HTTPTransport())
+        return self.recorder
+
+    def async_transport(self) -> httpx.AsyncBaseTransport:
+        if self.replayer is not None:
+            return httpx.MockTransport(self.replayer)
+        self.recorder = AsyncRecorder(httpx.AsyncHTTPTransport())
+        return self.recorder
+
+    def client_kwargs(self, model: str, kw: dict[str, Any]) -> dict[str, Any]:
+        if not self.live:
             kw.setdefault("retry_backoff", 0)
             if requires_key(model):
                 kw.setdefault("api_key", REPLAY_KEY)
         if kw.get("api_key"):
-            passed_keys.append(kw["api_key"])
-        return Client(model, http_client=http, **kw)
+            self.passed_keys.append(kw["api_key"])
+        return kw
+
+    def finish(self) -> None:
+        """テストが通ったら、再生では記録をすべて使ったか確かめ、``--record`` なら記録を保存する。"""
+        node, config = self.request.node, self.request.config
+        report = config.stash[REPORTS].get(node.nodeid)
+        if report is None or not report.passed:
+            return
+        if self.replayer is not None:
+            unused = self.replayer.unused()
+            assert not unused, f"{unused} recorded request(s) were not sent. Re-record with --models ... --record"
+        if self.recorder is not None and config.getoption("--record"):
+            params = _params(node)
+            meta: dict[str, Any] = {
+                "nodeid": node.nodeid,
+                "models": _models_of(node),
+                "recorded_at": datetime.date.today().isoformat(),
+                "switchllm_version": switchllm.__version__,
+            }
+            if "pair" in params:
+                meta["pair"] = list(params["pair"])
+            save(self.path, meta, self.recorder.exchanges, secrets=_secrets(self.passed_keys))
+
+
+@pytest.fixture
+def make_client(request: pytest.FixtureRequest) -> Iterator[Callable[..., Client]]:
+    """このテスト用のクライアントを作る。実 API なら記録し、再生なら記録した応答を返す。"""
+    exchanges = _Exchanges(request)
+    http = httpx.Client(transport=exchanges.transport(), timeout=TIMEOUT)
+
+    def make(model: str, **kw: Any) -> Client:
+        return Client(model, http_client=http, **exchanges.client_kwargs(model, kw))
 
     yield make
     http.close()
+    exchanges.finish()
 
-    report = config.stash[REPORTS].get(request.node.nodeid)
-    if replayer is not None and report is not None and report.passed:
-        unused = replayer.unused()
-        assert not unused, f"{unused} recorded request(s) were not sent. Re-record with --models ... --record"
-    if recorder is not None and config.getoption("--record") and report is not None and report.passed:
-        params = _params(request.node)
-        meta: dict[str, Any] = {
-            "nodeid": request.node.nodeid,
-            "models": _models_of(request.node),
-            "recorded_at": datetime.date.today().isoformat(),
-            "switchllm_version": switchllm.__version__,
-        }
-        if "pair" in params:
-            meta["pair"] = list(params["pair"])
-        save(path, meta, recorder.exchanges, secrets=_secrets(passed_keys))
+
+@pytest.fixture
+def open_async_client(request: pytest.FixtureRequest) -> Iterator[Callable[..., Any]]:
+    """このテスト用の ``AsyncClient`` を ``async with open_async_client(model) as client:`` で開く。
+
+    接続は、テストの中のイベントループで作って閉じる（ループをまたいで使わないため）。1つのテストで1回だけ開く。"""
+    exchanges = _Exchanges(request)
+    transport = exchanges.async_transport()
+
+    @contextlib.asynccontextmanager
+    async def open_client(model: str, **kw: Any) -> AsyncIterator[AsyncClient]:
+        http = httpx.AsyncClient(transport=transport, timeout=TIMEOUT)
+        try:
+            yield AsyncClient(model, http_client=http, **exchanges.client_kwargs(model, kw))
+        finally:
+            await http.aclose()
+
+    yield open_client
+    exchanges.finish()
 
 
 def replay_kw(config: pytest.Config, model: str) -> dict[str, Any]:

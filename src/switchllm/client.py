@@ -1,4 +1,4 @@
-"""利用者が触る唯一の入口。
+"""利用者が触る入口。同期の ``Client`` と、非同期の ``AsyncClient``。
 
     client = Client("anthropic:claude-sonnet-5-5")   # ← ここだけ変えればプロバイダーが変わる
     res = client.chat("こんにちは")
@@ -9,13 +9,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-from typing import Any, Iterable, Iterator, Sequence, Union
+import time
+from contextlib import aclosing
+from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Sequence, Union
 
 import httpx
 
-from ._http import RetryPolicy, request_json, stream_sse
+from ._http import RetryPolicy, arequest_json, astream_sse, request_json, stream_sse
 from .errors import ConfigurationError
 from .providers import PRESETS, create_provider
 from .providers.base import (
@@ -129,19 +132,51 @@ def _fill_parsed(res: Response) -> None:
         res.parsed = None
 
 
-class Client:
-    def __init__(
+def _finish(req: ChatRequest, res: Response) -> Response:
+    if req.response_schema is not None:
+        _fill_parsed(res)
+    return res
+
+
+def _finish_event(req: ChatRequest, ev: StreamEvent) -> StreamEvent:
+    if ev.type == "done" and ev.response is not None:
+        _finish(req, ev.response)
+    return ev
+
+
+def _type_name(obj: Any) -> str:
+    cls = type(obj)
+    module = "httpx" if cls.__module__.startswith("httpx.") else cls.__module__
+    return f"{module}.{cls.__qualname__}"
+
+
+class _BaseClient:
+    """``Client`` と ``AsyncClient`` が共有する部分。モデル文字列の解決、送る前の検査、
+    ``ChatRequest`` の組み立て、``with_model()`` で引き継ぐ設定（docs/design-docs/async-client.md）。"""
+
+    #: このクライアントが使う httpx のクライアントの型（``httpx.Client`` / ``httpx.AsyncClient``）
+    _http_type: type = httpx.Client
+    #: リトライの前に待つ関数
+    _retry_sleep: Callable[[float], Any] = staticmethod(time.sleep)
+
+    def _setup(
         self,
-        model: str | None = None,
+        model: str | None,
         *,
-        api_key: str | None = None,
-        base_url: str | None = None,
-        timeout: float = 120.0,
-        max_retries: int = 2,
-        retry_backoff: float = 0.5,
-        http_client: httpx.Client | None = None,
-        **provider_options: Any,
+        api_key: str | None,
+        base_url: str | None,
+        timeout: float,
+        max_retries: int,
+        retry_backoff: float,
+        http_client: Any,
+        provider_options: dict[str, Any],
     ) -> None:
+        if http_client is not None and not isinstance(http_client, self._http_type):
+            # 取り違えると、最初の送信で分かりにくいエラーになる
+            raise TypeError(
+                f"{type(self).__name__} needs http_client=httpx.{self._http_type.__name__}(), "
+                f"got {_type_name(http_client)}"
+            )
         model = model or os.environ.get(MODEL_ENV)
         if not model:
             raise ConfigurationError(f"pass a model like 'openai:gpt-5.5' or set ${MODEL_ENV}")
@@ -150,8 +185,8 @@ class Client:
             key, name, api_key=api_key, base_url=base_url, options=provider_options
         )
         self._owns_http = http_client is None
-        self._http = http_client or httpx.Client(timeout=httpx.Timeout(timeout, connect=10.0))
-        self.retry = RetryPolicy(max_retries=max_retries, backoff=retry_backoff)
+        self._http = http_client or self._http_type(timeout=httpx.Timeout(timeout, connect=10.0))
+        self.retry = RetryPolicy(max_retries=max_retries, backoff=retry_backoff, sleep=self._retry_sleep)
         self._init_kwargs: dict[str, Any] = dict(
             api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
             retry_backoff=retry_backoff, **provider_options,
@@ -162,20 +197,14 @@ class Client:
     def model(self) -> str:
         return f"{self.provider.key}:{self.provider.model}"
 
-    def with_model(self, model: str, **overrides: Any) -> "Client":
-        """HTTP 接続を共有したまま別モデルのクライアントを作る（フォールバックや比較用）。
-
-        同じプロバイダー（``anthropic:a`` → ``anthropic:b``）なら、api_key / base_url /
-        プロバイダー別のオプションも引き継ぐ。別のプロバイダーへは timeout / max_retries /
-        retry_backoff だけを引き継ぐ（キーや ``headers=`` の認証情報を別のサーバーへ送らないため）。
-        ``overrides`` はどちらの場合も最後に上書きする。"""
+    def _with_model_kwargs(self, model: str, overrides: dict[str, Any]) -> dict[str, Any]:
         key, _ = parse_model(model)
         if key == self.provider.key:
             kw = dict(self._init_kwargs)
         else:
             kw = {k: self._init_kwargs[k] for k in _TRANSPORT_SETTINGS}
         kw.update(overrides)
-        return Client(model, http_client=self._http, **kw)
+        return kw
 
     def _request(
         self,
@@ -215,6 +244,39 @@ class Client:
             extra=_pick_extra(self.provider.key, extra, extra_by_provider),
         )
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.model!r})"
+
+
+class Client(_BaseClient):
+    """同期のクライアント。非同期で使うときは ``AsyncClient``（引数とメソッドの名前は同じ）。"""
+
+    def __init__(
+        self,
+        model: str | None = None,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        timeout: float = 120.0,
+        max_retries: int = 2,
+        retry_backoff: float = 0.5,
+        http_client: httpx.Client | None = None,
+        **provider_options: Any,
+    ) -> None:
+        self._setup(
+            model, api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
+            retry_backoff=retry_backoff, http_client=http_client, provider_options=provider_options,
+        )
+
+    def with_model(self, model: str, **overrides: Any) -> Client:
+        """HTTP 接続を共有したまま別モデルのクライアントを作る（フォールバックや比較用）。
+
+        同じプロバイダー（``anthropic:a`` → ``anthropic:b``）なら、api_key / base_url /
+        プロバイダー別のオプションも引き継ぐ。別のプロバイダーへは timeout / max_retries /
+        retry_backoff だけを引き継ぐ（キーや ``headers=`` の認証情報を別のサーバーへ送らないため）。
+        ``overrides`` はどちらの場合も最後に上書きする。"""
+        return Client(model, http_client=self._http, **self._with_model_kwargs(model, overrides))
+
     # ------------------------------------------------------------------ #
     def chat(
         self,
@@ -250,10 +312,7 @@ class Client:
         )
         http_req = self.provider.build_request(req, stream=False)
         data = request_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
-        res = self.provider.parse_response(data)
-        if req.response_schema is not None:
-            _fill_parsed(res)
-        return res
+        return _finish(req, self.provider.parse_response(data))
 
     def stream(
         self,
@@ -282,23 +341,122 @@ class Client:
         http_req = self.provider.build_request(req, stream=True)
         events = stream_sse(self._http, http_req, provider=self.provider.key, retry=self.retry)
         for ev in self.provider.parse_stream(events):
-            if ev.type == "done" and ev.response is not None and req.response_schema is not None:
-                _fill_parsed(ev.response)
-            yield ev
+            yield _finish_event(req, ev)
 
     # ------------------------------------------------------------------ #
     def close(self) -> None:
         if self._owns_http:
             self._http.close()
 
-    def __enter__(self) -> "Client":
+    def __enter__(self) -> Client:
         return self
 
     def __exit__(self, *exc: Any) -> None:
         self.close()
 
-    def __repr__(self) -> str:
-        return f"Client({self.model!r})"
+
+class AsyncClient(_BaseClient):
+    """非同期のクライアント。引数とメソッドの名前は ``Client`` と同じで、``chat()`` は await し、
+    ``stream()`` は ``async for`` で回す（docs/design-docs/async-client.md）。
+
+        async with AsyncClient("anthropic:claude-sonnet-5-5") as client:
+            res = await client.chat("こんにちは")
+            async for ev in client.stream("続けて"):
+                ...
+    """
+
+    _http_type = httpx.AsyncClient
+    _retry_sleep = staticmethod(asyncio.sleep)  # 待つ間もイベントループを止めない
+
+    def __init__(
+        self,
+        model: str | None = None,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        timeout: float = 120.0,
+        max_retries: int = 2,
+        retry_backoff: float = 0.5,
+        http_client: httpx.AsyncClient | None = None,
+        **provider_options: Any,
+    ) -> None:
+        self._setup(
+            model, api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
+            retry_backoff=retry_backoff, http_client=http_client, provider_options=provider_options,
+        )
+
+    def with_model(self, model: str, **overrides: Any) -> AsyncClient:
+        """HTTP 接続を共有したまま別モデルのクライアントを作る。引き継ぐ設定は ``Client.with_model()`` と同じ。"""
+        return AsyncClient(model, http_client=self._http, **self._with_model_kwargs(model, overrides))
+
+    # ------------------------------------------------------------------ #
+    async def chat(
+        self,
+        messages: MessagesLike,
+        *,
+        system: str | None = None,
+        tools: Iterable[ToolLike] | None = None,
+        tool_choice: Any = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        stop: list[str] | None = None,
+        response_schema: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+        extra: dict[str, Any] | None = None,
+        extra_by_provider: dict[str, dict[str, Any]] | None = None,
+    ) -> Response:
+        """1回分の応答を返す。引数の意味は ``Client.chat()`` と同じ。"""
+        req = self._request(
+            messages, system=system, tools=tools, tool_choice=tool_choice,
+            max_tokens=max_tokens, temperature=temperature, stop=stop,
+            response_schema=response_schema, reasoning_effort=reasoning_effort,
+            extra=extra, extra_by_provider=extra_by_provider,
+        )
+        http_req = self.provider.build_request(req, stream=False)
+        data = await arequest_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
+        return _finish(req, self.provider.parse_response(data))
+
+    async def stream(
+        self,
+        messages: MessagesLike,
+        *,
+        system: str | None = None,
+        tools: Iterable[ToolLike] | None = None,
+        tool_choice: Any = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        stop: list[str] | None = None,
+        response_schema: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+        extra: dict[str, Any] | None = None,
+        extra_by_provider: dict[str, dict[str, Any]] | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """差分を逐次返す。``await`` は付けずに ``async for`` で回す。引数と返すイベントは ``Client.stream()`` と同じ。
+
+        最後まで読めば接続は閉じる。途中で抜けたときにすぐ閉じたいなら ``contextlib.aclosing()`` で囲む。"""
+        req = self._request(
+            messages, system=system, tools=tools, tool_choice=tool_choice,
+            max_tokens=max_tokens, temperature=temperature, stop=stop,
+            response_schema=response_schema, reasoning_effort=reasoning_effort,
+            extra=extra, extra_by_provider=extra_by_provider,
+        )
+        http_req = self.provider.build_request(req, stream=True)
+        # 途中で閉じられたとき、内側のジェネレーター（と HTTP の応答）もその場で閉じる
+        async with aclosing(astream_sse(self._http, http_req, provider=self.provider.key, retry=self.retry)) as events:
+            async with aclosing(self.provider.aparse_stream(events)) as parsed:
+                async for ev in parsed:
+                    yield _finish_event(req, ev)
+
+    # ------------------------------------------------------------------ #
+    async def aclose(self) -> None:
+        if self._owns_http:
+            await self._http.aclose()
+
+    async def __aenter__(self) -> AsyncClient:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.aclose()
 
 
-__all__ = ["Client", "MODEL_ENV", "parse_model", "Tool"]
+__all__ = ["AsyncClient", "Client", "MODEL_ENV", "parse_model", "Tool"]

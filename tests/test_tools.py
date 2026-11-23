@@ -1,11 +1,13 @@
+import asyncio
 import enum
+import warnings
 from dataclasses import dataclass
 from datetime import date
 from typing import Annotated, Any, Literal, Optional, Union
 
 import pytest
 
-from switchllm import ToolCall, run_tool_calls, tool
+from switchllm import ToolCall, arun_tool_calls, run_tool_calls, tool
 from switchllm.tools import as_tool
 
 
@@ -56,6 +58,95 @@ def test_execute_and_errors():
 def test_run_tool_calls_unknown_tool():
     out = run_tool_calls([get_weather], [ToolCall(id="x", name="missing", arguments={})])
     assert out[0].is_error and "unknown tool" in out[0].text
+
+
+# --------------------------------------------------------------------------- #
+# async def のツール（docs/design-docs/async-client.md）
+# --------------------------------------------------------------------------- #
+@tool
+async def fetch_title(url: str) -> dict:
+    """ページの題名を返す。"""
+    await asyncio.sleep(0)
+    if url == "error":
+        raise ConnectionError("unreachable")
+    return {"url": url, "title": "題名"}
+
+
+def test_arun_tool_calls_awaits_async_tools_and_calls_plain_ones():
+    calls = [
+        ToolCall(id="1", name="fetch_title", arguments={"url": "https://example.com"}),
+        ToolCall(id="2", name="get_weather", arguments={"city": "東京"}),
+        ToolCall(id="3", name="fetch_title", arguments={"url": "error"}),
+        ToolCall(id="4", name="get_weather", arguments={"city": "error"}),
+        ToolCall(id="5", name="missing", arguments={}),
+        ToolCall(id="6", name="fetch_title", arguments={}, raw_arguments='{"url": "htt'),
+    ]
+    out = asyncio.run(arun_tool_calls([fetch_title, get_weather], calls))
+    assert [m.tool_call_id for m in out] == ["1", "2", "3", "4", "5", "6"]
+    assert out[0].text == '{"url": "https://example.com", "title": "題名"}' and not out[0].is_error
+    assert out[2].is_error and out[2].text == "ConnectionError: unreachable"
+    assert out[5].is_error and out[5].text == 'invalid arguments: not valid JSON: {"url": "htt'
+    # 普通の関数のツール・未知のツールは、同期の run_tool_calls と同じ結果になる
+    assert [out[1], out[3], out[4]] == run_tool_calls([get_weather], [calls[1], calls[3], calls[4]])
+
+
+def test_arun_tool_calls_runs_calls_concurrently_and_keeps_their_order():
+    # どの呼び出しも、全部が始まるまで終わらない。順に実行していたら待ちきれずに失敗する
+    async def main():
+        started: list[str] = []
+        everyone = asyncio.Event()
+
+        @tool
+        async def wait_for_others(name: str, delay: float) -> str:
+            """x"""
+            started.append(name)
+            if len(started) == 3:
+                everyone.set()
+            await asyncio.wait_for(everyone.wait(), timeout=5)
+            await asyncio.sleep(delay)
+            return name
+
+        calls = [
+            ToolCall(id=n, name="wait_for_others", arguments={"name": n, "delay": d})
+            for n, d in [("a", 0.03), ("b", 0.0), ("c", 0.01)]
+        ]
+        return await arun_tool_calls([wait_for_others], calls)
+
+    out = asyncio.run(main())
+    assert [(m.tool_call_id, m.text) for m in out] == [("a", "a"), ("b", "b"), ("c", "c")]  # 終わった順ではない
+
+
+class _Ready:
+    """コルーチンではない awaitable（Future や Task のようなもの）。"""
+
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def __await__(self):
+        return self.value
+        yield  # ジェネレーターにする（__await__ はイテレーターを返す）
+
+
+def test_tools_returning_other_awaitables_are_awaited_only_by_arun_tool_calls():
+    @tool
+    def start_job(job: str) -> Any:
+        """x"""
+        return _Ready({"job": job, "state": "done"})
+
+    call = ToolCall(id="1", name="start_job", arguments={"job": "build"})
+    assert asyncio.run(arun_tool_calls([start_job], [call]))[0].text == '{"job": "build", "state": "done"}'
+    sync = run_tool_calls([start_job], [call])[0]
+    assert sync.is_error and "arun_tool_calls()" in sync.text
+
+
+def test_run_tool_calls_reports_async_tools_instead_of_sending_a_coroutine():
+    # 以前は関数を実行せず、"<coroutine object ...>" を結果としてモデルに返していた
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = run_tool_calls([fetch_title], [ToolCall(id="1", name="fetch_title", arguments={"url": "x"})])
+    assert out[0].is_error and out[0].tool_call_id == "1"
+    assert out[0].text == "tool 'fetch_title' is an async function; run it with arun_tool_calls()"
+    assert [w for w in caught if issubclass(w.category, RuntimeWarning)] == []  # never awaited の警告を出さない
 
 
 def test_bare_containers_are_supported():

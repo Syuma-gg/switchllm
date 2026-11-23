@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import inspect
 import json
@@ -36,20 +37,60 @@ class Tool:
 
         引数が JSON として壊れていたとき（``arguments`` が空で ``raw_arguments`` だけある）は、
         関数を呼ばずにそのことを返す。空の引数で呼ぶと「引数が足りない」という分かりにくい
-        エラーになり、モデルが直して呼び直せないため。"""
-        if not call.arguments and call.raw_arguments and not _is_json(call.raw_arguments):
-            return Message.tool_result(
-                call.id,
-                f"invalid arguments: not valid JSON: {call.raw_arguments[:500]}",
-                name=call.name,
-                is_error=True,
-            )
+        エラーになり、モデルが直して呼び直せないため。
+
+        ``async def`` の関数はここでは実行できないので、``arun_tool_calls()`` を使うよう
+        ``is_error=True`` の結果で知らせる（コルーチンを文字列にして返さない）。"""
+        invalid = _invalid_arguments(call)
+        if invalid is not None:
+            return invalid
         try:
             result = self(**call.arguments)
         except Exception as e:  # noqa: BLE001 - モデルにエラー内容を伝えるため
-            return Message.tool_result(call.id, f"{type(e).__name__}: {e}", name=call.name, is_error=True)
-        text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
-        return Message.tool_result(call.id, text, name=call.name)
+            return _error_result(call, e)
+        if inspect.isawaitable(result):
+            if inspect.iscoroutine(result):
+                result.close()  # 実行しないコルーチンを閉じ、never awaited の警告を出さない
+            return Message.tool_result(
+                call.id,
+                f"tool {self.name!r} is an async function; run it with arun_tool_calls()",
+                name=call.name,
+                is_error=True,
+            )
+        return _result_message(call, result)
+
+    async def _aexecute(self, call: ToolCall) -> Message:
+        """``execute`` の非同期版。``async def`` の関数は await し、普通の関数はそのまま呼ぶ。"""
+        invalid = _invalid_arguments(call)
+        if invalid is not None:
+            return invalid
+        try:
+            result = self(**call.arguments)
+            if inspect.isawaitable(result):
+                result = await result
+        except Exception as e:  # noqa: BLE001 - モデルにエラー内容を伝えるため
+            return _error_result(call, e)
+        return _result_message(call, result)
+
+
+def _invalid_arguments(call: ToolCall) -> Message | None:
+    if not call.arguments and call.raw_arguments and not _is_json(call.raw_arguments):
+        return Message.tool_result(
+            call.id,
+            f"invalid arguments: not valid JSON: {call.raw_arguments[:500]}",
+            name=call.name,
+            is_error=True,
+        )
+    return None
+
+
+def _error_result(call: ToolCall, e: Exception) -> Message:
+    return Message.tool_result(call.id, f"{type(e).__name__}: {e}", name=call.name, is_error=True)
+
+
+def _result_message(call: ToolCall, result: Any) -> Message:
+    text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
+    return Message.tool_result(call.id, text, name=call.name)
 
 
 def _is_json(s: str) -> bool:
@@ -77,17 +118,39 @@ def as_tool(obj: ToolLike) -> Tool:
     raise TypeError(f"cannot convert {obj!r} to Tool")
 
 
+def _unknown_tool(call: ToolCall) -> Message:
+    return Message.tool_result(call.id, f"unknown tool: {call.name}", name=call.name, is_error=True)
+
+
+def _runnable(table: dict[str, Tool], call: ToolCall) -> Tool | None:
+    """呼び出しの名前のツール。関数のない定義（dict から作ったもの）は実行できないので None。"""
+    t = table.get(call.name)
+    return None if t is None or t.fn is None else t
+
+
 def run_tool_calls(tools: Iterable[ToolLike], calls: Iterable[ToolCall]) -> list[Message]:
-    """複数のツール呼び出しをまとめて実行する（エージェントループ用の小さなヘルパー）。"""
+    """複数のツール呼び出しをまとめて実行する（エージェントループ用の小さなヘルパー）。
+    ``async def`` のツールは ``arun_tool_calls()`` で実行する。"""
     table = {t.name: t for t in map(as_tool, tools)}
     out: list[Message] = []
     for call in calls:
-        t = table.get(call.name)
-        if t is None or t.fn is None:
-            out.append(Message.tool_result(call.id, f"unknown tool: {call.name}", name=call.name, is_error=True))
-        else:
-            out.append(t.execute(call))
+        t = _runnable(table, call)
+        out.append(_unknown_tool(call) if t is None else t.execute(call))
     return out
+
+
+async def arun_tool_calls(tools: Iterable[ToolLike], calls: Iterable[ToolCall]) -> list[Message]:
+    """``run_tool_calls`` の非同期版（docs/design-docs/async-client.md）。
+
+    ``async def`` のツールは await し、普通の関数はイベントループの中でそのまま呼ぶ。
+    呼び出しは ``asyncio.gather`` で並行に実行し、結果は呼び出しの順に返す。"""
+    table = {t.name: t for t in map(as_tool, tools)}
+
+    async def one(call: ToolCall) -> Message:
+        t = _runnable(table, call)
+        return _unknown_tool(call) if t is None else await t._aexecute(call)
+
+    return list(await asyncio.gather(*(one(c) for c in calls)))
 
 
 # --------------------------------------------------------------------------- #

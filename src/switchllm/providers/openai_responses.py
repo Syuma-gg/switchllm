@@ -8,12 +8,12 @@ OpenAI の移行ガイドに「GPT-5.4 以降、Chat Completions は reasoning_e
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from typing import Any
 
 from .._http import HTTPRequest
 from ..errors import StreamError, UnsupportedFeatureError
 from ..types import ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
-from .base import ChatRequest, Provider, deep_merge, normalize_tool_choice, schema_name
+from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice, schema_name
 
 
 def _parse_args(s: str | None) -> tuple[dict[str, Any], str | None]:
@@ -166,22 +166,38 @@ class OpenAIResponsesProvider(Provider):
             thinking="\n".join(thinking) or None,
         )
 
-    def parse_stream(self, events: Iterator[tuple[str, str]]) -> Iterator[StreamEvent]:
-        for event, data in events:
-            if data.strip() == "[DONE]":
-                break
-            obj = json.loads(data)
-            typ = obj.get("type") or event
-            if typ == "response.output_text.delta":
-                yield StreamEvent("text", text=obj.get("delta", ""))
-            elif typ == "response.reasoning_summary_text.delta":
-                yield StreamEvent("thinking", text=obj.get("delta", ""))
-            elif typ in ("response.completed", "response.incomplete"):
-                yield StreamEvent("done", response=self.parse_response(obj["response"]))
-                return
-            elif typ == "response.failed":
-                err = (obj.get("response") or {}).get("error") or {}
-                raise StreamError(err.get("message", "response failed"), provider=self.key, body=obj)
-            elif typ == "error":
-                raise StreamError(obj.get("message") or str(obj), provider=self.key, body=obj)
-        raise StreamError("stream ended before response.completed", provider=self.key)
+    def stream_parser(self) -> StreamParser:
+        return _ResponsesStream(self)
+
+
+class _ResponsesStream(StreamParser):
+    """Responses API の SSE。``response.completed`` / ``response.incomplete`` に完成した応答が丸ごと入る。"""
+
+    def __init__(self, provider: OpenAIResponsesProvider) -> None:
+        self.provider = provider
+        self.completed = False
+
+    def feed(self, event: str, data: str) -> list[StreamEvent]:
+        if data.strip() == "[DONE]":
+            self.closed = True
+            return []
+        obj = json.loads(data)
+        typ = obj.get("type") or event
+        if typ == "response.output_text.delta":
+            return [StreamEvent("text", text=obj.get("delta", ""))]
+        if typ == "response.reasoning_summary_text.delta":
+            return [StreamEvent("thinking", text=obj.get("delta", ""))]
+        if typ in ("response.completed", "response.incomplete"):
+            self.closed = self.completed = True
+            return [StreamEvent("done", response=self.provider.parse_response(obj["response"]))]
+        if typ == "response.failed":
+            err = (obj.get("response") or {}).get("error") or {}
+            raise StreamError(err.get("message", "response failed"), provider=self.provider.key, body=obj)
+        if typ == "error":
+            raise StreamError(obj.get("message") or str(obj), provider=self.provider.key, body=obj)
+        return []
+
+    def finish(self) -> list[StreamEvent]:
+        if not self.completed:
+            raise StreamError("stream ended before response.completed", provider=self.provider.key)
+        return []  # done は response.completed で返した

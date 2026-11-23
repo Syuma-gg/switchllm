@@ -6,13 +6,24 @@
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 import json
 from pathlib import Path
 
 import httpx
 import pytest
-from e2e_recording import RECORDINGS, Recorder, Replayer, find_secrets, load, recording_path, save, scrub
+from e2e_recording import (
+    RECORDINGS,
+    AsyncRecorder,
+    Recorder,
+    Replayer,
+    find_secrets,
+    load,
+    recording_path,
+    save,
+    scrub,
+)
 
 
 def _serve(*responses: httpx.Response) -> httpx.MockTransport:
@@ -32,6 +43,30 @@ def test_recorder_keeps_bodies_but_not_headers_or_key_param():
         "response": {"status": 200, "content_type": "application/json", "json": {"ok": True}},
     }]
     assert "SECRET" not in json.dumps(rec.exchanges) and "org-1" not in json.dumps(rec.exchanges)
+
+
+def test_async_recorder_records_the_same_as_recorder():
+    # AsyncClient の E2E も、同期と同じ形で記録する（秘密を残さないことも同じ）
+    def upstream():
+        return httpx.Response(200, json={"ok": True}, headers={"x-request-id": "req_1", "retry-after": "1"})
+
+    def send_sync():
+        rec = Recorder(_serve(upstream()))
+        with httpx.Client(transport=rec) as http:
+            http.post("https://api.example.com/v1/x?key=SECRET", json={"a": "東京"}, headers={"x-api-key": "SECRET"})
+        return rec.exchanges
+
+    async def send_async():
+        rec = AsyncRecorder(_serve(upstream()))
+        async with httpx.AsyncClient(transport=rec) as http:
+            res = await http.post("https://api.example.com/v1/x?key=SECRET", json={"a": "東京"},
+                                  headers={"x-api-key": "SECRET"})
+            assert res.json() == {"ok": True} and res.headers["retry-after"] == "1"
+        return rec.exchanges
+
+    recorded = asyncio.run(send_async())
+    assert recorded == send_sync() and len(recorded) == 1
+    assert "SECRET" not in json.dumps(recorded) and "req_1" not in json.dumps(recorded)
 
 
 def test_recorder_keeps_retry_after_for_replaying_retries():

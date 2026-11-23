@@ -115,6 +115,29 @@ def place_order(order: dict) -> str:
 - 並列ツール呼び出しにも対応（Anthropic・Gemini では結果を1メッセージにまとめて送る）
 - `run_tool_calls` は、モデルが決めた引数で関数を実行する。危険な操作をする関数では引数を検証すること（[SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md)）
 
+### 非同期
+
+`AsyncClient` は、引数とメソッドの名前が `Client` と同じ。`chat()` は `await` し、`stream()` は `await` を付けずに `async for` で回す。
+
+```python
+import asyncio
+from switchllm import AsyncClient
+
+async def main():
+    async with AsyncClient("anthropic:claude-sonnet-5-5") as client:
+        res = await client.chat("日本の首都は？")
+        async for ev in client.stream("俳句を書いて"):
+            if ev.type == "text":
+                print(ev.text, end="")
+
+asyncio.run(main())
+```
+
+- リクエストを並行に送れる（`asyncio.gather(client.chat(a), client.chat(b))`）。リトライの待ち時間も、イベントループを止めない
+- 自分の接続を使うときは `http_client=httpx.AsyncClient(...)` を渡す。`with_model()` で作ったクライアントは、この接続を共有する。閉じるのは `await client.aclose()` か `async with`
+- ストリームは、最後まで読めば接続を閉じる。途中で `break` してすぐに閉じたいときは、`async with contextlib.aclosing(client.stream(...)) as events:` で囲む
+- `await arun_tool_calls(tools, res.tool_calls)` は、`async def` のツールを await し、普通の関数はそのまま呼ぶ。呼び出しを並行に実行し、結果は呼び出しの順に返す。`run_tool_calls` は `async def` のツールを実行せず、`arun_tool_calls` を使うよう、エラーの結果を返す
+
 ### 履歴の保存と復元
 
 ```python
@@ -223,7 +246,6 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 ## 既知の制限
 
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
-- 非同期（`async`）は未対応
 - 画像入力は対応、音声・PDF・ファイル入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
 - 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`extra_by_provider=` で各社の形式で頼む（OpenAI `{"reasoning": {"summary": "auto"}}`、Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`、Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`）
 - Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md)）
