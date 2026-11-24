@@ -35,6 +35,7 @@
 - **Chat Completions 互換は OpenAI の形で送り、受け付けないと分かっているプリセットでは送る前に止める**（作者の判断）。プリセット別のオプション `file_input`（既定は `True`）を足し、DeepSeek（文書は `file_id` でだけ受け付け、形も違う）・Ollama・LM Studio（文書にファイルの記述がない）のプリセットを `False` にした。`json_schema: False` と同じ仕組みで、`register_provider(..., file_input=False)` や `Client(..., file_input=False)` でも指定できる
 - **`filename` は、`FilePart` にあるときだけ送る**（OpenAI の2つのアダプター）。文書では省略できる（U28）。`from_file()` は必ず付ける。Anthropic の `title` には入れない（モデルに渡す内容を、利用者に断らずに足さない）。Gemini の `inlineData` には送る場所がない
 - **送る前に分かる誤りは、送る前に知らせる。** `data` と `media_type` が空でない文字列でなければ `TypeError`。Anthropic でテキストとして送るときに、`data` が base64 として読めなければ `ValueError`、UTF-8 として読めなければ `UnsupportedFeatureError`
+- **中身のない `ImagePart` も、送る前に知らせる**（2026-11-24、作者の判断）。アダプターは `url` があれば `url` だけを送り、なければ `data` と `media_type` を送る。そこで、`url` があればそれが文字列であることを、なければ `data` と `media_type` が空でない文字列であることを確かめ、違えば `TypeError` にする。以前は `ImagePart()` を `data:image/png;base64,None` のまま送り、API のエラーで初めて気づいた。`url` を送るときは `media_type` を使わないので、空でも止めない。JSON から戻した履歴も同じ検査を通る
 - **画像とファイルは user のメッセージにだけ入れられる。** system・assistant のメッセージに `ImagePart` か `FilePart` を入れると `TypeError`。どのアダプターも、user 以外のメッセージからは文字しか読まず、黙って落としていた（`ImagePart` で確かめた。2026-11-23）
 - パーツの順は変えない。Anthropic の文書は PDF を文字より先に置くよう勧めるので、README の例でも先に置く
 - 履歴の保存（`to_dict()`・`from_dict()`）では `{"type": "file", "data", "media_type", "filename"}` にする（[判断](history-serialization.md)）
@@ -47,9 +48,11 @@
 - **Chat Completions 互換ではすべて止める**: OpenAI の Chat Completions は PDF を受け付けるので、`openai-chat:` でも使えるほうがよい
 - **Chat Completions 互換では形を確かめずに送り、サーバーに任せる**: DeepSeek・Ollama・LM Studio では、送る前に分かることが API のエラーになる
 - **`DocumentPart` という名前**: Anthropic の `document` と同じ名前だが、文書でない種類（表計算など）を足すと名前が合わない（作者の判断で `FilePart`）
+- **中身のない `ImagePart` を、作るときに `ValueError` にする**: いちばん早く気づけるが、`FilePart`（送る前に止める）と止める時期がそろわず、`ImagePart()` を作ること自体ができなくなる（2026-11-24、作者の判断で却下）
+- **中身のない `ImagePart` をそのまま送る**: API のエラーで初めて気づくことになり、エラーの文面も各社で違う
 
 ## 影響
 
 - 公開 API に `FilePart` が増える（`__all__`、[公開 API](../product-specs/public-api.md)）
-- 送る前の検査（`client.py` の `_check_content`）が `FilePart` を受け付け、user 以外のメッセージの画像とファイルを `TypeError` にする。今まで黙って落としていた `ImagePart` も、送る前の例外になる
+- 送る前の検査（`client.py` の `_check_content`）が `FilePart` を受け付け、user 以外のメッセージの画像とファイルを `TypeError` にする。今まで黙って落としていた `ImagePart` も、送る前の例外になる。2026-11-24 から、中身のない `ImagePart` も `TypeError` にする
 - プリセットの `deepseek`・`ollama`・`lmstudio` に `file_input: False` が付く

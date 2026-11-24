@@ -1,4 +1,5 @@
-"""ファイル（PDF など）の入力。FilePart を各社の形で送り、受け付けないと分かっている種類は送る前に知らせる
+"""ファイル（PDF など）の入力。FilePart を各社の形で送り、受け付けないと分かっている種類は送る前に知らせる。
+画像とファイルに共通の、送る前の検査（中身がない、user 以外のメッセージに入れた）もここで確かめる
 （docs/design-docs/file-input.md）。"""
 
 from __future__ import annotations
@@ -138,6 +139,39 @@ def test_images_audio_and_video_are_not_sent_as_files(api, model, media_type, ma
 def test_files_without_data_or_media_type_are_rejected(api, model, part):
     # 中身のないファイルを送って、API のエラーで初めて気づくことにしない
     _rejected(api, model, part, TypeError, "FilePart")
+
+
+IMAGE = "iVBORw0KGgo="
+
+
+@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("part", [
+    ImagePart(),
+    ImagePart(data=""),
+    ImagePart(url=""),
+    ImagePart(data=b"iVBORw0KGgo="),
+    ImagePart(data=IMAGE, url=b"https://example.com/a.png"),
+    ImagePart(data=IMAGE, media_type=None),
+    ImagePart(data=IMAGE, media_type=""),
+], ids=["empty", "data-empty", "url-empty", "data-bytes", "url-bytes", "media-type-none", "media-type-empty"])
+def test_images_without_data_or_url_are_rejected(api, model, part):
+    # 以前は data:image/png;base64,None のような中身のない画像を送り、API のエラーで初めて気づいた
+    _rejected(api, model, part, TypeError, "ImagePart")
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_restored_images_without_data_or_url_are_rejected(api, model):
+    # JSON から戻した履歴も、同じ検査を通る
+    with pytest.raises(TypeError, match="ImagePart"):
+        api.client(model).chat([{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "説明して"}]}])
+    assert api.requests == []
+
+
+@pytest.mark.parametrize("model", ["openai:gpt-5.5", "openai-chat:gpt-x", "anthropic:claude-sonnet-5-5"])
+def test_image_urls_are_sent_without_a_media_type(api, model):
+    # url を送るときは media_type を使わないので、空でも止めない
+    body = _send(api, model, ImagePart(url="https://example.com/a.png", media_type=""))
+    assert "https://example.com/a.png" in str(body)
 
 
 @pytest.mark.parametrize("model", MODELS)

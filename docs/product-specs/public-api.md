@@ -16,7 +16,7 @@
 | `register_provider` | 関数 | OpenAI 互換サーバーなどを名前付きで登録する |
 | `Message` | クラス | 会話の1メッセージ。`Message.user()` / `system()` / `assistant()` / `tool_result()`。`to_dict()` / `from_dict()` で、推論情報（`provider_state`）ごと JSON に保存・復元できる（[判断](../design-docs/history-serialization.md)） |
 | `TextPart` | クラス | テキストのパーツ |
-| `ImagePart` | クラス | 画像のパーツ（base64 か URL）。`ImagePart.from_file()` |
+| `ImagePart` | クラス | 画像のパーツ（base64 か URL）。`ImagePart.from_file()`。`url` があれば `url` を、なければ `data` と `media_type` を送り、どちらもなければ送る前に `TypeError`（[判断](../design-docs/file-input.md)） |
 | `FilePart` | クラス | ファイル（PDF など）のパーツ。`data`（base64）・`media_type`・`filename`。`FilePart.from_file()`。受け付ける種類はアダプターで違う（OpenAI Responses と Gemini は確かめずに送る。Chat Completions 互換は PDF だけ、Anthropic は PDF とテキスト。ほかは送る前に `UnsupportedFeatureError`）。画像・音声・動画は送らない。画像とファイルは user のメッセージにだけ入れられる（[判断](../design-docs/file-input.md)） |
 | `ToolCall` | クラス | モデルが要求したツール呼び出し |
 | `Response` | クラス | `chat()` の結果。`chat(response_schema=...)` で構造化出力を指定したら、読んだ JSON が `parsed` に入る（[判断](../design-docs/structured-output.md)） |

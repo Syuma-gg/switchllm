@@ -67,7 +67,7 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 | `tests/test_consistency.py` | 同じテストを4アダプターで回し、切り替えても同じ振る舞いになること（共通パラメータ、`tool_choice`、ストリームの終わりとエラー、未知のイベント、同じクライアントの複数のストリームが混ざらないこと、`headers=` が足され、同じ名前のヘッダーを置き換え、`None` で止めること） |
 | `tests/test_reasoning_effort.py` | 推論の強さ（`reasoning_effort=`）。4アダプターで各社の指定になること、段階の名前を変えないこと、名前のない段階と打ち間違いを送る前に例外にすること |
 | `tests/test_structured_output.py` | 構造化出力（`response_schema=`）。4アダプターで各社の形式になり、同じ `parsed` を返すこと、スキーマに足すもの、JSON Schema を受け付けない接続先 |
-| `tests/test_file_input.py` | ファイルの入力（`FilePart`）。4アダプターの形、受け付けない種類とプリセットを送る前に止めること、user 以外のメッセージの画像とファイルを止めること、`from_file()` |
+| `tests/test_file_input.py` | ファイルの入力（`FilePart`）。4アダプターの形、受け付けない種類とプリセットを送る前に止めること、user 以外のメッセージの画像とファイルを止めること、中身のない画像とファイルを止めること、`from_file()` |
 | `tests/test_async_client.py` | 非同期にしかないこと（引数が `Client` と同じこと、並行の送信、リトライの待ちでイベントループを止めないこと、取り消したら再送せずに応答を閉じること、途中で抜けたら閉じること、`aclose()`、`http_client=` の取り違え） |
 | `tests/test_client.py` | モデル文字列、APIキー、`with_model()`、プロバイダー別のオプション、`extra_by_provider`、送る前の検査、プロバイダーの登録 |
 | `tests/test_http.py` | リトライ、`Retry-After`、例外への対応づけ、エラー本体の解釈、接続エラー |

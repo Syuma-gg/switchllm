@@ -84,6 +84,21 @@ def _check_content(m: Message) -> None:
     for p in media:
         if isinstance(p, FilePart):
             _check_file(p)
+        else:
+            _check_image(p)
+
+
+def _check_image(p: ImagePart) -> None:
+    """中身のない画像を、送る前に知らせる。アダプターは ``url`` があれば ``url`` だけを送り、
+    なければ ``data`` と ``media_type`` を送る。"""
+    if p.url:
+        if not isinstance(p.url, str):
+            raise TypeError(f"ImagePart.url must be a str, got {type(p.url).__name__}")
+        return
+    if not isinstance(p.data, str) or not p.data:
+        raise TypeError("ImagePart needs a non-empty data or url; build images with ImagePart.from_file(path)")
+    if not isinstance(p.media_type, str) or not p.media_type:
+        raise TypeError("ImagePart.media_type must be a non-empty str when data is given")
 
 
 def _check_file(p: FilePart) -> None:
