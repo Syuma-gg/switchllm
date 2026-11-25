@@ -142,6 +142,9 @@ class GeminiProvider(Provider):
             gen["responseJsonSchema"] = req.response_schema
         if req.reasoning_effort is not None:
             gen["thinkingConfig"] = {"thinkingLevel": self._thinking_level(req.reasoning_effort)}
+        if req.reasoning_summary:
+            # thought: true のパートで要約が返る。「returned only when available」（docs/references/gemini-generate-content.md）
+            gen.setdefault("thinkingConfig", {})["includeThoughts"] = True
         if gen:
             body["generationConfig"] = gen
         if req.tools:

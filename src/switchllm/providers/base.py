@@ -45,6 +45,9 @@ class ChatRequest:
     response_schema: dict[str, Any] | None = None
     #: 推論の強さ。``REASONING_EFFORTS`` のどれか（``Client`` が確かめたもの）。None なら指定なし
     reasoning_effort: str | None = None
+    #: 推論の要約を返させるか（docs/design-docs/reasoning-summary.md）。``Client`` が bool であることと、
+    #: ``reasoning_effort="none"`` と一緒でないことを確かめたもの
+    reasoning_summary: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
 

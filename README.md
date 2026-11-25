@@ -181,7 +181,22 @@ res = client.chat("How many r's are in 'strawberry'?", reasoning_effort="low")
 - `reasoning_effort=` takes one of `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` (the levels OpenAI documents). The name is sent unchanged in each provider's own field (OpenAI `reasoning.effort`, Anthropic `output_config.effort`, Gemini `thinkingConfig.thinkingLevel`, Chat Completions `reasoning_effort`). Leave it out to use the model's default
 - A level that a provider's API has no name for raises `UnsupportedFeatureError` before sending: `"minimal"` on Anthropic, and `"none"` and `"max"` on Gemini. On Anthropic, `"none"` turns thinking off (`thinking: {"type": "disabled"}`)
 - Models differ in the levels they accept (gpt-5.5 has no `"max"`, and Claude Opus 5.5 cannot turn thinking off). The library keeps no list of models, so these come back from the API as `BadRequestError`
-- The levels are hints, not token budgets: the same level does not mean the same amount of reasoning on every model. Write other reasoning settings (summaries, Gemini 2.5's `thinkingBudget`) in `extra_by_provider=` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md), in Japanese)
+- The levels are hints, not token budgets: the same level does not mean the same amount of reasoning on every model. Write other reasoning settings (such as Gemini 2.5's `thinkingBudget`) in `extra_by_provider=` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md), in Japanese)
+
+### Reasoning summaries
+
+Most reasoning models don't return their reasoning text unless you ask. Pass `reasoning_summary=True` to ask for it:
+
+```python
+res = client.chat("How many integers from 1 to 1000 have digits that add up to 10?", reasoning_summary=True)
+print(res.thinking)  # the reasoning summary, or None if the model returned none
+```
+
+- Each provider gets its own setting: OpenAI `reasoning.summary: "auto"`, Anthropic `thinking: {"type": "adaptive", "display": "summarized"}`, Gemini `thinkingConfig.includeThoughts: true`. Chat Completions has no standard setting, so nothing is added there; DeepSeek returns its reasoning anyway, and Ollama or LM Studio text is used if the server sends it. With `stream()`, the text arrives as `thinking` events
+- The default is `False`. On Anthropic and Gemini the summary itself costs nothing extra (you pay for the full reasoning either way); on Anthropic it adds some latency. Claude Opus 4.6 to 4.8 and Sonnet 4.6 don't think unless asked, so `adaptive` turns thinking on there, which does cost more. Claude 4.5 models reject `adaptive` with a 400, so on those pass `extra={"thinking": {"type": "enabled", "budget_tokens": 2048}}` as well. OpenAI may require organization verification for summaries on its latest reasoning models
+- The model decides whether to return a summary, so `res.thinking` can still be `None`
+- It is a plain on/off switch. For OpenAI's `"concise"` or `"detailed"`, use `extra_by_provider=`
+- Combining it with `reasoning_effort="none"` raises `ConfigurationError` before sending. The `openai-chat:` provider pointed at OpenAI raises `UnsupportedFeatureError`, because OpenAI's Chat Completions doesn't return reasoning text; use `openai:` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md), in Japanese)
 
 ### Files (PDF and more)
 

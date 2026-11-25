@@ -157,7 +157,8 @@ def test_gemini_thinking_config_sits_beside_other_generation_config(api):
 @pytest.mark.parametrize(
     ("model", "ok", "extra", "pick", "expected"),
     [
-        # 共通化しない推論の指定は、extra= で足せる（深いマージなので reasoning_effort= と並ぶ）
+        # 共通化しない推論の指定は、extra= で足せる（深いマージなので reasoning_effort= と並ぶ）。
+        # 要約は reasoning_summary=True でも頼める（tests/test_reasoning_summary.py）
         ("openai:gpt-5.5", _RESPONSES_OK, {"reasoning": {"summary": "auto"}}, lambda b: b["reasoning"], {"effort": "high", "summary": "auto"}),
         (
             "anthropic:claude-opus-4-8",

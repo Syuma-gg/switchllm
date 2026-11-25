@@ -155,6 +155,21 @@ def _check_reasoning_effort(effort: Any) -> None:
         raise ConfigurationError(f"unknown reasoning_effort {effort!r}. Use one of: {allowed}")
 
 
+def _check_reasoning_summary(summary: Any, effort: str | None) -> None:
+    """bool だけを受け付ける。段階（OpenAI の concise・detailed）はほかの社で送れず、切り替えを妨げるため
+    受け付けない。推論を切りながら本文を頼むのは矛盾するので、送る前に知らせる。"""
+    if not isinstance(summary, bool):
+        raise TypeError(
+            f"reasoning_summary must be True or False, got {summary!r}. "
+            "For a provider-specific summary level, pass it with extra="
+        )
+    if summary and effort == "none":
+        raise ConfigurationError(
+            "reasoning_summary=True asks for the model's reasoning, but reasoning_effort='none' turns reasoning off. "
+            "Drop one of them"
+        )
+
+
 def _fill_parsed(res: Response) -> None:
     """構造化出力の本文を読んで ``res.parsed`` に入れる。最後まで答えたときだけ読む。
     拒否や上限で止まった本文は、JSON として読めてもスキーマに合う保証がないため。"""
@@ -252,6 +267,7 @@ class _BaseClient:
         stop: list[str] | None,
         response_schema: dict[str, Any] | None,
         reasoning_effort: str | None,
+        reasoning_summary: Any,
         extra: dict[str, Any] | None,
         extra_by_provider: dict[str, dict[str, Any]] | None,
     ) -> ChatRequest:
@@ -266,6 +282,7 @@ class _BaseClient:
                 "For a Pydantic model, pass Model.model_json_schema()"
             )
         _check_reasoning_effort(reasoning_effort)
+        _check_reasoning_summary(reasoning_summary, reasoning_effort)
         return ChatRequest(
             messages=msgs,
             tools=tool_list,
@@ -275,6 +292,7 @@ class _BaseClient:
             stop=stop,
             response_schema=None if response_schema is None else strict_object_schema(response_schema),
             reasoning_effort=reasoning_effort,
+            reasoning_summary=reasoning_summary,
             extra=_pick_extra(self.provider.key, extra, extra_by_provider),
         )
 
@@ -324,6 +342,7 @@ class Client(_BaseClient):
         stop: list[str] | None = None,
         response_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
+        reasoning_summary: bool = False,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> Response:
@@ -334,6 +353,9 @@ class Client(_BaseClient):
         ``reasoning_effort`` は推論の強さで、``"none"``・``"minimal"``・``"low"``・``"medium"``・``"high"``・
         ``"xhigh"``・``"max"`` のどれか。各社の指定に名前を変えずに入れ、名前のない段階は送る前に
         ``UnsupportedFeatureError`` にする（docs/design-docs/reasoning-effort.md）。
+        ``reasoning_summary=True`` は推論の要約を返させ、``Response.thinking`` と ``thinking`` イベントに入れる。
+        各社の「要約を返す」指定を送り、Chat Completions 互換のサーバーには何も足さない（返したら入れる）。
+        要約を返すかはモデルが決めるので、頼んでも ``None`` のことがある（docs/design-docs/reasoning-summary.md）。
         ``extra`` はプロバイダー固有パラメータをリクエスト本体にそのままマージする。
         ``extra_by_provider`` は ``{"anthropic": {...}, "openai": {...}}`` の形で各社の分を並べ、
         モデル文字列の ``provider:`` 部分と同じ名前の分だけをマージする（``extra`` より優先）。
@@ -342,7 +364,7 @@ class Client(_BaseClient):
             messages, system=system, tools=tools, tool_choice=tool_choice,
             max_tokens=max_tokens, temperature=temperature, stop=stop,
             response_schema=response_schema, reasoning_effort=reasoning_effort,
-            extra=extra, extra_by_provider=extra_by_provider,
+            reasoning_summary=reasoning_summary, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=False)
         data = request_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
@@ -360,6 +382,7 @@ class Client(_BaseClient):
         stop: list[str] | None = None,
         response_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
+        reasoning_summary: bool = False,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> Iterator[StreamEvent]:
@@ -370,7 +393,7 @@ class Client(_BaseClient):
             messages, system=system, tools=tools, tool_choice=tool_choice,
             max_tokens=max_tokens, temperature=temperature, stop=stop,
             response_schema=response_schema, reasoning_effort=reasoning_effort,
-            extra=extra, extra_by_provider=extra_by_provider,
+            reasoning_summary=reasoning_summary, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=True)
         events = stream_sse(self._http, http_req, provider=self.provider.key, retry=self.retry)
@@ -436,6 +459,7 @@ class AsyncClient(_BaseClient):
         stop: list[str] | None = None,
         response_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
+        reasoning_summary: bool = False,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> Response:
@@ -444,7 +468,7 @@ class AsyncClient(_BaseClient):
             messages, system=system, tools=tools, tool_choice=tool_choice,
             max_tokens=max_tokens, temperature=temperature, stop=stop,
             response_schema=response_schema, reasoning_effort=reasoning_effort,
-            extra=extra, extra_by_provider=extra_by_provider,
+            reasoning_summary=reasoning_summary, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=False)
         data = await arequest_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
@@ -462,6 +486,7 @@ class AsyncClient(_BaseClient):
         stop: list[str] | None = None,
         response_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
+        reasoning_summary: bool = False,
         extra: dict[str, Any] | None = None,
         extra_by_provider: dict[str, dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
@@ -472,7 +497,7 @@ class AsyncClient(_BaseClient):
             messages, system=system, tools=tools, tool_choice=tool_choice,
             max_tokens=max_tokens, temperature=temperature, stop=stop,
             response_schema=response_schema, reasoning_effort=reasoning_effort,
-            extra=extra, extra_by_provider=extra_by_provider,
+            reasoning_summary=reasoning_summary, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=True)
         # 途中で閉じられたとき、内側のジェネレーター（と HTTP の応答）もその場で閉じる

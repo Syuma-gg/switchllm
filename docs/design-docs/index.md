@@ -21,6 +21,7 @@
 | [プロバイダー固有の指定は、各社の分を並べて渡す](provider-specific-params.md) | 採用（2026-11-15） | — |
 | [構造化出力は response_schema= で JSON Schema を受け取る](structured-output.md) | 採用（2026-11-20） | 一次情報で確認、実 API 未検証 |
 | [推論の強さは reasoning_effort= で段階の名前を受け取る](reasoning-effort.md) | 採用（2026-11-21） | 一次情報で確認、実 API 未検証 |
+| [推論の要約は reasoning_summary=True で頼む](reasoning-summary.md) | 採用（2026-11-26） | 一次情報で確認、実 API 未検証 |
 | [Anthropic の API の版は 2026-10-21 を既定にし、temperature は送る前に知らせる](anthropic-api-version.md) | 採用（2026-11-21） | 一次情報で確認、実 API 未検証 |
 | [非同期のクライアントは AsyncClient として分け、アダプターを同期版と共有する](async-client.md) | 採用（2026-11-23） | モックで確認、実 API 未検証 |
 | [headers= はすべてのアダプターで受け付け、同じ名前のヘッダーは利用者の値で置き換える](custom-headers.md) | 採用（2026-11-23） | モックで確認（RFC 9110） |

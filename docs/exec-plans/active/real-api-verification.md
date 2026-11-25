@@ -6,7 +6,7 @@
 
 ## 手順
 
-- [x] 下の表（U1〜U18。U19〜U22 は構造化出力、U23〜U27 は推論の強さを実装したときに E2E のケースを足した）を1回の実行で確かめられるようにする（2026-11-17。smoke test を広げ、同じ日に pytest の E2E テスト `e2e/` に置き換えた。[E2E テスト](../../e2e-tests.md)）
+- [x] 下の表（U1〜U18。U19〜U22 は構造化出力、U23〜U27 は推論の強さ、U28〜U31 はファイルの入力、U32〜U35 は推論の要約を実装したときに E2E のケースを足した）を1回の実行で確かめられるようにする（2026-11-17。smoke test を広げ、同じ日に pytest の E2E テスト `e2e/` に置き換えた。[E2E テスト](../../e2e-tests.md)）
 - [ ] 各社のキーで E2E テストを `--record` を付けて実行し、記録をコミットする。**料金が発生するので、実行前にユーザーの確認を取る**。記録は、それ以降の `python -m pytest` で毎回再生される
   - まず `--collect-only` で呼び出しの回数を確かめる（API は呼ばない）。モデルと料金の目安を伝えて了承を得てから実行する
   - 例: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,anthropic:claude-haiku-5-5,openai:gpt-5.5,gemini:gemini-flash-latest,deepseek:deepseek-flash,deepseek:deepseek-v4-pro,ollama:<model>,lmstudio:<model>"`
@@ -54,6 +54,10 @@ ID はほかの文書から参照しているので変えない。
 | U29 | Chat Completions 互換（ファイル） | `{"type": "file", "file": {"file_data": data URL, "filename"}}` を送る。PDF 以外は送る前に `UnsupportedFeatureError` | Chat Completions の `file_data` の形（data URL か base64 だけか）は、例がなく書かれていない | |
 | U30 | Anthropic（ファイル） | PDF は base64 の document。テキスト（`text/*`・`application/json`・`application/xml`）は UTF-8 に戻して `text/plain` の text の document で送る | text の document の例は引用の文書にある。Markdown・CSV・JSON を `text/plain` として送ってよいかは、PDF のガイドの「.txt, .csv, or .md can be used directly in document blocks」と Files API の説明から推した | |
 | U31 | Gemini（ファイル） | `inlineData` に `mimeType` と base64 を送る。種類は確かめずに送る | 今の文書の例は Interactions API の形で、generateContent で PDF を送る例がない（Part のスキーマの `mimeType` の例に `application/pdf` があることからの推定）。Office のファイルの扱いは要約でしか読めていない | |
+| U32 | OpenAI Responses（推論の要約） | `reasoning_summary=True` で `reasoning: {"summary": "auto"}` を送る | 最新の推論モデルでは組織の認証が要ることがあり、認証していないときにエラーになるか、要約が返らないだけかが書かれていない。推論しないモデルに送ったときの挙動も書かれていない | |
+| U33 | Anthropic（推論の要約） | `thinking: {"type": "adaptive", "display": "summarized"}` を送る | `display` の既定が `omitted` のモデル（Claude 5 系・Opus 4.8・4.7）で要約が返るか。要約の入った thinking ブロックを、ツールの往復で手を加えずに送り返せるか。Opus 4.6・Sonnet 4.6 は考えるようになり、`temperature` と一緒に送れるかは要約でしか読めていない | |
+| U34 | Gemini（推論の要約） | `generationConfig.thinkingConfig.includeThoughts: true` を送る | 「thoughts are returned only when available」で、頼んでも返らないことがある。推論しないモデルに送るとエラーになる、とは API リファレンスの要約でしか読めていない | |
+| U35 | Ollama・LM Studio（推論の要約） | 何も足さずに送り、返った `reasoning_content` か `reasoning` を `Response.thinking` に入れる | 互換 API が推論テキストを返すか、返すならどのフィールドかが、どちらの文書にも書かれていない | |
 
 ## 進捗ログ
 

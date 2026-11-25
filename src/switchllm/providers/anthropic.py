@@ -164,6 +164,11 @@ class AnthropicProvider(Provider):
             )
         elif req.reasoning_effort is not None:
             body.setdefault("output_config", {})["effort"] = req.reasoning_effort  # format と並ぶ
+        if req.reasoning_summary:
+            # display だけでは送れない（type が必須）。Claude 5 系は送らなくても adaptive で考える。
+            # Opus 4.6〜4.8・Sonnet 4.6 は考えるようになり、4.5 系は 400（docs/references/anthropic-messages.md）。
+            # effort の none とは一緒に来ない（Client が先に止める）
+            body["thinking"] = {"type": "adaptive", "display": "summarized"}
         if stream:
             body["stream"] = True
         body = deep_merge(body, req.extra)

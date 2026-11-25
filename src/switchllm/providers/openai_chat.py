@@ -133,6 +133,14 @@ class OpenAIChatProvider(Provider):
             # OpenAI・DeepSeek・Ollama とも同じ名前のフィールド。名前は変えない（DeepSeek と Ollama は、
             # 文書にない段階を接続先の側で近い段階に置き換える。docs/references/openai-chat-compatible.md）
             body["reasoning_effort"] = req.reasoning_effort
+        if req.reasoning_summary and self.base_url == OPENAI_BASE_URL:
+            # Chat Completions には要約を頼む標準の指定がないので、互換サーバーには何も足さない（返したら入れる。
+            # DeepSeek は頼まなくても返す）。OpenAI 本家の Chat Completions は推論の本文を返さないので、
+            # 黙って None にせず止める。プリセットの名前ではなく接続先で決める（docs/design-docs/reasoning-summary.md）
+            raise UnsupportedFeatureError(
+                "OpenAI Chat Completions does not return reasoning summaries (reasoning_summary=True). "
+                "Use the 'openai:' provider (Responses API) instead"
+            )
         if stream:
             body["stream"] = True
             if self.options.get("stream_usage", True):

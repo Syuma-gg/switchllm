@@ -41,7 +41,8 @@
   - Anthropic の `none` だけは、`thinking: {"type": "disabled"}` で同じ意味になるので送る。effort は送らない
   - Gemini の `none`: `thinkingLevel` には推論を切る段階がない。`thinkingBudget: 0` で切れるのは Gemini 2.5 だけで、Gemini 4 は `thinkingBudget` を近い段階に置き換えて警告を返すだけ（黙って考える）
 - **モデルが受け付けない段階は、API のエラーをそのまま返す。** gpt-5.5 の `max`、Opus 5.5 の `none` などを、先回りして弾かず、別の段階に替えもしない。モデルの一覧を持たない（[実 API 検証](../exec-plans/active/real-api-verification.md) の 2026-11-17 の判断）
-- **ほかの推論の指定は共通化しない。** 推論の要約を返させる指定（OpenAI の `reasoning.summary`、Anthropic の `thinking.display`、Gemini の `includeThoughts`）、Anthropic の `thinking: {"type": "adaptive"}`、Gemini 2.5 の `thinkingBudget` は、`extra=` で渡す。深いマージなので、`reasoning_effort=` と一緒に使える
+- **ほかの推論の指定は共通化しない。** Anthropic の `thinking: {"type": "adaptive"}`、Gemini 2.5 の `thinkingBudget` は、`extra=` で渡す。深いマージなので、`reasoning_effort=` と一緒に使える
+  - 推論の要約を返させる指定（OpenAI の `reasoning.summary`、Anthropic の `thinking.display`、Gemini の `includeThoughts`）も、ここでは共通化しないとしたが、2026-11-26 に作者の判断で `reasoning_summary=True` として足した（[判断](reasoning-summary.md)）
 - **`temperature` との組み合わせは、先回りして弾かない。** Gemini 3.6 Flash 以降と DeepSeek の思考モードは黙って無視し、OpenAI は書いていない（U23）。Anthropic は API の版で決まる（[判断](anthropic-api-version.md)）
 - `response_schema=`・ツール・ストリーミングとも一緒に使える。Anthropic では `output_config` の `format` と `effort` が同じオブジェクトに並ぶ
 
@@ -60,5 +61,5 @@
 
 - `chat()` / `stream()` の引数が増える。`__all__` は変わらない
 - `ChatRequest` に `reasoning_effort` が増える（`register_provider()` で足すアダプターも読める）
-- Claude 5 系・Gemini・OpenAI の推論モデルは、推論の要約を既定では返さない。`reasoning_effort=` を指定しても `Response.thinking` は `None` のことがある（[負債](../exec-plans/tech-debt-tracker.md)）
+- Claude 5 系・Gemini・OpenAI の推論モデルは、推論の要約を既定では返さない。`reasoning_effort=` を指定しても `Response.thinking` は `None` のことがある。返させるには `reasoning_summary=True` も渡す（2026-11-26 に足した。[判断](reasoning-summary.md)）
 - LM Studio が `reasoning_effort` を受け付けるかは分からない（U27）。受け付けないサーバーのためのオプションは、必要になってから足す

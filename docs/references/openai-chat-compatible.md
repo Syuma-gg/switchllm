@@ -87,6 +87,8 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 
 `reasoning_effort=` は、どの接続先にもトップレベルの `reasoning_effort` で、段階の名前を変えずに送る（[判断](../design-docs/reasoning-effort.md)）。以下は 2026-11-21 に文書で確かめた形式。
 
+`reasoning_summary=True` では何も足さない。Chat Completions には要約を頼む標準の指定がなく、DeepSeek は頼まなくても `reasoning_content` を返す。Ollama・LM Studio が互換 API で推論テキストを返すかは文書にない（U35）。接続先が OpenAI 本家なら、推論の本文を返さないので送る前に `UnsupportedFeatureError`（[判断](../design-docs/reasoning-summary.md)）。
+
 | 接続先 | 受け付ける段階 | 推論を切る | 文書にない段階 |
 |---|---|---|---|
 | OpenAI 本家 | `none`・`minimal`・`low`・`medium`・`high`・`xhigh`・`max`（モデルによって一部だけ。[OpenAI Responses](openai-responses.md) の「推論の強さ」） | `none`（受け付けないモデルは 400） | 書かれていない（U23） |
@@ -131,6 +133,7 @@ DeepSeek の思考モードは、ツールを使う会話で、過去の `reason
 - [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)（2026-11-21 確認: `/v1/chat/completions` に「`reasoning_effort` (model-defined names and compatibility aliases)」と `reasoning` の `effort`、「Boolean-only models that support enabling thinking map recognized compatibility efforts to `true`, while `"none"` requests `false`」「`"minimal"` maps to `"low"`, and `"xhigh"` or `"ultra"` map to `"max"`」「`"none"` uses `"low"` because GPT-OSS cannot disable thinking」「supported names are applied exactly and unsupported names resolve to the model default」）
 - [Ollama: Thinking](https://docs.ollama.com/capabilities/thinking)（2026-11-21 確認: 独自 API の `think` は `true`・`false`・段階の文字列。「Models that cannot disable thinking use their lowest supported level instead」）
 - [LM Studio: Chat Completions](https://lmstudio.ai/docs/developer/openai-compat/chat-completions)（2026-11-21 確認: 受け付けるパラメータの一覧に `reasoning_effort` がない）
+- [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)・[Ollama: Thinking](https://docs.ollama.com/capabilities/thinking)・[LM Studio: Chat Completions](https://lmstudio.ai/docs/developer/openai-compat/chat-completions)（2026-11-26 確認: どれも、互換 API が推論テキストを返すか、返すならどのフィールドかを書いていない。推論テキストを頼む・断るパラメータも互換 API にはない。Ollama の独自 API は `message.thinking`、LM Studio の独自 API `/api/v1/chat` は `type: "reasoning"` の出力アイテムで返す）
 - [OpenAI: File inputs](https://developers.openai.com/api/docs/guides/pdf-files)（2026-11-23 確認: 「Chat Completions accepts only PDF files as `file` content parts」、表で `file_url` は Chat Completions では「Not supported」、Chat Completions の例はない）
 - [OpenAI: Create chat completion](https://developers.openai.com/api/reference/resources/chat)（2026-11-23 確認: `file: object { file_data, file_id, filename }`、`file_data` は「The base64 encoded file data, used when passing the file to the model as a string」）
 - [DeepSeek: Create Chat Completion](https://api-docs.deepseek.com/api/create-chat-completion)・[File Parsing](https://api-docs.deepseek.com/guides/document_parsing/)（2026-11-23 確認: パーツは text・image_url・file。file は `file_id` か `file_data`（と `filename`）を直接置く。「A document that needs parsing can be referenced only by `file_id`. Passing the file content or a file URL in the request is not supported.」）

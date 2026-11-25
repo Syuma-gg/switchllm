@@ -114,6 +114,15 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 | `test_reasoning_effort_with_tools` | `low` を指定したまま、ツールの往復で推論情報を送り返す | | 2 | U23〜U26 |
 | `test_turn_reasoning_off_after_tool_call`（Gemini 以外） | 推論したツールの呼び出しのあと、`none` で結果を渡す。Anthropic で、thinking を切ったリクエストに前の thinking ブロックを送り返せるかを見る | ○ | 2 | U24 |
 
+### 推論の要約（`test_e2e_reasoning_summary.py`）
+
+`reasoning_summary=True` で各社の「要約を返す」指定を送る。考えないと答えにくい問い（1〜1000 で各桁の和が 10 になる数）を使い、答えの文言は確かめない。OpenAI 本家の Chat Completions（`openai-chat:`）は、送る前に `UnsupportedFeatureError` になることを確かめる（呼ばない）。
+
+| テスト | 確かめること | 境界 | 回数 | 前提 |
+|---|---|---|---|---|
+| `test_reasoning_summary_stream` | ストリーミングで頼む。`done` が1回だけで本文が返る。クラウドの API（OpenAI・Anthropic・Gemini・DeepSeek）は、`Response.thinking` と `thinking` イベントに要約が入る。ローカルのサーバーは、何も足さずに送って推論テキストが返ったかを記録する | | 1 | U32〜U35 |
+| `test_reasoning_summary_with_tools`（OpenAI・Anthropic・Gemini） | 要約を頼んだまま、ツールの往復で推論情報（要約の入った thinking ブロック、reasoning アイテム、署名）を送り返す | | 2 | U32〜U34 |
+
 ### 非同期（`test_e2e_async.py`）
 
 送るリクエストと応答の解析は同期の `Client` と同じものを使う（[判断](design-docs/async-client.md)）。ここでは、本物の HTTP の上で `AsyncClient` の非同期の送信と SSE の読み取りが最後まで動くことを確かめる。並行の送信は、記録の順序が決まらないので E2E では試さない（`tests/test_async_client.py` で確かめる）。

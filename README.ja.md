@@ -181,7 +181,22 @@ res = client.chat("「strawberry」に r はいくつある？", reasoning_effor
 - `reasoning_effort=` には `"none"`・`"minimal"`・`"low"`・`"medium"`・`"high"`・`"xhigh"`・`"max"` のどれか（OpenAI が文書に挙げる段階）を渡す。各社の指定（OpenAI `reasoning.effort`、Anthropic `output_config.effort`、Gemini `thinkingConfig.thinkingLevel`、Chat Completions `reasoning_effort`）に、名前を変えずに入れる。指定しなければモデルの既定の段階になる
 - 各社の API に名前のない段階は、送る前に `UnsupportedFeatureError`。Anthropic の `"minimal"` と、Gemini の `"none"`・`"max"` が当たる。Anthropic の `"none"` は thinking を切る（`thinking: {"type": "disabled"}`）
 - 使える段階はモデルによって違う（gpt-5.5 に `"max"` はなく、Claude Opus 5.5 は推論を切れない）。ライブラリはモデルの一覧を持たないので、API の `BadRequestError` で返る
-- 段階は目安で、トークンの予算ではない。同じ段階でも、モデルによって考える量は違う。ほかの推論の指定（要約、Gemini 2.5 の `thinkingBudget`）は `extra_by_provider=` に書く（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md)）
+- 段階は目安で、トークンの予算ではない。同じ段階でも、モデルによって考える量は違う。ほかの推論の指定（Gemini 2.5 の `thinkingBudget` など）は `extra_by_provider=` に書く（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-effort.md)）
+
+### 推論の要約
+
+推論するモデルの多くは、頼まなければ推論の本文を返さない。`reasoning_summary=True` を渡すと頼める。
+
+```python
+res = client.chat("1 から 1000 までの整数のうち、各桁の和が 10 になるものはいくつ？", reasoning_summary=True)
+print(res.thinking)  # 推論の要約。モデルが返さなければ None
+```
+
+- 各社の指定に置き換えて送る（OpenAI `reasoning.summary: "auto"`、Anthropic `thinking: {"type": "adaptive", "display": "summarized"}`、Gemini `thinkingConfig.includeThoughts: true`）。Chat Completions には標準の指定がないので何も足さない。DeepSeek は頼まなくても推論を返し、Ollama・LM Studio は返せばそれを入れる。`stream()` では `thinking` イベントで届く
+- 既定は `False`。Anthropic と Gemini では、要約そのものに料金はかからない（どちらでも推論の全体の分がかかる）。Anthropic では待ち時間が少し増える。Claude Opus 4.6〜4.8 と Sonnet 4.6 は頼まなければ考えないので、`adaptive` で考えるようになり、その分の料金が増える。Claude 4.5 系は `adaptive` を 400 にするので、`extra={"thinking": {"type": "enabled", "budget_tokens": 2048}}` も一緒に渡す。OpenAI は、最新の推論モデルで要約に組織の認証が要ることがある
+- 要約を返すかはモデルが決めるので、`res.thinking` が `None` のこともある
+- 渡せるのは `True` か `False` だけ。OpenAI の `"concise"`・`"detailed"` は `extra_by_provider=` で渡す
+- `reasoning_effort="none"` と一緒に渡すと、送る前に `ConfigurationError`。OpenAI に向けた `openai-chat:` は、Chat Completions が推論の本文を返さないので `UnsupportedFeatureError`。`openai:` を使う（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md)）
 
 ### ファイル（PDF など）
 

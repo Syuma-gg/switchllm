@@ -53,7 +53,7 @@
 
 ## 推論の強さ
 
-`reasoning_effort=` は `generationConfig.thinkingConfig.thinkingLevel` で、段階の名前を変えずに送る。`none` と `max` は送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/reasoning-effort.md)）。以下は 2026-11-21 に文書で確かめた形式。
+`reasoning_effort=` は `generationConfig.thinkingConfig.thinkingLevel` で、段階の名前を変えずに送る。`none` と `max` は送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/reasoning-effort.md)）。`reasoning_summary=True` は同じ `thinkingConfig` に `includeThoughts: true` を足す（[判断](../design-docs/reasoning-summary.md)。U34）。以下は 2026-11-21 に文書で確かめた形式（要約は 2026-11-26）。
 
 - 指定: `generationConfig: {"thinkingConfig": {"thinkingLevel": "low"}}`。`thinkingConfig` の項目は `thinkingLevel`・`thinkingBudget`・`includeThoughts` の3つ
 - 段階: API リファレンスの列挙は `MINIMAL`・`LOW`・`MEDIUM`・`HIGH`・`XHIGH`（と `THINKING_LEVEL_UNSPECIFIED`）。ガイドの例は小文字（`"low"`、`"xhigh"`）で送っていて、switchllm も小文字で送る。大文字・小文字のどちらも受け付けるかは書かれていない（U26）。`none` と `max` はない
@@ -62,7 +62,7 @@
 - `thinkingLevel` は「required for Gemini 4 and recommended for Gemini 3 models」。指定しなければモデルの既定の段階
 - `thinkingBudget`（数で予算を決める）は Gemini 2.5 のためのもの。`0` で切り（2.5 Pro は切れない）、`-1` で動的。「For Gemini 4 and Gemini 3 models, use thinkingLevel instead of thinkingBudget」。Gemini 4 では、`thinkingBudget` だけを送ると近い `thinkingLevel` に置き換えて警告を返し、両方を送ると 400。Gemini 2.5 は `thinkingLevel` を受け付けない（「Gemini 2.5 series models don't support `thinkingLevel`; use `thinkingBudget` instead」。API リファレンスは、要約でしか読めなかったが、エラーになるとする）
 - Gemini 2.5: `gemini-2.5-flash` と `gemini-2.5-pro` は非推奨で、2026-12-01 から、それぞれ `gemini-3.5-flash-lite` と `gemini-3.8-flash` へ自動で回される。2.5 で推論の強さを決めるなら `extra={"generationConfig": {"thinkingConfig": {"thinkingBudget": N}}}` を渡す
-- 推論の本文: `includeThoughts: true` を送ると、`thought: true` のパートで要約が返る。既定の値は書かれていないが、例はどれも明示している
+- 推論の本文: `includeThoughts: true` を送ると、`thought: true` のパートで要約が返る（生の推論ではない。「Thought summaries are summarized versions of the model's raw thoughts」）。既定の値は書かれていないが、例はどれも明示している。「thoughts are returned only when available」なので、頼んでも返らないことがある。ストリーミングでは要約が少しずつ返る。推論しないモデルに送るとエラーになる（API リファレンスの要約でしか読めていない）。料金は要約ではなく推論の全体で決まる
 - `maxOutputTokens` は推論トークンを含む（「including thought tokens」）。推論の途中で上限に達すると `MAX_TOKENS` で止まり、推論の分も課金される
 - `temperature`: 「This field is no longer supported and is silently ignored on Gemini 3.6 Flash and newer models」。エラーにはならず、効かない
 
@@ -89,6 +89,8 @@
 
 - [Thinking（generateContent）](https://ai.google.dev/gemini-api/docs/generate-content/thinking)（2026-11-21 確認。aistudio.google.com/docs/thinking?generate-content=true へ転送される: `{"thinkingConfig": {"thinkingLevel": "xhigh"}}` などの例、モデルごとの既定と段階の表、「If you don't specify a thinking level, Gemini will use the model's default thinking level」「The `thinkingLevel` parameter, required for Gemini 4 and recommended for Gemini 3 models」「You cannot disable thinking for Gemini 4 Carbon, Gemini 4 Argon, Gemini 4 Neon, or Gemini 4 Hydrogen」、`minimal` は「the model likely will not think (though it still potentially can)」、`thinkingBudget` の範囲の表（2.5 だけ）、「sending `thinkingBudget` and `thinkingLevel` together returns a `400` error」「Gemini 2.5 series models don't support `thinkingLevel`; use `thinkingBudget` instead」、`includeThoughts`）
 - [API reference: generateContent](https://ai.google.dev/api/generate-content) の GenerationConfig（2026-11-21 確認: `temperature` は「This field is no longer supported and is silently ignored on Gemini 3.6 Flash and newer models」、`maxOutputTokens` は「including thought tokens」。ThinkingConfig の項目と列挙は自動取得の要約でしか読めなかった）
+- [Thinking（generateContent）](https://ai.google.dev/gemini-api/docs/generate-content/thinking) の要約（2026-11-26 確認。aistudio.google.com/docs/thinking?generate-content=true へ転送される: 「You can enable thought summaries by setting `includeThoughts` to `true` in your request configuration」「Thought summaries are summarized versions of the model's raw thoughts」、ストリーミングは「rolling, incremental summaries during generation」、「Thinking features are supported on all 4, 3, and 2.5 series models」「thinking levels and budgets apply to the model's raw thoughts and not to thought summaries」「pricing is based on the full thought tokens the model needs to generate to create a summary」）
+- [API reference: generateContent](https://ai.google.dev/api/generate-content) の ThinkingConfig（2026-11-26 確認。自動取得の要約でしか読めなかった: `includeThoughts` は「If true, thoughts are returned only when available」、「An error will be returned if this field is set for models that don't support thinking」。既定の値は書かれていない）
 - [Models](https://ai.google.dev/gemini-api/docs/models)（2026-11-21 確認: `gemini-2.5-flash` と `gemini-2.5-pro` は「Effective December 1, 2026, all API requests ... will automatically route to」それぞれ `gemini-3.5-flash-lite` と `gemini-3.8-flash`。`gemini-3-pro-preview` は提供終了）
 - [Document understanding](https://aistudio.google.com/docs/document-processing)（2026-11-23 確認。ai.google.dev から移った: 「Gemini models can process documents in PDF format, using native vision」「Other non-PDF documents, such as TXT, Markdown, or HTML files, are processed as plain text」、Office と OpenDocument のファイル、1000 ページ。例は Interactions API の形）
 - [File input methods](https://aistudio.google.com/docs/file-input-methods)（2026-11-23 確認: インラインは「100 MB per request or payload (50 MB for PDFs)」、対応する種類の一覧、公開 URL は 15 MB まで）
