@@ -23,7 +23,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 - `--models`（または環境変数 `SWITCHLLM_E2E_MODELS`）に、試すモデル文字列をカンマ区切りで渡す。渡さなければ、記録を再生する
 - `--record` を付けると、通ったテストのやりとりを `e2e/recordings/` に記録する。付けずに実 API で回しても、記録は残らない。`--record` だけを付けて `--models` を渡さなければ、使い方の誤りとして止まる
 - 実行の前に、すべてのモデルのクライアントを作る。キーが足りなければ、API を呼ぶ前に止まる
-- 実 API で回したときは、最後に「U 番号ごとの結果」（[実 API 検証](exec-plans/active/real-api-verification.md) の表と対応）と、テストごとの観察メモ（推論情報が返ったか、API が拒否したときの文言など）を表示する。表の「結果」列にはここから書き写す
+- 実 API で回したときは、最後に「U 番号ごとの結果」（[実 API 検証](exec-plans/active/real-api-verification.md) の前提と対応）と、テストごとの観察メモ（推論情報が返ったか、API が拒否したときの文言など）を表示する。各前提の「結果」には、ここから書き写す
 - `--vision-models` に挙げた Chat Completions 互換のモデルでは、画像のテストも回す（OpenAI・Anthropic・Gemini のモデルでは常に回す）
 - Claude Code が実行するときは、モデルと料金の目安を伝えて、ユーザーの了承を得てから（[CLAUDE.md](../CLAUDE.md)）
 

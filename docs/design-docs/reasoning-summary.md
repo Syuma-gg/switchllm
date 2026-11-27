@@ -4,7 +4,7 @@
 - 検証: 一次情報で確認、実 API 未検証（U32〜U35。E2E の `test_e2e_reasoning_summary.py`）
 - コード: `client.py`（`reasoning_summary=`、型と `reasoning_effort="none"` との組み合わせの検査）、`providers/base.py`（`ChatRequest.reasoning_summary`）、4つのアダプターの `build_request`
 - テスト: `tests/test_reasoning_summary.py`
-- 計画: [推論の要約を返させる共通の指定](../exec-plans/active/reasoning-summary.md)
+- 計画: [推論の要約を返させる共通の指定](../exec-plans/completed/2026-11-26-reasoning-summary.md)
 
 ## 背景
 
@@ -19,7 +19,9 @@
 | Ollama・LM Studio（Chat Completions 互換） | 互換 API にはない | 返すか、どのフィールドかが書かれていない |
 | OpenAI Chat Completions | ない | 返さない（要約の文書は Responses の形だけ） |
 
-`Response.thinking` と `StreamEvent("thinking")` はあるのに、多くのモデルで `None` になる。返させるには、利用者が各社の形式を調べて `extra_by_provider=` に書き分けるしかなかった（Anthropic では `adaptive` を一緒に送ると、モデルによって考えるようになったり 400 になったりすることも調べる）。2026-11-21 に [推論の強さ](reasoning-effort.md) を足したときは「共通化しない」としたが、[基本方針](core-beliefs.md) の「Client のパラメータ1つだけを変えればよい」に照らし、2026-11-26 に作者の判断で足すことにした。
+- `Response.thinking` と `StreamEvent("thinking")` はあるのに、多くのモデルで `None` になる
+- 返させるには、利用者が各社の形式を調べて `extra_by_provider=` に書き分けるしかなかった。Anthropic では、`adaptive` を一緒に送ると、モデルによって考えるようになったり 400 になったりすることも調べる
+- 2026-11-21 に [推論の強さ](reasoning-effort.md) を足したときは「共通化しない」とした。[基本方針](core-beliefs.md) の「Client のパラメータ1つだけを変えればよい」に照らし、2026-11-26 に作者の判断で足すことにした
 
 ## 決定
 
@@ -34,12 +36,25 @@
 | `gemini` | `generationConfig.thinkingConfig.includeThoughts: true`。`thinkingLevel` と同じオブジェクトに並ぶ |
 | `openai_chat` | 何も足さない。接続先が OpenAI 本家（`https://api.openai.com/v1`）なら、送る前に `UnsupportedFeatureError` |
 
-- **段階は受け付けない。** OpenAI の `concise`・`detailed` は OpenAI にしかなく、受け付けるとほかの社では `UnsupportedFeatureError` にするしかなくなり、切り替えを妨げる。`auto` は多くのモデルで `detailed` と同じ。段階を決めたいときは `extra_by_provider=` で渡す（同じ場所なら `extra=` が勝つ。いつもの深いマージ）
-- **既定は `False`（頼まない）。** `True` にすると、今のコードで Anthropic 4.5 系が毎回 400 になり、Opus 4.6〜4.8・Sonnet 4.6 は考えるようになって料金と待ち時間が増える。OpenAI は、最新の推論モデルで要約に組織の認証が要ることがある（U32）
+- **段階は受け付けない**
+  - OpenAI の `concise`・`detailed` は OpenAI にしかなく、受け付けるとほかの社では `UnsupportedFeatureError` にするしかなくなり、切り替えを妨げる
+  - `auto` は、多くのモデルで `detailed` と同じ
+  - 段階を決めたいときは `extra_by_provider=` で渡す（同じ場所なら `extra=` が勝つ。いつもの深いマージ）
+- **既定は `False`（頼まない）。** `True` にすると次のことが起きる
+  - 今のコードで、Anthropic 4.5 系が毎回 400 になる
+  - Opus 4.6〜4.8・Sonnet 4.6 は考えるようになり、料金と待ち時間が増える
+  - OpenAI は、最新の推論モデルで、要約に組織の認証が要ることがある（U32）
 - **`reasoning_effort="none"` と一緒なら、送る前に `ConfigurationError`。** 推論を切りながら本文を頼むのは矛盾する。Anthropic では `display` が `type: "disabled"` で無効（「there is nothing to display」）
-- **Anthropic は `type: "adaptive"` も送る。** `type` は必須で、`display` だけでは送れない。Claude 5 系は送らなくても adaptive で考えるので変わらない。変わるのは Opus 4.6〜4.8・Sonnet 4.6（考えるようになる）と 4.5 系（400）だけ。4.5 系で使うときは `extra={"thinking": {"type": "enabled", "budget_tokens": N}}` と一緒に渡すと、深いマージで `display` が並ぶ（`display` は `enabled` でも使える）
-- **Chat Completions 互換のサーバーには何も足さない。** 要約を頼む標準の指定がない。DeepSeek は頼まなくても返すので、これで満たせる。Ollama・LM Studio は、返せば `reasoning_content` か `reasoning` から読む（U35）
-  - **OpenAI 本家の Chat Completions だけは止める。** 推論の本文を返さないので、黙って `None` にせず、Responses API（`openai:`）を案内する。止めるのはサーバーの制約なので、プリセットの名前ではなく接続先で決める（`max_tokens_field` と同じ）。`openai-chat:` に別の `base_url`（OpenRouter など）を渡せば使える
+- **Anthropic は `type: "adaptive"` も送る。** `type` は必須で、`display` だけでは送れない
+  - Claude 5 系は、送らなくても adaptive で考えるので変わらない
+  - 変わるのは、Opus 4.6〜4.8・Sonnet 4.6（考えるようになる）と 4.5 系（400）だけ
+  - 4.5 系で使うときは、`extra={"thinking": {"type": "enabled", "budget_tokens": N}}` と一緒に渡す。深いマージで `display` が並ぶ（`display` は `enabled` でも使える）
+- **Chat Completions 互換のサーバーには何も足さない。** 要約を頼む標準の指定がない
+  - DeepSeek は、頼まなくても返すので、これで満たせる
+  - Ollama・LM Studio は、返せば `reasoning_content` か `reasoning` から読む（U35）
+- **OpenAI 本家の Chat Completions だけは止める。** 推論の本文を返さないので、黙って `None` にせず、Responses API（`openai:`）を案内する
+  - 止めるのはサーバーの制約なので、プリセットの名前ではなく接続先で決める（`max_tokens_field` と同じ）
+  - `openai-chat:` に別の `base_url`（OpenRouter など）を渡せば使える
 - **モデルが受け付けないときは、API のエラーをそのまま返す。** 推論しないモデル、Anthropic 4.5 系の `adaptive` など。推論の強さと同じく、モデルの一覧を持たない（[実 API 検証](../exec-plans/active/real-api-verification.md) の 2026-11-17 の判断）
 - **頼んでも `None` のことがある。** 要約を返すかはモデルが決める（Gemini は「thoughts are returned only when available」、Anthropic の adaptive は考えないこともある）。返らなかったことを例外にはしない
 - 履歴の再送（`ProviderState`）は変えない。Anthropic は会話の途中で `display` を変えてよく、`signature` は `display` によらず同じ（「Switching `display` values between turns in a conversation is supported」）

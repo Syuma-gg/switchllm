@@ -111,7 +111,10 @@ def place_order(order: dict) -> str:
 ```
 
 - Tool definitions can also be dicts (`{"name", "description", "parameters"}`)
-- `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`. It is not sent unless you give it (every provider defaults to auto). Naming a tool that is not in `tools` raises `ConfigurationError` before sending. Some models reject `"required"` and a named tool (for example Anthropic's Opus 5.5 and Sonnet 5.5). The API's error is then raised as is as `BadRequestError`; switchllm never quietly changes it to `"auto"`
+- `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`
+  - It is not sent unless you give it (every provider defaults to auto)
+  - Naming a tool that is not in `tools` raises `ConfigurationError` before sending
+  - Some models reject `"required"` and a named tool (for example Anthropic's Opus 5.5 and Sonnet 5.5). The API's error is then raised as is as `BadRequestError`; switchllm never quietly changes it to `"auto"`
 - Parallel tool calls are supported (for Anthropic and Gemini, the results are sent together in one message)
 - `run_tool_calls` runs your functions with arguments chosen by the model. Validate the arguments in functions that do anything dangerous ([SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md), in Japanese)
 
@@ -193,7 +196,11 @@ print(res.thinking)  # the reasoning summary, or None if the model returned none
 ```
 
 - Each provider gets its own setting: OpenAI `reasoning.summary: "auto"`, Anthropic `thinking: {"type": "adaptive", "display": "summarized"}`, Gemini `thinkingConfig.includeThoughts: true`. Chat Completions has no standard setting, so nothing is added there; DeepSeek returns its reasoning anyway, and Ollama or LM Studio text is used if the server sends it. With `stream()`, the text arrives as `thinking` events
-- The default is `False`. On Anthropic and Gemini the summary itself costs nothing extra (you pay for the full reasoning either way); on Anthropic it adds some latency. Claude Opus 4.6 to 4.8 and Sonnet 4.6 don't think unless asked, so `adaptive` turns thinking on there, which does cost more. Claude 4.5 models reject `adaptive` with a 400, so on those pass `extra={"thinking": {"type": "enabled", "budget_tokens": 2048}}` as well. OpenAI may require organization verification for summaries on its latest reasoning models
+- The default is `False`
+  - On Anthropic and Gemini the summary itself costs nothing extra (you pay for the full reasoning either way); on Anthropic it adds some latency
+  - Claude Opus 4.6 to 4.8 and Sonnet 4.6 don't think unless asked, so `adaptive` turns thinking on there, which does cost more
+  - Claude 4.5 models reject `adaptive` with a 400, so on those pass `extra={"thinking": {"type": "enabled", "budget_tokens": 2048}}` as well
+  - OpenAI may require organization verification for summaries on its latest reasoning models
 - The model decides whether to return a summary, so `res.thinking` can still be `None`
 - It is a plain on/off switch. For OpenAI's `"concise"` or `"detailed"`, use `extra_by_provider=`
 - Combining it with `reasoning_effort="none"` raises `ConfigurationError` before sending. The `openai-chat:` provider pointed at OpenAI raises `UnsupportedFeatureError`, because OpenAI's Chat Completions doesn't return reasoning text; use `openai:` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md), in Japanese)
@@ -228,7 +235,12 @@ client.chat("...", extra_by_provider={
 
 `client.with_model("anthropic:claude-haiku-5-5")` creates a client for another model that shares the connection (useful for fallbacks and comparisons). For the same provider it keeps `api_key` / `base_url` / options; for a different provider it does not, so keys and auth headers are never sent to another server.
 
-`headers=` adds HTTP headers to every request, for every provider (for example, for a gateway in front of the APIs). A header with the same name as one the library sets, including the API key header (`Authorization`, `x-api-key`, `x-goog-api-key`), replaces it; names are compared case-insensitively. If you pass the API key header this way, you need no `api_key=` or environment variable. To stop a header the library sets, pass `None` as its value. For example, when the gateway takes its key in a different header, set the library's API key header to `None` so that your provider key is not sent to the gateway. On Anthropic, set the API version and beta features with `anthropic_version=` and `beta=` instead.
+`headers=` adds HTTP headers to every request, for every provider (for example, for a gateway in front of the APIs).
+
+- A header with the same name as one the library sets, including the API key header (`Authorization`, `x-api-key`, `x-goog-api-key`), replaces it. Names are compared case-insensitively
+- If you pass the API key header this way, you need no `api_key=` or environment variable
+- To stop a header the library sets, pass `None` as its value. For example, when the gateway takes its key in a different header, set the library's API key header to `None` so that your provider key is not sent to the gateway
+- On Anthropic, set the API version and beta features with `anthropic_version=` and `beta=` instead
 
 ```python
 Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
@@ -287,7 +299,7 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` (this costs a small amount; add `--collect-only` first to see how many calls it makes without calling the APIs)
 - Image and file input are supported (files as base64 only); audio input is not. Image URLs are not supported for Gemini (pass base64 instead)
-- Reasoning text: OpenAI, Claude 5 models, and Gemini return no reasoning summary unless you ask, so `res.thinking` is often `None`. Ask in each provider's format with `extra_by_provider=` (OpenAI `{"reasoning": {"summary": "auto"}}`, Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`, Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`)
+- Reasoning text: OpenAI, Claude 5 models, and Gemini return no reasoning summary unless you ask, so `res.thinking` is often `None`. Pass `reasoning_summary=True` to ask for it (see "Reasoning summaries" above). Even then, the model decides whether to return one
 - Anthropic: the default API version is `2026-10-21`, which rejects `temperature` on every model, so `temperature=` raises `UnsupportedFeatureError` before sending. For older models that still accept it, use `Client(..., anthropic_version="2023-06-01")`. Current Claude models reject a non-default `temperature` even on the older version ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md), in Japanese)
 - Structured output: OpenAI requires every property to be listed in `required` (make an optional field nullable instead, for example `{"type": ["string", "null"]}`), and each provider supports a different subset of JSON Schema. Keywords a provider does not support are rejected with `BadRequestError` (Gemini ignores them)
 - Anthropic requires max_tokens, so it is sent as 4096 when you do not give one (change it with `Client(..., default_max_tokens=...)`). The other providers send no limit unless you give one, so a long answer may stop with `stop_reason="max_tokens"` on Anthropic only

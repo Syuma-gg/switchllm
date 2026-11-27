@@ -4,27 +4,25 @@
 
 ## やること
 
+細かい振る舞いは、各行のリンク先の設計判断と [公開 API](public-api.md) にある。
+
 - テキストの送受信（`chat()`）とストリーミング（`stream()`）
-- ツール呼び出し（並列を含む）と、署名・推論情報を落とさない往復
+- ツール呼び出し（並列を含む）と、署名・推論情報を落とさない往復（[判断](../design-docs/provider-state-resend.md)）
 - 会話の途中でのプロバイダー切り替え（履歴の変換）
-- 画像入力
-- 共通の例外と自動リトライ
-- `@tool`（決めた範囲の型から JSON Schema を作る）と `run_tool_calls`
-- `extra=` による各社固有パラメータの受け渡しと、`extra_by_provider=` でプロバイダーごとに並べて書くこと（モデルを切り替えても、呼び出し側のコードを直さずに済む）
+- 画像の入力
+- 共通の例外と自動リトライ（[信頼性](../RELIABILITY.md)）
+- `@tool`（決めた範囲の型から JSON Schema を作る）と `run_tool_calls`（[判断](../design-docs/tool-schema-scope.md)）
+- `extra=` による各社に固有のパラメータの受け渡しと、`extra_by_provider=` でプロバイダーごとに並べて書くこと（[判断](../design-docs/provider-specific-params.md)）
 - `register_provider()` による OpenAI 互換サーバーの追加
-- 履歴の JSON 保存・復元（`Message.to_dict()` / `from_dict()`。推論情報を含む。2026-11-18）
-- 構造化出力（`response_schema=` に JSON Schema の dict を渡し、`Response.parsed` に読んだ値を入れる。2026-11-20。[判断](../design-docs/structured-output.md)）。スキーマのない JSON モードは共通化しない（`extra=` で渡す）
-- 推論の強さ（`reasoning_effort=` に段階の名前を渡し、各社の指定に名前を変えずに入れる。2026-11-21。[判断](../design-docs/reasoning-effort.md)）。数での予算（Gemini 2.5 の `thinkingBudget`）は共通化しない（`extra=` で渡す）
-- 推論の要約（`reasoning_summary=True` で各社の「要約を返す」指定を送り、`Response.thinking` に入れる。段階は受け付けない。2026-11-26。[判断](../design-docs/reasoning-summary.md)）
-- すべてのアダプターで `headers=`（ゲートウェイなどに足すヘッダー。同じ名前はライブラリの値を置き換え、値の `None` で止める。2026-11-23。[判断](../design-docs/custom-headers.md)）
-- ファイルの入力（`FilePart`。PDF などを base64 で送る。種類は各社が受け付けるものをそのまま送り、受け付けないと分かっているものは送る前に `UnsupportedFeatureError`。ファイルの URL とアップロードの API は扱わない。2026-11-23。[判断](../design-docs/file-input.md)）
-- 非同期のクライアント（`AsyncClient`。引数とメソッドの名前は `Client` と同じ）と、`async def` のツールを並行に実行する `arun_tool_calls`（2026-11-23。[判断](../design-docs/async-client.md)）
+- 履歴の JSON 保存・復元（`Message.to_dict()` / `from_dict()`。2026-11-18。[判断](../design-docs/history-serialization.md)）
+- 構造化出力（`response_schema=`。2026-11-20。[判断](../design-docs/structured-output.md)）。スキーマのない JSON モードは共通化しない（`extra=` で渡す）
+- 推論の強さ（`reasoning_effort=`。2026-11-21。[判断](../design-docs/reasoning-effort.md)）。数での予算（Gemini 2.5 の `thinkingBudget`）は共通化しない（`extra=` で渡す）
+- 推論の要約（`reasoning_summary=True`。2026-11-26。[判断](../design-docs/reasoning-summary.md)）。段階は受け付けない
+- すべてのアダプターで `headers=`（2026-11-23。[判断](../design-docs/custom-headers.md)）
+- ファイルの入力（`FilePart`。2026-11-23。[判断](../design-docs/file-input.md)）。ファイルの URL とアップロードの API は扱わない
+- 非同期のクライアント（`AsyncClient`）と、`async def` のツールを並行に実行する `arun_tool_calls`（2026-11-23。[判断](../design-docs/async-client.md)）
 
-## 足すと決めたもの
-
-2026-11-18 に作者が決めた。選んだ基準は [基本方針](../design-docs/core-beliefs.md) の「機能を足すか絞るかの基準」で、進め方は [計画](../exec-plans/active/model-layer-features.md) にある。できたものから「やること」に移す。
-
-2026-11-23 に、6つすべてを「やること」に移した。
+2026-11-18〜23 に足した6つの機能の経緯は、[モデルの層の機能を足す](../exec-plans/completed/2026-11-23-model-layer-features.md) にある。
 
 ## やらないこと
 

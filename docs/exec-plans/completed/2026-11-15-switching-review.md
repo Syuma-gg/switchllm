@@ -48,14 +48,13 @@
 
 ## 進捗ログ
 
+細かい経緯は、コミット `0942986` にある。
+
 - 2026-11-15: コード全体とテストを読み、上の表の S1〜S15 を見つけた。S1〜S8 はスクラッチのスクリプトで再現した
-- 2026-11-15: 一次情報を確認した。OpenAI Chat Completions の `max_tokens` は「`max_completion_tokens` に置き換えられて非推奨で、o-series とは互換性がない」、`tool_choice` は「ツールがあれば `auto` が既定」。OpenAI Responses（function calling のガイド）、Anthropic、Gemini（API リファレンスの FunctionCallingConfig「If unspecified, the default value will be set to AUTO」）も省略時は `auto`。Ollama は `tool_choice` を非対応とし、`max_completion_tokens` は載っていない。Anthropic のストリーミングは最後に `message_stop` が届く。出典は `docs/references/` に書いた
-
-- 2026-11-15: S1〜S15 を直した。S1〜S11・S13〜S15 は、修正前のコード（HEAD の `src/`）に新しいテストを当て、落ちることを確かめた（S12 は文書だけ）。S5 のテストは、最初は引き継ぎ先を Anthropic にしていたため修正前でも通ってしまった（Anthropic は `headers` オプションを読まない）。同じアダプターを使う Ollama への切り替えに書き直し、落ちることを確かめた
-- 2026-11-15: テストを 76 件から 216 件にした。新しいファイルは `tests/test_http.py`（リトライと例外）、`tests/test_consistency.py`（同じテストを4アダプターで回す）、`tests/test_types.py`（共通型）。カバレッジは 87.68% から 98.55% になり、行はすべて到達した。使われていなかった `_http.loads()` は消した
-- 2026-11-15: 新しい前提 U16（Chat Completions 互換と Gemini のストリームの終わりの合図）を [実 API 検証](../active/real-api-verification.md) に足した。U15 は実装を変えたので、結果の列に書いた
-
-- 2026-11-15: 完了。品質検査（ruff・pytest・カバレッジ）が通ることを確かめ、`completed/` に移した
+- 2026-11-15: `tool_choice` の省略時の既定は、4社とも `auto` だった。OpenAI Chat Completions の `max_tokens` は非推奨で、o-series とは互換性がない。Ollama は `tool_choice` を非対応とし、`max_completion_tokens` は載っていない。出典は `docs/references/` にある
+- 2026-11-15: S1〜S11・S13〜S15 は、修正前のコードに新しいテストを当て、落ちることを確かめた（S12 は文書だけ）。S5 のテストは、最初は引き継ぎ先を Anthropic にしていたので、修正前でも通ってしまった（Anthropic は `headers` オプションを読まない）。同じアダプターを使う Ollama への切り替えに書き直した
+- 2026-11-15: テストを 76 件から 216 件にし、カバレッジは 87.68% から 98.55% になった。新しいファイルは `tests/test_http.py`（リトライと例外）、`tests/test_consistency.py`（同じテストを4アダプターで回す）、`tests/test_types.py`（共通型）
+- 2026-11-15: U16 を [実 API 検証](../active/real-api-verification.md) に足した。完了し、`completed/` に移した
 
 ## 判断ログ
 

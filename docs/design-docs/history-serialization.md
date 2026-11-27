@@ -4,7 +4,7 @@
 - 検証: モックで確認（4アダプター）、実 API 未検証（E2E の `test_restored_history_continues`）
 - コード: `types.py`（`Message.to_dict()` / `Message.from_dict()`）
 - テスト: `tests/test_history.py`
-- 計画: [モデルの層の機能を足す](../exec-plans/active/model-layer-features.md) の 1
+- 計画: [モデルの層の機能を足す](../exec-plans/completed/2026-11-23-model-layer-features.md) の 1
 
 ## 背景
 

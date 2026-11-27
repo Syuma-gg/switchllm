@@ -4,7 +4,7 @@
 - 検証: 一次情報で確認、実 API 未検証（U23・U24・U26・U27。E2E の `test_e2e_reasoning.py`）
 - コード: `client.py`（`reasoning_effort=`、段階の検査）、`providers/base.py`（`REASONING_EFFORTS`）、4つのアダプターの `build_request`
 - テスト: `tests/test_reasoning_effort.py`
-- 計画: [モデルの層の機能を足す](../exec-plans/active/model-layer-features.md) の 3
+- 計画: [モデルの層の機能を足す](../exec-plans/completed/2026-11-23-model-layer-features.md) の 3
 
 ## 背景
 
@@ -39,7 +39,7 @@
 - **段階の意味まではそろえない。** 同じ `high` でも、考える量はモデルによって違う。各社とも段階は目安で、Anthropic も「a behavioral signal, not a strict token budget」とする。switchllm はトークン数に換算しない
 - **各社の API に名前のない段階は、送る前に `UnsupportedFeatureError` にする**（作者の判断。不変条件 4）。例外のメッセージで、近い段階と `extra=` での指定を案内する
   - Anthropic の `none` だけは、`thinking: {"type": "disabled"}` で同じ意味になるので送る。effort は送らない
-  - Gemini の `none`: `thinkingLevel` には推論を切る段階がない。`thinkingBudget: 0` で切れるのは Gemini 2.5 だけで、Gemini 4 は `thinkingBudget` を近い段階に置き換えて警告を返すだけ（黙って考える）
+  - Gemini の `none`: `thinkingLevel` には、推論を切る段階がない。`thinkingBudget: 0` で切れるのは Gemini 2.5 だけ。Gemini 4 は、`thinkingBudget` を近い段階に置き換えて警告を返すだけ（黙って考える）
 - **モデルが受け付けない段階は、API のエラーをそのまま返す。** gpt-5.5 の `max`、Opus 5.5 の `none` などを、先回りして弾かず、別の段階に替えもしない。モデルの一覧を持たない（[実 API 検証](../exec-plans/active/real-api-verification.md) の 2026-11-17 の判断）
 - **ほかの推論の指定は共通化しない。** Anthropic の `thinking: {"type": "adaptive"}`、Gemini 2.5 の `thinkingBudget` は、`extra=` で渡す。深いマージなので、`reasoning_effort=` と一緒に使える
   - 推論の要約を返させる指定（OpenAI の `reasoning.summary`、Anthropic の `thinking.display`、Gemini の `includeThoughts`）も、ここでは共通化しないとしたが、2026-11-26 に作者の判断で `reasoning_summary=True` として足した（[判断](reasoning-summary.md)）

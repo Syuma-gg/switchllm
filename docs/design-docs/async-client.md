@@ -4,7 +4,7 @@
 - 検証: モックで確認、実 API 未検証（E2E の `test_e2e_async.py`）
 - コード: `client.py`（`AsyncClient`、同期版と共有する `_BaseClient`）、`_http.py`（`arequest_json`・`astream_sse`）、`providers/base.py`（`StreamParser`、`parse_stream`・`aparse_stream`）、4つのアダプターのストリームの解析、`tools.py`（`arun_tool_calls`）
 - テスト: `tests/test_async_client.py`。`tests/conftest.py` の `api` を使うテストは、同期と非同期の両方で回る
-- 計画: [モデルの層の機能を足す](../exec-plans/active/model-layer-features.md) の 4
+- 計画: [モデルの層の機能を足す](../exec-plans/completed/2026-11-23-model-layer-features.md) の 4
 
 ## 背景
 

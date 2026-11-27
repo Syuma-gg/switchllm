@@ -111,7 +111,10 @@ def place_order(order: dict) -> str:
 ```
 
 - ツール定義は dict（`{"name", "description", "parameters"}`）でも渡せる
-- `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`。指定しなければ送らない（各社とも既定は auto）。`tools` にない名前を指定すると、送る前に `ConfigurationError`。`"required"` と名前の指定を受け付けないモデルもある（Anthropic の Opus 5.5・Sonnet 5.5 など）。そのときは API のエラーをそのまま `BadRequestError` で返し、黙って `"auto"` に替えることはしない
+- `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`
+  - 指定しなければ送らない（各社とも既定は auto）
+  - `tools` にない名前を指定すると、送る前に `ConfigurationError`
+  - `"required"` と名前の指定を受け付けないモデルもある（Anthropic の Opus 5.5・Sonnet 5.5 など）。そのときは API のエラーをそのまま `BadRequestError` で返し、黙って `"auto"` に替えることはしない
 - 並列ツール呼び出しにも対応（Anthropic・Gemini では結果を1メッセージにまとめて送る）
 - `run_tool_calls` は、モデルが決めた引数で関数を実行する。危険な操作をする関数では引数を検証すること（[SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md)）
 
@@ -193,7 +196,11 @@ print(res.thinking)  # 推論の要約。モデルが返さなければ None
 ```
 
 - 各社の指定に置き換えて送る（OpenAI `reasoning.summary: "auto"`、Anthropic `thinking: {"type": "adaptive", "display": "summarized"}`、Gemini `thinkingConfig.includeThoughts: true`）。Chat Completions には標準の指定がないので何も足さない。DeepSeek は頼まなくても推論を返し、Ollama・LM Studio は返せばそれを入れる。`stream()` では `thinking` イベントで届く
-- 既定は `False`。Anthropic と Gemini では、要約そのものに料金はかからない（どちらでも推論の全体の分がかかる）。Anthropic では待ち時間が少し増える。Claude Opus 4.6〜4.8 と Sonnet 4.6 は頼まなければ考えないので、`adaptive` で考えるようになり、その分の料金が増える。Claude 4.5 系は `adaptive` を 400 にするので、`extra={"thinking": {"type": "enabled", "budget_tokens": 2048}}` も一緒に渡す。OpenAI は、最新の推論モデルで要約に組織の認証が要ることがある
+- 既定は `False`
+  - Anthropic と Gemini では、要約そのものに料金はかからない（どちらでも推論の全体の分がかかる）。Anthropic では待ち時間が少し増える
+  - Claude Opus 4.6〜4.8 と Sonnet 4.6 は、頼まなければ考えない。`adaptive` で考えるようになり、その分の料金が増える
+  - Claude 4.5 系は `adaptive` を 400 にするので、`extra={"thinking": {"type": "enabled", "budget_tokens": 2048}}` も一緒に渡す
+  - OpenAI は、最新の推論モデルで、要約に組織の認証が要ることがある
 - 要約を返すかはモデルが決めるので、`res.thinking` が `None` のこともある
 - 渡せるのは `True` か `False` だけ。OpenAI の `"concise"`・`"detailed"` は `extra_by_provider=` で渡す
 - `reasoning_effort="none"` と一緒に渡すと、送る前に `ConfigurationError`。OpenAI に向けた `openai-chat:` は、Chat Completions が推論の本文を返さないので `UnsupportedFeatureError`。`openai:` を使う（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md)）
@@ -228,7 +235,12 @@ client.chat("...", extra_by_provider={
 
 `client.with_model("anthropic:claude-haiku-5-5")` で、接続を共有したまま別のモデルのクライアントを作れる（フォールバックや比較に使う）。同じプロバイダーなら `api_key` / `base_url` / オプションを引き継ぎ、別のプロバイダーへは引き継がない（キーや認証ヘッダーを別のサーバーへ送らないため）。
 
-`headers=` で、どのプロバイダーにも HTTP ヘッダーを足せる（API の前にゲートウェイを置くときなど）。ライブラリが付けるヘッダーと同じ名前なら、APIキーのヘッダー（`Authorization`、`x-api-key`、`x-goog-api-key`）も含めて置き換える。名前は大文字と小文字を区別せずに比べる。APIキーのヘッダーをこれで渡せば、`api_key=` も環境変数も要らない。ライブラリが付けるヘッダーを止めるときは、値に `None` を渡す。たとえば、ゲートウェイがキーを別の名前のヘッダーで受けるときは、ライブラリのAPIキーのヘッダーを `None` にすれば、プロバイダーのキーをゲートウェイへ送らない。Anthropic の API の版と beta 機能は、`anthropic_version=` と `beta=` で指定する。
+`headers=` で、どのプロバイダーにも HTTP ヘッダーを足せる（API の前にゲートウェイを置くときなど）。
+
+- ライブラリが付けるヘッダーと同じ名前なら、APIキーのヘッダー（`Authorization`、`x-api-key`、`x-goog-api-key`）も含めて置き換える。名前は大文字と小文字を区別せずに比べる
+- APIキーのヘッダーをこれで渡せば、`api_key=` も環境変数も要らない
+- ライブラリが付けるヘッダーを止めるときは、値に `None` を渡す。たとえば、ゲートウェイがキーを別の名前のヘッダーで受けるときは、ライブラリのAPIキーのヘッダーを `None` にすれば、プロバイダーのキーをゲートウェイへ送らない
+- Anthropic の API の版と beta 機能は、`anthropic_version=` と `beta=` で指定する
 
 ```python
 Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
@@ -287,7 +299,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
 - 画像とファイルの入力は対応（ファイルは base64 だけ）、音声入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
-- 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`extra_by_provider=` で各社の形式で頼む（OpenAI `{"reasoning": {"summary": "auto"}}`、Anthropic `{"thinking": {"type": "adaptive", "display": "summarized"}}`、Gemini `{"generationConfig": {"thinkingConfig": {"includeThoughts": True}}}`）
+- 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`reasoning_summary=True` を渡すと頼める（上の「推論の要約」）。頼んでも、返すかはモデルが決める
 - Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md)）
 - 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）
 - Anthropic は max_tokens が必須なので、指定しないと 4096 で送る（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないため、長い出力では Anthropic だけ `stop_reason="max_tokens"` で切れることがある

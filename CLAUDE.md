@@ -65,7 +65,7 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 4. **共通パラメータを増やしたら4アダプターすべてで対応する**か、`UnsupportedFeatureError` を明示的に投げる。黙って無視しない。増やす前に [scope.md](docs/product-specs/scope.md) を確認する
 5. **正規化した値の意味を変えない**（`stop_reason` / `Usage` / `ToolCall.arguments`。定義は [public-api.md](docs/product-specs/public-api.md)）
 6. **テストはネットワークを使わない**。`tests/conftest.py` の `FakeAPI` で応答を積み、送られたリクエスト本体を検証する。実 API を呼ぶテストは `e2e/` にだけ置き、`--models` を渡したときだけ呼ぶ
-7. **API 仕様に関わる変更は一次情報（各社の公式ドキュメント）で確認してから行う**。確認したら `docs/references/` の該当文書に出典を足し、[実 API 検証](docs/exec-plans/active/real-api-verification.md) の表を更新する
+7. **API 仕様に関わる変更は一次情報（各社の公式ドキュメント）で確認してから行う**。確認したら `docs/references/` の該当文書に出典を足し、[実 API 検証](docs/exec-plans/active/real-api-verification.md) の前提の一覧を更新する
 
 ## コード規約
 
@@ -77,6 +77,7 @@ python scripts/quality_gate.py --ci  # ruff・pytest・カバレッジ（Stop �
 ## ドキュメントの保守
 
 - 新しい文書は、そのディレクトリの `index.md`（計画は [docs/PLANS.md](docs/PLANS.md)）からリンクする。どこからも辿れない文書があると `tests/test_docs.py` が失敗する
+- 同じ事実は正本の1か所にだけ書き、ほかの文書はリンクする。何がどこの正本かは [docs の索引](docs/index.md) の「文書の種類と更新のきっかけ」
 - コードの挙動を変えたら、同じ変更で関係する文書も直す。古い記述を見つけたらその場で直すか、tech-debt-tracker に書く
 - README は英語版と日本語版を同じ変更で直す。リンクは `https://github.com/Syuma-gg/switchllm/blob/main/...` の絶対 URL にする（`tests/test_docs.py` が検査）
 - 複数ステップの作業は `docs/exec-plans/active/` に計画を置き、終わったら `completed/` に移す

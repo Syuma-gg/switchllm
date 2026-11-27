@@ -19,7 +19,7 @@
 - `chat()` / `stream()` に `extra_by_provider=` を足す。`{"anthropic": {...}, "openai": {...}}` の形で各社の分を並べ、モデル文字列の `provider:` 部分と同じ名前の分だけを `extra=` に深くマージする（同じキーはプロバイダーの分が優先）
   - 名前は大文字小文字を区別しない。登録されていない名前は `ConfigurationError`、値が dict でなければ `TypeError`（打ち間違いを黙って無視しない）
   - 書いていないプロバイダーには何も足さない
-- 意味の共通化（推論の強さを `low` / `medium` / `high` にそろえる、など）はしない。指定方法がモデルの世代ごとに変わり、4アダプターで追い続けるのは重い（方針 1「薄く保つ」）。**2026-11-18 に見直した**: 推論の強さと構造化出力は共通化する（[計画](../exec-plans/active/model-layer-features.md)）。構造化出力は 2026-11-20 に `response_schema=` として（[判断](structured-output.md)）、推論の強さは 2026-11-21 に `reasoning_effort=` として足した（[判断](reasoning-effort.md)）。`extra=` / `extra_by_provider=` は、共通化しないものの逃げ道として残す
+- 意味の共通化（推論の強さを `low` / `medium` / `high` にそろえる、など）はしない。指定方法がモデルの世代ごとに変わり、4アダプターで追い続けるのは重い（方針 1「薄く保つ」）。**2026-11-18 に見直した**: 推論の強さと構造化出力は共通化する（[計画](../exec-plans/completed/2026-11-23-model-layer-features.md)）。構造化出力は 2026-11-20 に `response_schema=` として（[判断](structured-output.md)）、推論の強さは 2026-11-21 に `reasoning_effort=` として足した（[判断](reasoning-effort.md)）。`extra=` / `extra_by_provider=` は、共通化しないものの逃げ道として残す
 - アダプターごとに、受け付けるオプション名を `Provider.option_names` に決め、それ以外は `ConfigurationError` にする。`register_provider()` も登録の時点で検査する。一覧は [public-api.md](../product-specs/public-api.md) にあり、ソースが読むオプションとの一致は `tests/test_client.py`、文書との一致は `tests/test_docs.py` が検査する
 - `with_model()` は、同じプロバイダーなら api_key / base_url / オプションを引き継ぎ、別のプロバイダーへは timeout / max_retries / retry_backoff だけを引き継ぐ
 
@@ -27,7 +27,7 @@
 
 | 案 | 却下した理由 |
 |---|---|
-| 構造化出力を共通パラメータにする | 4社とも JSON Schema での出力に対応しているが、一次情報の確認と4アダプターの実装が要る。作者の判断で、[スコープ](../product-specs/scope.md) の「やらないこと」のままにした。2026-11-18 に見直し、足すことにした（[計画](../exec-plans/active/model-layer-features.md)） |
+| 構造化出力を共通パラメータにする | 4社とも JSON Schema での出力に対応しているが、一次情報の確認と4アダプターの実装が要る。作者の判断で、[スコープ](../product-specs/scope.md) の「やらないこと」のままにした。2026-11-18 に見直し、足すことにした（[計画](../exec-plans/completed/2026-11-23-model-layer-features.md)） |
 | `extra=` のキーがプロバイダー名なら振り分ける | `extra` は本体にそのままマージするので、本体のキーとプロバイダー名の区別がつかない |
 | キーをアダプター名（`openai_chat` など）にする | 利用者はアダプター名を目にしない。モデル文字列に書く名前の方が迷わない |
 | `with_model()` で何も引き継がない | 同じ社の別モデルへの切り替え（よくある使い方）で、毎回キーを渡し直すことになる |
