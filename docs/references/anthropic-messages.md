@@ -23,7 +23,7 @@
 | reasoning_effort | `output_config.effort`。`none` は `thinking: {"type": "disabled"}`、`minimal` は `UnsupportedFeatureError`（下の「推論の強さ」） |
 | ツール定義 | `{"name", "description", "input_schema"}` |
 | tool_choice | `{"type": "auto"}` / `{"type": "none"}` / `{"type": "any"}` / `{"type": "tool", "name"}`。指定がなければ送らない（ツールがあれば既定は `auto`） |
-| 画像 | `{"type": "image", "source": {"type": "base64", ...}}` か `{"type": "url", "url"}` |
+| 画像 | `{"type": "image", "source": {"type": "base64", ...}}` か `{"type": "url", "url"}`。オプション `image_url=False` なら URL は送る前に止める（`bedrock` のプリセット。[クラウドの経路](cloud-endpoints.md)） |
 | ファイル | 下の「ファイルの入力」 |
 
 ファイルの送り方:

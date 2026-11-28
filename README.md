@@ -36,6 +36,7 @@ Pass API keys through environment variables (or the `api_key=` argument).
 | OpenAI (Chat Completions) | `openai-chat:<model>` | `OPENAI_API_KEY` |
 | DeepSeek | `deepseek:deepseek-flash` | `DEEPSEEK_API_KEY` |
 | Ollama / LM Studio (local) | `ollama:llama3.2` / `lmstudio:<model>` | Not needed |
+| Azure OpenAI, Claude on Foundry or Bedrock, Vertex AI | `azure:<deployment>`, `foundry:<deployment>`, `bedrock:anthropic.claude-sonnet-5-5`, `vertex:gemini-2.5-flash` | See "Cloud platforms" below |
 | Other OpenAI-compatible APIs | Register with `register_provider()` (see "Other OpenAI-compatible APIs" below) | Set when registering |
 
 Model IDs change often, so check each provider's model list before you use one.
@@ -206,7 +207,7 @@ print(res.thinking)  # the reasoning summary, or None if the model returned none
   - OpenAI may require organization verification for summaries on its latest reasoning models
 - The model decides whether to return a summary, so `res.thinking` can still be `None`
 - It is a plain on/off switch. For OpenAI's `"concise"` or `"detailed"`, use `extra_by_provider=`
-- Combining it with `reasoning_effort="none"` raises `ConfigurationError` before sending. The `openai-chat:` provider pointed at OpenAI raises `UnsupportedFeatureError`, because OpenAI's Chat Completions doesn't return reasoning text; use `openai:` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md), in Japanese)
+- Combining it with `reasoning_effort="none"` raises `ConfigurationError` before sending. The `openai-chat:` provider pointed at OpenAI, and `azure-chat:`, raise `UnsupportedFeatureError`, because their Chat Completions doesn't return reasoning text; use `openai:` or `azure:` ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md), in Japanese)
 
 ### Files (PDF and more)
 
@@ -286,6 +287,31 @@ When an option is not sent because every model of the provider would reject it, 
 
 429s, 5xx errors, and connection errors are retried automatically with exponential backoff (`max_retries=2`, honoring the `Retry-After` header). Streams are retried only before the first event arrives. See [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md) (in Japanese) for details.
 
+### Cloud platforms (API keys)
+
+Models offered on Azure, AWS and Google Cloud can be called with an API key. The request format is the same as the provider's own API, so only the model string changes. Cloud sign-in (IAM / SigV4, OAuth, Entra ID) is not supported.
+
+| Platform | Example model string | Key | Builds the URL from |
+|---|---|---|---|
+| Azure OpenAI (Responses API / Chat Completions) | `azure:<deployment>` / `azure-chat:<deployment>` | `AZURE_OPENAI_API_KEY` | `AZURE_OPENAI_ENDPOINT` (`https://<resource>.openai.azure.com`) |
+| Claude in Microsoft Foundry | `foundry:claude-sonnet-5-5` (the deployment name) | `ANTHROPIC_FOUNDRY_API_KEY` | `ANTHROPIC_FOUNDRY_RESOURCE` (or `ANTHROPIC_FOUNDRY_BASE_URL`) |
+| Claude in Amazon Bedrock | `bedrock:anthropic.claude-sonnet-5-5` | `AWS_BEARER_TOKEN_BEDROCK` | `AWS_REGION` (or `AWS_DEFAULT_REGION`) |
+| Vertex AI express mode (Gemini) | `vertex:gemini-2.5-flash` | `VERTEX_API_KEY` | Nothing (fixed URL) |
+
+```python
+# AWS_BEARER_TOKEN_BEDROCK and AWS_REGION are set
+client = Client("bedrock:anthropic.claude-sonnet-5-5")
+client = client.with_model("bedrock:anthropic.claude-haiku-5-5")   # same region and key
+```
+
+- The environment variables have the same names as in each platform's official SDK (`VERTEX_API_KEY` is this library's own name, because Google's documentation names none). Pass `base_url=` to use another URL; then the URL variables are not read
+- A missing or unusable value (a region with a `.`, an `http://` endpoint, and so on) raises `ConfigurationError` when the `Client` is created, before anything is sent. The key goes to the URL built from these values, so the library checks them first
+- For Azure OpenAI and Foundry, `model` is your deployment name
+- Bedrock short-term keys expire after 12 hours. The library does not renew keys; pass a fresh one with `api_key=`
+- What differs from the provider's own API: `bedrock` accepts no image URLs, and `azure-chat` returns no reasoning summaries, so both raise `UnsupportedFeatureError` before sending. Vertex AI express mode is for personal Google accounts (@gmail.com) and offers Gemini models only
+- Raw data (signatures, reasoning items) goes back only on the same route: history from `bedrock:` is converted again before it goes to `anthropic:` or `foundry:`
+- Not yet verified against the real APIs. Sources and open questions are in [cloud-endpoints.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/references/cloud-endpoints.md) (in Japanese)
+
 ### Other OpenAI-compatible APIs
 
 Servers without a preset (OpenAI-compatible cloud APIs, your own vLLM, an internal gateway, and so on) can be registered under a name. Check the base_url in each service's official documentation.
@@ -307,11 +333,11 @@ Most code runs unchanged when only the model string changes. A few arguments dif
 - **Keep provider-specific settings side by side.** Put request parameters that only one provider understands in `extra_by_provider=`, and client options in `options_by_provider=`. Only the chosen provider's part is used. `extra=` and `**options` go to every provider, so use them only for what every provider accepts
 - **`max_tokens`: leave it out, or leave room for reasoning.** Left out, each model uses its own limit (Anthropic, which requires a value, gets 64000). If you set it to cap length or cost, remember that OpenAI, Gemini and Claude 5 models count reasoning tokens toward it. A reply cut off by the limit has `stop_reason == "max_tokens"` and may have no text
 - **Don't rely on `temperature` or `stop`.** `temperature` is dropped on Anthropic (with a `DroppedParameterWarning`) and ignored without an error by Gemini 3.6 and later and by DeepSeek in thinking mode. `stop` raises `UnsupportedFeatureError` on the OpenAI Responses API. Describe the length and format you want in the prompt (or use `response_schema=`), and cut the text yourself where you need to
-- **Pass images as base64.** `ImagePart.from_file()` and `ImagePart(data=..., media_type=...)` work on every preset. An image URL is fetched by the provider's API, and Ollama accepts no URLs
+- **Pass images as base64.** `ImagePart.from_file()` and `ImagePart(data=..., media_type=...)` work on every preset. An image URL is fetched by the provider's API, and Ollama and Bedrock accept no URLs
 - **Send PDFs or plain text.** PDFs work except on the `deepseek`, `ollama` and `lmstudio` presets. For other text files (CSV and so on), read the file and put its text in a `TextPart`, which works everywhere
 - **`reasoning_effort`: use `"low"`, `"medium"` or `"high"`.** These are the levels most reasoning models accept. `"none"`, `"minimal"`, `"xhigh"` and `"max"` are missing on some providers (`UnsupportedFeatureError` before sending) or some models (`BadRequestError`). Gemini 2.5 takes no level: write its `thinkingBudget` in `extra_by_provider=`
 - **Leave `tool_choice` unset.** `"auto"` is the default everywhere. A forced choice (`"required"` or a tool name) is rejected by several Claude 5 models, by DeepSeek in thinking mode, and by Ollama. Ask for the tool in the prompt instead, and to stop tool calls, don't pass `tools`
-- **Treat `res.thinking` as optional.** With `reasoning_summary=True`, the model still decides whether to return a summary. `openai-chat:` pointed at OpenAI raises `UnsupportedFeatureError`, and Claude 4.5 models reject it with a 400
+- **Treat `res.thinking` as optional.** With `reasoning_summary=True`, the model still decides whether to return a summary. `openai-chat:` pointed at OpenAI and `azure-chat:` raise `UnsupportedFeatureError`, and Claude 4.5 models reject it with a 400
 - **Structured output: list every property in `required`.** Make optional fields nullable (OpenAI requires it). DeepSeek has no JSON Schema, so `response_schema=` raises `UnsupportedFeatureError` there (see "Structured output" above)
 - **Switching in the middle of a conversation** works with the same `messages`: raw data goes back only to the same model (any Claude model for Anthropic), and other models get the history converted again. History that holds what the new provider cannot take (an image URL or a PDF for Ollama, for example) raises `UnsupportedFeatureError` before sending
 
@@ -332,11 +358,12 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 ## Known limitations
 
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` (this costs a small amount; add `--collect-only` first to see how many calls it makes without calling the APIs)
-- Image and file input are supported (files as base64 only); audio input is not. Image URLs are fetched by the provider's API, not by this library; Ollama accepts only base64 images. What each preset can send, and what stops before sending, is listed in [public-api.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/public-api.md) (in Japanese)
+- Image and file input are supported (files as base64 only); audio input is not. Image URLs are fetched by the provider's API, not by this library; Ollama and the `bedrock` preset accept only base64 images. What each preset can send, and what stops before sending, is listed in [public-api.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/public-api.md) (in Japanese)
 - Reasoning text: OpenAI, Claude 5 models, and Gemini return no reasoning summary unless you ask, so `res.thinking` is often `None`. Pass `reasoning_summary=True` to ask for it (see "Reasoning summaries" above). Even then, the model decides whether to return one
 - Anthropic: the default API version is `2026-10-21`, which rejects `temperature` on every model. So `temperature=` is not sent, and a `DroppedParameterWarning` tells you so; the rest of the request goes through. For older models that still accept it, use `Client(..., anthropic_version="2023-06-01")`. Current Claude models reject a non-default `temperature` even on the older version. Gemini 3.6 and later, and DeepSeek in thinking mode, ignore `temperature` without an error ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/dropped-parameter-warning.md), in Japanese)
 - Structured output: OpenAI requires every property to be listed in `required` (make an optional field nullable instead, for example `{"type": ["string", "null"]}`), and each provider supports a different subset of JSON Schema. Keywords a provider does not support are rejected with `BadRequestError` (Gemini ignores them)
 - Anthropic requires max_tokens, so it is sent as 64000 when you do not give one. Every current Claude model accepts this value, and Claude 5 models count their reasoning toward it (change it with `Client(..., default_max_tokens=...)`). The other providers send no limit unless you give one, so the model's own limit applies ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-max-tokens.md), in Japanese)
+- Cloud platforms are reached with API keys only (see "Cloud platforms" above); IAM / SigV4, OAuth and Entra ID sign-in are not supported, and Bedrock short-term keys are not renewed
 - The OpenAI Responses API has no `stop` sequences, so specifying one raises `UnsupportedFeatureError`
 - The Responses API stores responses by default. With `extra={"store": False}`, reasoning items still include `encrypted_content` by default, so they can be resent without `include` (not yet verified against the real API)
 - Gemini function schemas are sent as `parameters` (a subset of OpenAPI). For complex JSON Schemas, use `Client(..., schema_field="parametersJsonSchema")`

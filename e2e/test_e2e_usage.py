@@ -8,7 +8,7 @@ from e2e_support import MAX_TOKENS, usage_problems
 QUESTION = "17×23 はいくつ？答えの数字だけを書いて。"  # 推論トークンが出るように、少し考えさせる
 
 
-@pytest.mark.premise("U14", "U18")
+@pytest.mark.premise("U14", "U18", "U44")
 @pytest.mark.calls(2)
 def test_usage_breakdown(client, adapter, note):
     res = client.chat(QUESTION, max_tokens=MAX_TOKENS)

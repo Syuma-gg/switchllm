@@ -23,6 +23,8 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 - `--models`（または環境変数 `SWITCHLLM_E2E_MODELS`）に、試すモデル文字列をカンマ区切りで渡す。渡さなければ、記録を再生する
 - `--record` を付けると、通ったテストのやりとりを `e2e/recordings/` に記録する。付けずに実 API で回しても、記録は残らない。`--record` だけを付けて `--models` を渡さなければ、使い方の誤りとして止まる
 - 実行の前に、すべてのモデルのクライアントを作る。キーが足りなければ、API を呼ぶ前に止まる
+- クラウドの経路（`azure:<deployment>`・`azure-chat:<deployment>`・`foundry:<deployment>`・`bedrock:anthropic.<model>`・`vertex:<model>`）は、キーのほかに URL を組み立てる環境変数（`AZURE_OPENAI_ENDPOINT`・`ANTHROPIC_FOUNDRY_RESOURCE`・`AWS_REGION`）も要る（[クラウドの経路](references/cloud-endpoints.md)）。足りなければ、同じく API を呼ぶ前に止まる
+  - 記録には、URL のリソース名とリージョンを決まった値（`e2e_support.REPLAY_ENV`）に置き換えて残す。再生では、その値を環境変数に入れて同じ URL を組み立てる
 - 実 API で回したときは、最後に「U 番号ごとの結果」（[実 API 検証](exec-plans/active/real-api-verification.md) の前提と対応）と、テストごとの観察メモ（推論情報が返ったか、API が拒否したときの文言など）を表示する。各前提の「結果」には、ここから書き写す
 - `--vision-models` に挙げた Chat Completions 互換のモデルでは、画像のテストも回す（OpenAI・Anthropic・Gemini のモデルでは常に回す）
 - Claude Code が実行するときは、モデルと料金の目安を伝えて、ユーザーの了承を得てから（[CLAUDE.md](../CLAUDE.md)）
@@ -33,6 +35,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 - **モデルが拒否してよい指定は、API のエラーをそのまま返すことを確かめる。** モデルごとの制限の一覧は持たない（[判断](exec-plans/active/real-api-verification.md) の 2026-11-17）。受け付けたか拒否したかは観察メモに残す。拒否されたときは、switchllm がエラーに案内を足した引数も残す（`e2e_support.rejection()`、U38）
 - **skip と xfail を使わない。** 対象外のモデル（OpenAI だけの `store`、キーの要らないローカルのサーバーなど）には、最初からテストを作らない（収集のときに外す）
 - **呼ぶ回数を `@pytest.mark.calls(n)` で書く。** 収集したときに合計を表示する
+- **クラウドの経路（`azure`・`azure-chat`・`foundry`・`bedrock`・`vertex`）の結果は、その経路の U 番号（U40〜U44）にだけ数える。** 同じアダプターでも、各社に直接つなぐときの前提（U25 など）には数えない（`e2e_support.CLOUD_ROUTES`）
 - **確かめる前提を `@pytest.mark.premise("U1", ...)` で書く。** プロバイダーに関係のない U 番号は数えない（`e2e/e2e_support.py` の `SCOPE`）
 - テストのファイル名は `test_e2e_*.py` にする。`tests/` と同じ名前だと、両方を一度に回したときに pytest が区別できない
 
@@ -44,7 +47,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_text` | テキストが返り、`stop_reason` が `end`、usage が 0 より大きい | | 1 | U12、U13、U25 |
+| `test_text` | テキストが返り、`stop_reason` が `end`、usage が 0 より大きい | | 1 | U12、U13、U25、U40〜U44 |
 | `test_system_prompt` | system がモデルに届く（各社で入れる場所が違う） | | 1 | |
 | `test_hand_written_history` | 手で作った assistant メッセージ（生データなし）を、共通型から変換して送れる | | 1 | U2 |
 | `test_max_tokens_lower_boundary` | `max_tokens=16` で `stop_reason` が `max_tokens` になる。16 は OpenAI の `max_output_tokens` の下限 | ○ | 1 | |
@@ -67,14 +70,14 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | `test_tool_error_result` | ツールの例外を `is_error` の結果として返しても受け付ける | ○ | 2 | |
 | `test_unicode_arguments` | 引用符・バックスラッシュ・日本語・絵文字を含む引数が JSON として読め、結果として送り返せる | ○ | 2 | |
 | `test_restored_history_continues` | ツールを呼んだ会話を `to_dict()` → JSON → 復元して続けても受け付ける（推論情報を送り返す。DeepSeek は送らないと 400） | | 2 | U11 |
-| `test_store_false`（OpenAI だけ） | `store: false` でツールを往復できる | | 2 | U1 |
-| `test_parameters_json_schema`（Gemini だけ） | `schema_field="parametersJsonSchema"` でツールを往復できる | | 2 | U4 |
+| `test_store_false`（OpenAI だけ） | `store: false` でツールを往復できる | | 2 | U1、U40 |
+| `test_parameters_json_schema`（Gemini だけ） | `schema_field="parametersJsonSchema"` でツールを往復できる | | 2 | U4、U44 |
 
 ### ストリーミング（`test_e2e_stream.py`）
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_stream_text` | `done` が最後に1回だけ来る。`text` の差分をつなぐと `done` の本文になる。usage が入る | | 1 | U10、U16 |
+| `test_stream_text` | `done` が最後に1回だけ来る。`text` の差分をつなぐと `done` の本文になる。usage が入る | | 1 | U10、U16、U41〜U44 |
 | `test_stream_tool_call_then_resend` | ストリーミングで組み立てたツール呼び出しと推論情報を、次のリクエストで送り返せる | | 2 | U11、U16 |
 | `test_stream_max_tokens` | 出力の上限で止まったストリームも `done` で終わり、`stop_reason` が `max_tokens` | ○ | 1 | U16 |
 
@@ -83,7 +86,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
 | `test_image_base64` | 64×64 の赤い PNG（base64）の色を答えられる | ○ | 1 | |
-| `test_image_url` | 同じ赤い PNG を、このリポジトリの `e2e/assets/red.png` の GitHub の raw の URL で渡し、色を答えられる（接続先の API が取りに行く）。Ollama は送る前に `UnsupportedFeatureError`（呼ばない）。main に push してから回す | | 1 | U39 |
+| `test_image_url` | 同じ赤い PNG を、このリポジトリの `e2e/assets/red.png` の GitHub の raw の URL で渡し、色を答えられる（接続先の API が取りに行く）。Ollama と `bedrock` は送る前に `UnsupportedFeatureError`（呼ばない）。main に push してから回す | | 1 | U39、U44 |
 
 ### ファイル（`test_e2e_files.py`）
 
@@ -91,8 +94,8 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_pdf_file` | 標準ライブラリで作った1ページの PDF（`FilePart`、base64）に書いたコードを答えられる | | 1 | U28・U29・U30・U31 |
-| `test_text_file` | テキストのファイル（`text/plain`）に書いた合言葉を答えられる。Anthropic は文字に戻して送る | ○ | 1 | U28・U30・U31 |
+| `test_pdf_file` | 標準ライブラリで作った1ページの PDF（`FilePart`、base64）に書いたコードを答えられる | | 1 | U28・U29・U30・U31・U41・U43 |
+| `test_text_file` | テキストのファイル（`text/plain`）に書いた合言葉を答えられる。Anthropic は文字に戻して送る | ○ | 1 | U28・U30・U31・U42・U43 |
 
 ### 構造化出力（`test_e2e_structured.py`）
 
@@ -100,7 +103,7 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_structured_output` | 入れ子のオブジェクト・配列・enum を含むスキーマを受け付け、`stop_reason` が `end`、`parsed` がスキーマどおりのキーと型（`additionalProperties: false` を入れ子にも足して送る） | | 1 | U19、U20、U21 |
+| `test_structured_output` | 入れ子のオブジェクト・配列・enum を含むスキーマを受け付け、`stop_reason` が `end`、`parsed` がスキーマどおりのキーと型（`additionalProperties: false` を入れ子にも足して送る） | | 1 | U19、U20、U21、U44 |
 | `test_structured_output_stream` | ストリーミングでも同じ。`text` の差分をつなぐと `done` の本文（JSON）になり、`parsed` が入る | | 1 | U19、U20、U21 |
 | `test_structured_output_with_tools` | ツールと一緒に指定する。ツールを呼んだ応答の `parsed` は `None`、結果を渡したあとの答えはスキーマどおり。受け付けないモデルは API のエラーをそのまま返す | | 2 | U22 |
 
@@ -110,7 +113,7 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_reasoning_effort_low_stream` | どの社にもある `low` を、ストリーミングで送る。`done` が1回だけで本文が返る。クラウドの API が拒否したら失敗（送る形の誤り）。ローカルのサーバーは拒否を記録する | | 1 | U23、U24、U26、U27 |
+| `test_reasoning_effort_low_stream` | どの社にもある `low` を、ストリーミングで送る。`done` が1回だけで本文が返る。クラウドの API が拒否したら失敗（送る形の誤り）。ローカルのサーバーは拒否を記録する | | 1 | U23、U24、U26、U27、U44 |
 | `test_reasoning_effort_none` | 推論を切る。Anthropic は thinking を切る。切れないモデル（Claude Opus 5.5・Sonnet 5.5 など）は API のエラーをそのまま返す | ○ | 1 | U23、U24、U27、U38 |
 | `test_reasoning_effort_minimal` | モデルによってない段階（gpt-5.5、Gemini 4・3.8 Flash）を送り、400 になるか、黙って受け付けるかを記録する | ○ | 1 | U23、U26、U27、U38 |
 | `test_reasoning_effort_with_tools` | `low` を指定したまま、ツールの往復で推論情報を送り返す | | 2 | U23〜U26 |
@@ -118,7 +121,7 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 
 ### 推論の要約（`test_e2e_reasoning_summary.py`）
 
-`reasoning_summary=True` で各社の「要約を返す」指定を送る。考えないと答えにくい問い（1〜1000 で各桁の和が 10 になる数）を使い、答えの文言は確かめない。OpenAI 本家の Chat Completions（`openai-chat:`）は、送る前に `UnsupportedFeatureError` になることを確かめる（呼ばない）。
+`reasoning_summary=True` で各社の「要約を返す」指定を送る。考えないと答えにくい問い（1〜1000 で各桁の和が 10 になる数）を使い、答えの文言は確かめない。OpenAI のモデルの Chat Completions（`openai-chat:` と `azure-chat:`）は、送る前に `UnsupportedFeatureError` になることを確かめる（呼ばない）。
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
@@ -147,13 +150,13 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_invalid_api_key`（キーの要るものだけ） | 認証の失敗が `APIError` になり、API の文言と本文をそのまま持つ。Gemini は無効なキーを 400 で返すことがあるので、`AuthenticationError` か `BadRequestError` のどちらかとし、どちらだったかを残す | | 1 | |
-| `test_unknown_model` | 存在しないモデルが `NotFoundError` か `BadRequestError` になり、API の文言を持つ | ○ | 1 | |
+| `test_invalid_api_key`（キーの要るものだけ） | 認証の失敗が `APIError` になり、API の文言と本文をそのまま持つ。Gemini は無効なキーを 400 で返すことがあるので、`AuthenticationError` か `BadRequestError` のどちらかとし、どちらだったかを残す | | 1 | U40〜U44 |
+| `test_unknown_model` | 存在しないモデルが `NotFoundError` か `BadRequestError` になり、API の文言を持つ | ○ | 1 | U40〜U44 |
 | `test_temperature_above_range` | `temperature=5`（どの API の上限も超える）。API のエラーをそのまま返すか、黙って無視される（DeepSeek の思考モード）。Anthropic は送らずに捨て、`DroppedParameterWarning` が出て答える | ○ | 1 | |
 
 ### 切り替え（`test_e2e_switch.py`）
 
-`--models` で隣どうしのモデル（3つ以上なら最後から最初へも）で、A でツールを呼ぶ → B で結果を渡して答える → A に戻して次のターン、を試す。同じプロバイダーの2つのモデルを隣に置くと U8（Anthropic）と U17（DeepSeek）を、Gemini の隣に別のプロバイダーを置くと U5 を確かめられる。
+`--models` で隣どうしのモデル（3つ以上なら最後から最初へも）で、A でツールを呼ぶ → B で結果を渡して答える → A に戻して次のターン、を試す。同じプロバイダーの2つのモデルを隣に置くと U8（Anthropic）と U17（DeepSeek）を、Gemini の隣に別のプロバイダーを置くと U5 を確かめられる。クラウドの経路では、`foundry`・`bedrock` の2つのモデルを隣に置くと U42・U43 を、`vertex` の隣に別のプロバイダーを置くと U44 を確かめられる。
 
 | テスト | 確かめること | 回数 | 前提 |
 |---|---|---|---|
@@ -163,7 +166,7 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 
 | テスト | 確かめること | 回数 | 前提 |
 |---|---|---|---|
-| `test_usage_breakdown` | 推論させる質問で、usage の内訳が正規化の前提どおりか（Gemini は `totalTokenCount` と内訳の和、Chat Completions 互換は `total_tokens` と `prompt + completion`、`reasoning_tokens` が出力を超えない）。ストリーミングでも同じ | 2 | U14、U18 |
+| `test_usage_breakdown` | 推論させる質問で、usage の内訳が正規化の前提どおりか（Gemini は `totalTokenCount` と内訳の和、Chat Completions 互換は `total_tokens` と `prompt + completion`、`reasoning_tokens` が出力を超えない）。ストリーミングでも同じ | 2 | U14、U18、U44 |
 
 ## ネットワークを使わないテストとの分担
 

@@ -182,9 +182,7 @@ class GeminiProvider(Provider):
         body = deep_merge(body, req.extra)
 
         method = "streamGenerateContent?alt=sse" if stream else "generateContent"
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["x-goog-api-key"] = self.api_key
+        headers = {"Content-Type": "application/json", **self.auth_headers()}
         return HTTPRequest(
             url=f"{self.base_url}/models/{self.model}:{method}", headers=self.request_headers(headers), body=body
         )

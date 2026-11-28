@@ -36,7 +36,7 @@ def _rejected_before_sending(level: str, call: Callable[[], object], note: Calla
     note("送る前に UnsupportedFeatureError（呼ばない）")
 
 
-@pytest.mark.premise("U23", "U24", "U26", "U27")
+@pytest.mark.premise("U23", "U24", "U26", "U27", "U44")
 @pytest.mark.calls(1)
 def test_reasoning_effort_low_stream(client, model, note):
     # low はどの社にもある段階なので、クラウドの API が拒否したら送る形の誤り（Gemini の大文字・小文字など）。

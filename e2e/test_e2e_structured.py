@@ -46,7 +46,7 @@ def _rejected_before_sending(call: Callable[[], Any], note: Callable[[str], None
     note("送る前に UnsupportedFeatureError（呼ばない）")
 
 
-@pytest.mark.premise("U19", "U20", "U21")
+@pytest.mark.premise("U19", "U20", "U21", "U44")
 @pytest.mark.calls(1)
 def test_structured_output(client, model, note):
     if not json_schema_supported(model):

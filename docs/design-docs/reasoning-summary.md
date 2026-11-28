@@ -74,3 +74,4 @@
 - `ChatRequest` に `reasoning_summary` が増える（`register_provider()` で足すアダプターも読める）
 - 結果を読む側は変えていない。4アダプターとも、要約を `Response.thinking` と `thinking` イベントに入れる処理は前からある
 - 推論の強さの「ほかの推論の指定は共通化しない」は、要約についてだけ取り消す（[推論の強さ](reasoning-effort.md)）
+- 2026-11-28: Azure OpenAI の Chat Completions（`azure-chat`）も推論の本文を返さないので、送る前に止める。接続先の URL ではなく、Chat Completions 互換のオプション `reasoning_summary=False` で決める（[判断](cloud-api-keys.md)）

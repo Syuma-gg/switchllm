@@ -24,7 +24,7 @@ IMAGE_URL = "https://raw.githubusercontent.com/Syuma-gg/switchllm/main/e2e/asset
 
 
 @pytest.mark.vision
-@pytest.mark.premise("U39")
+@pytest.mark.premise("U39", "U44")
 @pytest.mark.calls(1)
 def test_image_url(client, model, note):
     # 公開の HTTPS の URL を渡し、接続先の API に取りに行かせる（ライブラリは取りに行かない）。

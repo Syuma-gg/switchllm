@@ -3,7 +3,11 @@
 ## APIキー
 
 - 環境変数（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` など）か `Client(api_key=...)` で渡す。コードやリポジトリ内のファイルには書かない。`.env` は `.gitignore` 済み
-- キーは HTTP ヘッダー（`Authorization` / `x-api-key` / `x-goog-api-key`）にだけ載せる。URL のクエリには載せない
+- キーは HTTP ヘッダー（`Authorization` / `x-api-key` / `x-goog-api-key`、Azure は `api-key`）にだけ載せる。URL のクエリには載せない
+- クラウドの経路（`azure`・`foundry`・`bedrock` など）は、環境変数（`AZURE_OPENAI_ENDPOINT`・`ANTHROPIC_FOUNDRY_RESOURCE`・`AWS_REGION` など）から組み立てた URL へキーを送る。そのため、組み立てる前に値を確かめ、使えない値なら `ConfigurationError` にする（[判断](design-docs/cloud-api-keys.md)）
+  - リソース名とリージョンは、ホスト名のラベル1つ（英数字とハイフン）だけを受け付ける。`.` や `/` を含む値で、別のホストへキーを送らないため
+  - URL（`AZURE_OPENAI_ENDPOINT`・`ANTHROPIC_FOUNDRY_BASE_URL`）は `https://` だけを受け付ける。キーを平文で送らないため
+  - Bedrock の短期のキーは 12 時間で切れる。ライブラリはキーを作り直さず、ファイルにも残さない
 - ゲートウェイを経由するときなどは、キーを `headers=` で渡せる（ライブラリの認証のヘッダーを置き換える。[判断](design-docs/custom-headers.md)）
   - ゲートウェイがキーを別の名前のヘッダーで受けるときは、ライブラリの認証のヘッダーを値の `None` で止める。止めないと、プロバイダーのキー（環境変数にあるものも）がゲートウェイに届く
   - `headers=` の誤りを知らせる例外のメッセージには、ヘッダーの名前と型だけを出し、値は出さない
@@ -25,6 +29,7 @@
 - `e2e/` の E2E テストは、`--models` を渡すと実際の API を呼ぶので、料金が発生する。キーは環境変数から読み、テストの出力やファイルには残さない（無効なキーのテストは、固定の偽のキーを使う）
 - `--record` で残す記録（`e2e/recordings/`）の扱い（[テストの方針](testing.md)）
   - リクエストのヘッダーと URL の `key` を入れず、キーの環境変数の値を `<redacted>` に置き換える
+  - クラウドの経路の URL は、リソース名やリージョンを決まった値（`e2e_support.REPLAY_ENV`）に置き換えて残す
   - `tests/test_recording.py` が、記録にキーの形をした文字列がないことを毎回確かめる
   - 記録はリポジトリに入れるので、コミットする前に差分を見る
 - テストはネットワークを使わない（`tests/conftest.py` の `FakeAPI`）

@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import struct
 import zlib
+from collections.abc import Mapping
 from typing import Annotated, Any
 
-from switchllm import APIError, Client, Message, Response, parse_model, run_tool_calls, tool
+from switchllm import APIError, Client, ConfigurationError, Message, Response, parse_model, run_tool_calls, tool
 from switchllm.providers import PRESETS
 
 # 思考が既定で有効なモデル（Claude 5・Gemini 3・DeepSeek）では、max_tokens に思考の分も入る。
@@ -79,6 +80,33 @@ def json_schema_supported(model: str) -> bool:
     return bool(PRESETS[key].options.get("json_schema", True))
 
 
+# 再生で、クラウドの経路の URL を組み立てる値。記録には、実 API で回したときの URL を、この値で組み立てた URL に
+# 置き換えて残す。リソース名やリージョンを記録に残さず、再生でも同じ URL を送るため（docs/e2e-tests.md）
+REPLAY_ENV: dict[str, str] = {
+    "AZURE_OPENAI_ENDPOINT": "https://switchllm-e2e.openai.azure.com",
+    "ANTHROPIC_FOUNDRY_RESOURCE": "switchllm-e2e",
+    "AWS_REGION": "us-east-1",
+}
+#: 再生では消す環境変数（あると、組み立てる URL が REPLAY_ENV のものと変わる）
+REPLAY_ENV_CLEARED = ("ANTHROPIC_FOUNDRY_BASE_URL", "AWS_DEFAULT_REGION")
+
+
+def cloud_url_rewrites(environ: Mapping[str, str]) -> dict[str, str]:
+    """``environ`` で組み立てたクラウドの経路の URL → ``REPLAY_ENV`` で組み立てた URL（同じものと、組み立てられないものは除く）。"""
+    out: dict[str, str] = {}
+    for preset in PRESETS.values():
+        if preset.resolve_base_url is None:
+            continue
+        try:
+            real = preset.resolve_base_url(environ)
+        except ConfigurationError:
+            continue
+        replay = preset.resolve_base_url(REPLAY_ENV)
+        if real != replay:
+            out[real] = replay
+    return out
+
+
 def pairs(models: list[str]) -> list[tuple[str, str]]:
     """隣どうしの組。3つ以上なら最後から最初へも戻る（2つなら A → B だけ。B → A は戻すときに通る）。"""
     if len(models) < 2:
@@ -128,13 +156,25 @@ SCOPE: dict[str, frozenset[str]] = {
     "U35": frozenset({"ollama", "lmstudio"}),
     "U36": frozenset({"anthropic"}),
     "U37": frozenset({"anthropic"}),
-    "U38": frozenset({"openai", "openai_chat", "anthropic", "gemini"}),  # どの接続先でも、断られたときに案内が付くか
+    # どの接続先でも、断られたときに案内が付くか
+    "U38": frozenset({"openai", "openai_chat", "anthropic", "gemini", "azure", "azure-chat", "foundry", "bedrock", "vertex"}),
     "U39": frozenset({"gemini"}),
+    # クラウドの経路（docs/references/cloud-endpoints.md）
+    "U40": frozenset({"azure"}),
+    "U41": frozenset({"azure-chat"}),
+    "U42": frozenset({"foundry"}),
+    "U43": frozenset({"bedrock"}),
+    "U44": frozenset({"vertex"}),
 }
+
+#: クラウドの経路のプリセット。同じアダプターを使っても、各社に直接つなぐときの前提（U25 など）には数えない
+CLOUD_ROUTES = frozenset({"azure", "azure-chat", "foundry", "bedrock", "vertex"})
 
 
 def relevant(ids: tuple[str, ...], model: str) -> tuple[str, ...]:
     key, adapter = parse_model(model)[0], adapter_of(model)
+    if key in CLOUD_ROUTES:
+        return tuple(i for i in ids if key in SCOPE[i])
     return tuple(i for i in ids if key in SCOPE[i] or adapter in SCOPE[i])
 
 
@@ -143,13 +183,15 @@ def switch_premises(a: str, b: str) -> tuple[str, ...]:
     相手のモデルが作ったメッセージを送る。"""
     (ka, _), (kb, _) = parse_model(a), parse_model(b)
     ids = []
-    if ka != kb and "gemini" in (adapter_of(a), adapter_of(b)):
-        ids.append("U5")  # 署名のない（別のプロバイダーの）履歴を、ダミー署名を付けて Gemini に送る
+    if ka != kb:
+        # 署名のない（別のプロバイダーの）履歴を、ダミー署名を付けて Gemini に送る。Vertex では U44 の一部
+        ids += ["U44" if key == "vertex" else "U5" for key, m in ((ka, a), (kb, b)) if adapter_of(m) == "gemini"]
     if ka == kb and adapter_of(a) == "anthropic":
-        ids.append("U8")  # Anthropic のモデルどうしで thinking ブロックを送る
+        # 同じ経路の Claude のモデルどうしで thinking ブロックを送る（別の経路へは送らない）
+        ids.append({"foundry": "U42", "bedrock": "U43"}.get(ka, "U8"))
     if "deepseek" in (ka, kb):
         ids.append("U17")  # 別のプロバイダー・別のモデルが作った、reasoning_content のない履歴を DeepSeek に送る
-    return tuple(ids)
+    return tuple(dict.fromkeys(ids))
 
 
 # --------------------------------------------------------------------------- #

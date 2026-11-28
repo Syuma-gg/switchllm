@@ -20,7 +20,7 @@
 | 画像 | `{"type": "image_url", "image_url": {"url": URL か data URL}}` |
 | ファイル | `{"type": "file", "file": {"file_data": data URL, "filename"}}`（下の「ファイルの入力」） |
 
-- max_tokens: `max_tokens_field=` で変えられる。OpenAI は `max_tokens` を非推奨とし、o-series とは互換性がないと書いている。Ollama の文書には `max_tokens` しかない
+- max_tokens: `max_tokens_field=` で変えられる。OpenAI は `max_tokens` を非推奨とし、o-series とは互換性がないと書いている。Ollama の文書には `max_tokens` しかない。`azure-chat` のプリセットは `max_completion_tokens`（[クラウドの経路](cloud-endpoints.md)）
 - ファイル: PDF だけで、ほかの種類は送る前に `UnsupportedFeatureError`。DeepSeek・Ollama・LM Studio のプリセットは `file_input: False` で、送る前に `UnsupportedFeatureError`
 
 ## レスポンス

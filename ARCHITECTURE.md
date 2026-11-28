@@ -40,10 +40,12 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 
 | アダプター | ファイル | プリセット | 仕様メモ |
 |---|---|---|---|
-| `openai` | `providers/openai_responses.py` | `openai` | [OpenAI Responses](docs/references/openai-responses.md) |
-| `openai_chat` | `providers/openai_chat.py` | `openai-chat`、`deepseek`、`ollama`、`lmstudio`、`register_provider()` で足したもの | [Chat Completions 互換](docs/references/openai-chat-compatible.md) |
-| `anthropic` | `providers/anthropic.py` | `anthropic` | [Anthropic Messages](docs/references/anthropic-messages.md) |
-| `gemini` | `providers/gemini.py` | `gemini`、`google` | [Gemini generateContent](docs/references/gemini-generate-content.md) |
+| `openai` | `providers/openai_responses.py` | `openai`、`azure` | [OpenAI Responses](docs/references/openai-responses.md) |
+| `openai_chat` | `providers/openai_chat.py` | `openai-chat`、`deepseek`、`ollama`、`lmstudio`、`azure-chat`、`register_provider()` で足したもの | [Chat Completions 互換](docs/references/openai-chat-compatible.md) |
+| `anthropic` | `providers/anthropic.py` | `anthropic`、`foundry`、`bedrock` | [Anthropic Messages](docs/references/anthropic-messages.md) |
+| `gemini` | `providers/gemini.py` | `gemini`、`google`、`vertex` | [Gemini generateContent](docs/references/gemini-generate-content.md) |
+
+クラウドの経路（`azure`・`azure-chat`・`foundry`・`bedrock`・`vertex`）は、同じアダプターを使い、URL・キーのヘッダー・送る前に止めるものだけをプリセットで変える（[クラウドの経路](docs/references/cloud-endpoints.md)）。
 
 各アダプターは `providers/base.py` の `Provider` を継承し、3つのメソッドを実装する。どれも通信をしないので、`Client` と `AsyncClient` が同じものを使う（[判断](docs/design-docs/async-client.md)）。
 
@@ -55,6 +57,7 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 
 1. `"ollama:llama3.2:3b"` を最初の `:` で分けて `("ollama", "llama3.2:3b")` にする（`client.parse_model`）
 2. `providers/__init__.py` の `PRESETS["ollama"]` から、アダプター・base_url・APIキーの環境変数を引く
+   - クラウドの経路は、`base_url=` が渡されていなければ、プリセットの `resolve_base_url` が環境変数から URL を組み立てる（`bedrock` なら `AWS_REGION`）。キーのヘッダーを替えるプリセット（`azure` の `api-key`）は `auth` に書く
 3. `ADAPTERS` からアダプターのクラスを引いてインスタンスを作る
 
 ## テスト
@@ -74,6 +77,8 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 | `tests/test_history.py` | 履歴の保存・復元（`to_dict()` / `from_dict()`） |
 | `tests/test_async_client.py` | 非同期にしかないこと（並行の送信、取り消し、`aclose()`、`http_client=` の取り違えなど） |
 | `tests/test_client.py` | モデル文字列、APIキー、`with_model()`、プロバイダー別のオプション、`extra_by_provider`、送る前の検査、プロバイダーの登録 |
+| `tests/test_cloud_presets.py` | クラウドの経路のプリセット（URL の組み立て、キーのヘッダー、経路ごとに送る前に止めるもの、経路の間で生データを送り返さないこと） |
+| `tests/test_support_table.py` | public-api.md の「プリセットごとに送れるもの」の表の全セルを、各プリセットで呼ぶ |
 | `tests/test_http.py` | リトライ、`Retry-After`、例外への対応づけ、エラーの本文の解釈、接続エラー |
 | `tests/test_tools.py` | `@tool` のスキーマの生成と対応する型、`run_tool_calls`、`arun_tool_calls` |
 | `tests/test_types.py` | 共通型（`Message`、`ToolCall`、`ImagePart`） |
@@ -81,7 +86,8 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 | `tests/test_docs.py` | リンク切れ、索引の漏れ、公開 API・プリセット・オプションの一覧の一致、CLAUDE.md の長さ、2つの README のそろい方 |
 | `tests/test_quality_gate.py` | 品質検査（`scripts/quality_gate.py`）の判定、`noqa`・`pragma: no cover` に理由があること |
 | `tests/test_harness.py` | 品質検査のファイル・Stop フック・CLAUDE.md の節が、テンプレート（`harness/quality-gate/`）と同じであること |
-| `tests/test_recording.py` | 実 API の記録と再生（秘密を残さない、記録と違うリクエストを見逃さない）、リポジトリの記録にキーがないこと |
+| `tests/test_recording.py` | 実 API の記録と再生（秘密を残さない、記録と違うリクエストを見逃さない、クラウドの URL を決まった値で残す）、リポジトリの記録にキーがないこと |
+| `tests/test_e2e_premises.py` | E2E の結果をどの前提（U 番号）に数えるか |
 | `tests/sample_tools.py` | テストで共有するツール定義（`conftest` からは import しない） |
 | `e2e/test_e2e_*.py` | 実 API に対する E2E テスト。`--models` を渡すと実 API で回し、渡さなければ記録を再生する |
 

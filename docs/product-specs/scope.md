@@ -14,6 +14,7 @@
 - `@tool`（決めた範囲の型から JSON Schema を作る）と `run_tool_calls`（[判断](../design-docs/tool-schema-scope.md)）
 - `extra=` による各社に固有のパラメータの受け渡しと、`extra_by_provider=` でプロバイダーごとに並べて書くこと（[判断](../design-docs/provider-specific-params.md)）
 - `register_provider()` による OpenAI 互換サーバーの追加
+- クラウドが API キーで呼べるようにしている経路（Azure OpenAI、Claude in Microsoft Foundry、Claude in Amazon Bedrock、Vertex AI express mode）のプリセット。URL は環境変数から組み立てる（2026-11-28。[判断](../design-docs/cloud-api-keys.md)）
 - 履歴の JSON 保存・復元（`Message.to_dict()` / `from_dict()`。2026-11-18。[判断](../design-docs/history-serialization.md)）
 - 構造化出力（`response_schema=`。2026-11-20。[判断](../design-docs/structured-output.md)）。スキーマのない JSON モードは共通化しない（`extra=` で渡す）
 - 推論の強さ（`reasoning_effort=`。2026-11-21。[判断](../design-docs/reasoning-effort.md)）。数での予算（Gemini 2.5 の `thinkingBudget`）は共通化しない（`extra=` で渡す）
@@ -31,7 +32,7 @@
 | 複数モデル間のフォールバック | `RateLimitError` などを捕まえて、`client.with_model()` で別モデルに切り替える |
 | 料金計算 | `Usage.details` の生の内訳を使う |
 | プロンプトキャッシュの制御 | なし（必要になったら再検討） |
-| Bedrock / Vertex AI / Azure の認証 | なし |
+| Bedrock / Vertex AI / Azure の認証（IAM・SigV4、OAuth、Entra ID）と、キーの作り直し | API キーで呼べる経路のプリセット（`azure`・`azure-chat`・`foundry`・`bedrock`・`vertex`）。作り直したキーは `api_key=` で渡す（[判断](../design-docs/cloud-api-keys.md)） |
 | エージェントのループ制御、記憶、RAG | 利用者のコード、またはエージェントフレームワーク |
 | ゲートウェイ、プロキシサーバー | LiteLLM の Proxy など |
 | `@tool` の対応型の追加（Pydantic、dataclass など） | `@tool(parameters=...)` で JSON Schema を渡す（[判断](../design-docs/tool-schema-scope.md)） |

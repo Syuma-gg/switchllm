@@ -20,6 +20,7 @@
 | 計画 | 目的 |
 |---|---|
 | [実 API 検証](exec-plans/active/real-api-verification.md) | 未検証の前提を、実際の API で確かめる |
+| [クラウドの API キー](exec-plans/active/cloud-api-keys.md) | Azure OpenAI・Foundry・Bedrock・Vertex AI を、API キーとモデル文字列だけで呼べるようにする |
 | [v0.1 公開](exec-plans/active/v0.1-release.md) | PyPI に最初の版を公開する |
 
 ## 完了

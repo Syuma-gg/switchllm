@@ -22,7 +22,7 @@ def _ask(client, part: FilePart, question: str):
     return client.chat([Message.user([part, TextPart(question)])], max_tokens=MAX_TOKENS)
 
 
-@pytest.mark.premise("U28", "U29", "U30", "U31")
+@pytest.mark.premise("U28", "U29", "U30", "U31", "U41", "U43")
 @pytest.mark.calls(1)
 def test_pdf_file(client, model, note):
     part = FilePart(base64.b64encode(text_pdf(f"Code: {CODE}")).decode("ascii"), "application/pdf", filename="code.pdf")
@@ -36,7 +36,7 @@ def test_pdf_file(client, model, note):
     note(f"text={res.text.strip()[:30]!r}")
 
 
-@pytest.mark.premise("U28", "U30", "U31")
+@pytest.mark.premise("U28", "U30", "U31", "U42", "U43")
 @pytest.mark.calls(1)
 def test_text_file(client, model, note):
     part = FilePart(base64.b64encode(f"合言葉は「{WORD}」です。\n".encode()).decode("ascii"), "text/plain", filename="notes.txt")

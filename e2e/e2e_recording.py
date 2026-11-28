@@ -12,7 +12,7 @@ from __future__ import annotations
 import difflib
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -178,9 +178,19 @@ def recording_path(root: Path, module: str, test_name: str) -> Path:
     return root / module / f"{safe}.json"
 
 
-def save(path: Path, meta: dict[str, Any], exchanges: list[dict[str, Any]], *, secrets: Iterable[str]) -> None:
+def save(
+    path: Path,
+    meta: dict[str, Any],
+    exchanges: list[dict[str, Any]],
+    *,
+    secrets: Iterable[str],
+    rewrite: Mapping[str, str] | None = None,
+) -> None:
+    """記録を書く。``rewrite`` は置き換える URL（実 API で回したときの値 → 再生で使う値）で、長いものから置き換える。"""
     data = {**meta, "exchanges": exchanges}
     text = json.dumps(data, ensure_ascii=False, indent=1) + "\n"
+    for real, replay in sorted((rewrite or {}).items(), key=lambda kv: len(kv[0]), reverse=True):
+        text = text.replace(real, replay)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(scrub(text, secrets), encoding="utf-8", newline="\n")
 

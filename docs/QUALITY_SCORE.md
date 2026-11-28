@@ -1,10 +1,10 @@
 # 品質評価
 
-領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-27）。
+領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-28）。
 
 - CI: GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確かめた）
-- カバレッジ（分岐を含む）: 99.16%（2026-11-27、Python 3.12。テスト 1034 件）。基準は `pyproject.toml` の `fail_under = 99` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）
-  - 到達していない行は1つだけ。`types.py` の `_part_to_dict` の、知らないパーツを変えずに返す行（2026-11-18 の履歴の保存で足した。テストがない）
+- カバレッジ（分岐を含む）: 99.15%（2026-11-28、Python 3.12。テスト 1558 件）。基準は `pyproject.toml` の `fail_under = 99` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）
+  - 到達していない行は3つ。`types.py` の `_part_to_dict` の、知らないパーツを変えずに返す行（2026-11-18 の履歴の保存で足した）と、`providers/base.py` の `error_hints` の、エラーの本文を JSON にできないときの2行（2026-11-28 のエラーの案内で足した）。どちらもテストがない
   - 残りは分岐の一部で、多くは、パーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）
 - 実 API に対する E2E テストは `e2e/` にあり、`--models` を渡したときだけ実 API を呼ぶ（料金が発生するため。[E2E テスト](e2e-tests.md)）。渡さなければ、実 API で記録したやりとりを再生し、既定の実行と CI にも入る（[テストの方針](testing.md)）。まだ実 API では回しておらず、記録は 0 件
 
@@ -43,6 +43,7 @@
 | Anthropic の API の版、`max_tokens` の既定、`temperature` を捨てる警告 | B | `tests/test_anthropic.py`（実装にわざと入れた誤りを、既定の `max_tokens` は 4 通り、`temperature` の警告は 8 通り、どれも見つけた。2026-11-28） | 実 API（U25、U36、U37） |
 | `@tool`、`run_tool_calls`、`arun_tool_calls` | B | `tests/test_tools.py` | 生成したスキーマを各社が受け付けるか |
 | 画像の入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py`、`tests/test_file_input.py` | 実 API（Gemini の URL は U39） |
+| クラウドの経路のプリセット（`azure`・`azure-chat`・`foundry`・`bedrock`・`vertex`） | B | `tests/test_cloud_presets.py`（実装にわざと入れた誤り 17 通りを、どれも見つけた。2026-11-28）、`tests/test_support_table.py` | 実 API（U40〜U44） |
 | プリセットごとに送れるもの（対応表） | B | `tests/test_support_table.py`（表の全セルを各プリセットで呼ぶ）。Gemini の画像の URL と Ollama の tool_choice・画像の URL は、実装にわざと入れた誤り 14 通りを、どれも見つけた（2026-11-28） | 実 API |
 | ファイルの入力（`FilePart`） | B | `tests/test_file_input.py`、`tests/test_history.py` | 実 API（E2E の `test_e2e_files.py`。U28〜U31） |
 | SSE の解析 | B | `tests/test_client.py`、`tests/test_async_client.py` | — |

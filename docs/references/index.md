@@ -8,6 +8,7 @@
 | [openai-chat-compatible.md](openai-chat-compatible.md) | `openai_chat`（Chat Completions と互換サーバー） |
 | [anthropic-messages.md](anthropic-messages.md) | `anthropic`（Anthropic Messages API） |
 | [gemini-generate-content.md](gemini-generate-content.md) | `gemini`（Gemini API の generateContent） |
+| [cloud-endpoints.md](cloud-endpoints.md) | クラウドの経路（プリセット `azure`・`azure-chat`・`foundry`・`bedrock`・`vertex`）。上の4つのアダプターを使い、違うところだけを書く |
 
 ## 横断の対応表
 

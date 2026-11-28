@@ -105,6 +105,8 @@
 
 モデル文字列の `provider:` 部分に書ける名前。base_url を公式ドキュメントで確認したものだけを置く（[判断](../design-docs/verified-presets.md)）。
 
+クラウドの経路（`azure`・`azure-chat`・`foundry`・`bedrock`・`vertex`）は、URL に入るリソース名やリージョンを環境変数から組み立てる。`base_url=` を渡せば、その環境変数は読まない。環境変数がないか、使えない値なら、`Client` を作るときに `ConfigurationError` にする（[判断](../design-docs/cloud-api-keys.md)、[仕様と出典](../references/cloud-endpoints.md)）。
+
 <!-- presets:start -->
 | 名前 | 形式 | 接続先 | APIキーの環境変数 |
 |---|---|---|---|
@@ -116,6 +118,11 @@
 | `google` | `gemini` の別名 | 同上 | 同上 |
 | `ollama` | Chat Completions | `http://localhost:11434/v1` | 不要 |
 | `lmstudio` | Chat Completions | `http://localhost:1234/v1` | 不要 |
+| `azure` | Responses API（Azure OpenAI） | `AZURE_OPENAI_ENDPOINT`（`https://<resource>.openai.azure.com`）に `/openai/v1` を足す | `AZURE_OPENAI_API_KEY`（`api-key` ヘッダーで送る） |
+| `azure-chat` | Chat Completions（Azure OpenAI） | 同上 | 同上 |
+| `foundry` | Messages API（Claude in Microsoft Foundry） | `https://<ANTHROPIC_FOUNDRY_RESOURCE>.services.ai.azure.com/anthropic`、または `ANTHROPIC_FOUNDRY_BASE_URL`（両方あればエラー） | `ANTHROPIC_FOUNDRY_API_KEY` |
+| `bedrock` | Messages API（Claude in Amazon Bedrock） | `https://bedrock-mantle.<AWS_REGION>.api.aws/anthropic`（`AWS_REGION` がなければ `AWS_DEFAULT_REGION`） | `AWS_BEARER_TOKEN_BEDROCK` |
+| `vertex` | generateContent（Vertex AI express mode） | `https://aiplatform.googleapis.com/v1/publishers/google` | `VERTEX_API_KEY` |
 <!-- presets:end -->
 
 ### プリセットごとに送れるもの
@@ -127,25 +134,26 @@
 - △: 送らずに捨て、`DroppedParameterWarning` を出す（[判断](../design-docs/dropped-parameter-warning.md)）
 
 <!-- support:start -->
-| 指定 | `openai` | `openai-chat` | `anthropic` | `gemini` | `deepseek` | `ollama` | `lmstudio` |
-|---|---|---|---|---|---|---|---|
-| `stop` | × | ○ | ○ | ○ | ○ | ○ | ○ |
-| 画像（base64） | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
-| 画像の URL | ○ | ○ | ○ | ○ | ○ | × | ○ |
-| ファイル（PDF） | ○ | ○ | ○ | ○ | × | × | × |
-| ファイル（テキスト） | ○ | × | ○ | ○ | × | × | × |
-| `response_schema` | ○ | ○ | ○ | ○ | × | ○ | ○ |
-| `reasoning_effort="none"` | ○ | ○ | ○ | × | ○ | ○ | ○ |
-| `reasoning_effort="minimal"` | ○ | ○ | × | ○ | ○ | ○ | ○ |
-| `reasoning_effort="max"` | ○ | ○ | ○ | × | ○ | ○ | ○ |
-| `reasoning_summary=True` | ○ | × | ○ | ○ | ○ | ○ | ○ |
-| `tool_choice="none"` | ○ | ○ | ○ | ○ | ○ | × | ○ |
-| 強制する `tool_choice` | ○ | ○ | ○ | ○ | ○ | × | ○ |
-| `temperature` | ○ | ○ | △ | ○ | ○ | ○ | ○ |
+| 指定 | `openai` | `openai-chat` | `anthropic` | `gemini` | `deepseek` | `ollama` | `lmstudio` | `azure` | `azure-chat` | `foundry` | `bedrock` | `vertex` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `stop` | × | ○ | ○ | ○ | ○ | ○ | ○ | × | ○ | ○ | ○ | ○ |
+| 画像（base64） | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| 画像の URL | ○ | ○ | ○ | ○ | ○ | × | ○ | ○ | ○ | ○ | × | ○ |
+| ファイル（PDF） | ○ | ○ | ○ | ○ | × | × | × | ○ | ○ | ○ | ○ | ○ |
+| ファイル（テキスト） | ○ | × | ○ | ○ | × | × | × | ○ | × | ○ | ○ | ○ |
+| `response_schema` | ○ | ○ | ○ | ○ | × | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| `reasoning_effort="none"` | ○ | ○ | ○ | × | ○ | ○ | ○ | ○ | ○ | ○ | ○ | × |
+| `reasoning_effort="minimal"` | ○ | ○ | × | ○ | ○ | ○ | ○ | ○ | ○ | × | × | ○ |
+| `reasoning_effort="max"` | ○ | ○ | ○ | × | ○ | ○ | ○ | ○ | ○ | ○ | ○ | × |
+| `reasoning_summary=True` | ○ | × | ○ | ○ | ○ | ○ | ○ | ○ | × | ○ | ○ | ○ |
+| `tool_choice="none"` | ○ | ○ | ○ | ○ | ○ | × | ○ | ○ | ○ | ○ | ○ | ○ |
+| 強制する `tool_choice` | ○ | ○ | ○ | ○ | ○ | × | ○ | ○ | ○ | ○ | ○ | ○ |
+| `temperature` | ○ | ○ | △ | ○ | ○ | ○ | ○ | ○ | ○ | △ | △ | ○ |
 <!-- support:end -->
 
 - 会話の途中で載せ替えるときも同じで、履歴に×のもの（PDF や画像の URL）があると、その接続先へは送れない
-- 互換サーバー（`register_provider()` や `base_url=`）は、オプション（`json_schema`・`file_input`・`tool_choice`・`image_url`）で決まる。既定ではどれも送る
+- 互換サーバー（`register_provider()` や `base_url=`）は、オプション（`json_schema`・`file_input`・`tool_choice`・`image_url`・`reasoning_summary`）で決まる。既定ではどれも送る
+- クラウドの経路は、同じ形式のプリセット（`azure` は `openai`、`azure-chat` は `openai-chat`、`foundry`・`bedrock` は `anthropic`、`vertex` は `gemini`）と同じ。違うのは、`bedrock` が URL の画像を、`azure-chat` が `reasoning_summary=True` を送る前に止めることだけ（[仕様と出典](../references/cloud-endpoints.md)）
 
 ## プロバイダー固有の指定と切り替え
 
@@ -171,11 +179,12 @@
 | 名前 | アダプター | 意味 |
 |---|---|---|
 | `headers` | `openai`、`openai_chat`、`anthropic`、`gemini` | リクエストに足すヘッダー（`str` から `str` か `None` への dict。下の一覧） |
-| `max_tokens_field` | `openai_chat` | max_tokens を送るフィールド名。既定は、接続先が OpenAI 本家なら `max_completion_tokens`、それ以外は `max_tokens` |
+| `max_tokens_field` | `openai_chat` | max_tokens を送るフィールド名。既定は、接続先が OpenAI 本家なら `max_completion_tokens`、それ以外は `max_tokens`（`azure-chat` のプリセットは `max_completion_tokens`） |
 | `stream_usage` | `openai_chat` | `False` にすると、ストリーミングで `stream_options.include_usage` を送らない（既定 `True`、U10） |
 | `json_schema` | `openai_chat` | `False` にすると、`response_schema=` を送る前に `UnsupportedFeatureError` にする。JSON Schema を受け付けない接続先のため（既定 `True`、`deepseek` のプリセットは `False`） |
 | `tool_choice` | `openai_chat` | `False` にすると、`tool_choice` の `"none"` と強制を送る前に `UnsupportedFeatureError` にし、`"auto"` は送らない。`tool_choice` に対応しない接続先のため（既定 `True`、`ollama` のプリセットは `False`。[判断](../design-docs/provider-capabilities.md)） |
-| `image_url` | `openai_chat` | `False` にすると、URL の画像を送る前に `UnsupportedFeatureError` にする。画像を base64 でしか受け付けない接続先のため（既定 `True`、`ollama` のプリセットは `False`。[判断](../design-docs/provider-capabilities.md)） |
+| `image_url` | `openai_chat`、`anthropic` | `False` にすると、URL の画像を送る前に `UnsupportedFeatureError` にする。画像を base64 でしか受け付けない接続先のため（既定 `True`、`ollama`・`bedrock` のプリセットは `False`。[判断](../design-docs/provider-capabilities.md)） |
+| `reasoning_summary` | `openai_chat` | `False` にすると、`reasoning_summary=True` を送る前に `UnsupportedFeatureError` にする。推論の本文を返さない接続先のため（既定 `True`、`azure-chat` のプリセットは `False`。OpenAI 本家は接続先の URL で決める。[判断](../design-docs/cloud-api-keys.md)） |
 | `file_input` | `openai_chat` | `False` にすると、`FilePart` を送る前に `UnsupportedFeatureError` にする。ファイルを受け付けない接続先のため（既定 `True`、`deepseek`・`ollama`・`lmstudio` のプリセットは `False`。[判断](../design-docs/file-input.md)） |
 | `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 64000。Anthropic は必須。[判断](../design-docs/anthropic-max-tokens.md)） |
 | `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2026-10-21`）。`2026-10-21` 以降の版では、`temperature=` を送らずに捨て、`DroppedParameterWarning` を出す（[判断](../design-docs/dropped-parameter-warning.md)） |

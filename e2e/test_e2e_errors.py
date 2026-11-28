@@ -8,6 +8,7 @@ from e2e_support import MAX_TOKENS, rejection
 from switchllm import AuthenticationError, BadRequestError, DroppedParameterWarning, NotFoundError, parse_model
 
 
+@pytest.mark.premise("U40", "U41", "U42", "U43", "U44")  # クラウドの経路のエラーの本文の形
 @pytest.mark.needs_key
 @pytest.mark.calls(1)
 def test_invalid_api_key(make_client, model, note):
@@ -21,6 +22,7 @@ def test_invalid_api_key(make_client, model, note):
     note(f"{type(e).__name__}（HTTP {e.status_code}）: {e.message[:160]}")
 
 
+@pytest.mark.premise("U40", "U41", "U42", "U43", "U44")  # クラウドの経路のエラーの本文の形
 @pytest.mark.calls(1)
 def test_unknown_model(make_client, model, note):
     key, _ = parse_model(model)

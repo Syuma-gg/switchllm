@@ -10,13 +10,16 @@ import pytest
 from e2e_support import MAX_TOKENS, describe_reasoning, requires_key, tool_roundtrip
 
 from switchllm import UnsupportedFeatureError, parse_model
+from switchllm.providers import PRESETS
 
 # 考えないと答えにくい問い（答えは 63）。答えの文言は確かめない
 PROMPT = "1 から 1000 までの整数のうち、各桁の数字の和が 10 になるものはいくつありますか。数だけを答えて。"
 
 
 def _openai_chat_completions(model: str) -> bool:
-    return parse_model(model)[0] == "openai-chat"
+    """OpenAI のモデルの Chat Completions（本家の ``openai-chat`` と Azure の ``azure-chat``）。推論の本文を返さない。"""
+    key = parse_model(model)[0]
+    return key == "openai-chat" or PRESETS[key].options.get("reasoning_summary", True) is False
 
 
 @pytest.mark.premise("U32", "U33", "U34", "U35")

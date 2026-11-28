@@ -27,6 +27,11 @@ MODELS = {
     "deepseek": "deepseek:deepseek-v4-pro",
     "ollama": "ollama:llama3.2",
     "lmstudio": "lmstudio:qwen3",
+    "azure": "azure:my-gpt",
+    "azure-chat": "azure-chat:my-gpt",
+    "foundry": "foundry:claude-sonnet-5-5",
+    "bedrock": "bedrock:anthropic.claude-sonnet-5-5",
+    "vertex": "vertex:gemini-2.5-flash",
 }
 
 # 構造化出力でも読める本文（"{}"）で答える、各形式の応答
@@ -88,7 +93,7 @@ def test_table_covers_every_preset_and_known_features():
 
 
 @pytest.mark.parametrize(("feature", "preset", "mark"), CELLS)
-def test_cell_matches_behavior(api, feature, preset, mark):
+def test_cell_matches_behavior(api, cloud_env, feature, preset, mark):
     model = MODELS[preset]
     kwargs = FEATURES[feature]()
     messages = kwargs.pop("messages")

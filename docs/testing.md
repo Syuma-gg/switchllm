@@ -43,6 +43,7 @@ python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" --rec
 - 通ったテストだけを、`e2e/recordings/<テストのファイル>/<テストの名前>.json` に記録する。失敗したテストは記録しない（前の記録があれば残る）
 - 記録に残すのは、リクエストの method・URL（`key` の引数を除く）・本体と、応答の status・`content-type`・`retry-after`・本文だけ。リクエストのヘッダー（APIキーが入る）と、ほかの応答のヘッダー（組織の ID など）は残さない
 - 保存するときに、各プロバイダーのキーの環境変数の値を `<redacted>` に置き換える
+- クラウドの経路の URL は、リソース名とリージョンを決まった値（`e2e_support.REPLAY_ENV`）に置き換えて残す（[E2E テスト](e2e-tests.md)）
 - `tests/test_recording.py` が、記録にキーの形をした文字列やリクエストのヘッダーがないことを毎回確かめる
 - 記録はリポジトリに入れる。コミットする前に差分を見て、意図しない内容がないかを確かめる
 
@@ -52,7 +53,7 @@ python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5" --rec
 
 - 記録した応答を順に返し、ライブラリが送るリクエストが記録と同じかを確かめる。JSON として比べ、Gemini の仮 ID（`switchllm_` と12桁）だけは比べない（実行ごとに変わるため）
 - 記録より多く呼んだとき、記録の一部を使わなかったときも失敗する
-- 再生ではキーは要らない（偽のキーを使う）
+- 再生ではキーは要らない（偽のキーを使う）。クラウドの経路の URL は、`e2e_support.REPLAY_ENV` の値を環境変数に入れて組み立てる
 
 ## 実装
 

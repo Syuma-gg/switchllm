@@ -34,8 +34,11 @@ class OpenAIChatProvider(Provider):
     adapter = "openai_chat"
     default_base_url = OPENAI_BASE_URL
     api_key_env = ("OPENAI_API_KEY",)
-    option_names = frozenset({"max_tokens_field", "stream_usage", "json_schema", "file_input", "tool_choice", "image_url"})
+    option_names = frozenset(
+        {"max_tokens_field", "stream_usage", "json_schema", "file_input", "tool_choice", "image_url", "reasoning_summary"}
+    )
     auth_header = "Authorization"
+    auth_scheme = "Bearer"
     # エラーの文言か本文に出てくる名前。reasoning_summary は何も送らないので持たない（docs/design-docs/error-hints.md）
     error_fields = {
         "tool_choice": ("tool_choice",),
@@ -169,15 +172,19 @@ class OpenAIChatProvider(Provider):
                 "OpenAI Chat Completions does not return reasoning summaries (reasoning_summary=True). "
                 "Use the 'openai:' provider (Responses API) instead"
             )
+        if req.reasoning_summary and not self.options.get("reasoning_summary", True):
+            # Azure OpenAI の Chat Completions も推論の本文を返さない（docs/references/cloud-endpoints.md）
+            raise UnsupportedFeatureError(
+                f"{self.key!r} (Chat Completions) does not return reasoning summaries (reasoning_summary=True). "
+                "Use a Responses API provider such as 'azure:' or 'openai:' instead"
+            )
         if stream:
             body["stream"] = True
             if self.options.get("stream_usage", True):
                 body["stream_options"] = {"include_usage": True}
         body = deep_merge(body, req.extra)
 
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        headers = {"Content-Type": "application/json", **self.auth_headers()}
         return HTTPRequest(url=f"{self.base_url}/chat/completions", headers=self.request_headers(headers), body=body)
 
     def parse_response(self, data: dict[str, Any]) -> Response:

@@ -8,7 +8,7 @@ from e2e_support import MAX_TOKENS, rejection
 from switchllm import APIError, BadRequestError, DroppedParameterWarning, Message, UnsupportedFeatureError
 
 
-@pytest.mark.premise("U12", "U13", "U25")
+@pytest.mark.premise("U12", "U13", "U25", "U40", "U41", "U42", "U43", "U44")
 @pytest.mark.calls(1)
 def test_text(client, note):
     res = client.chat("「ok」とだけ返して", max_tokens=MAX_TOKENS)

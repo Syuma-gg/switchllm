@@ -27,6 +27,7 @@
 | [Anthropic の temperature は送らずに捨て、DroppedParameterWarning で知らせる](dropped-parameter-warning.md) | 採用（2026-11-28） | 一次情報で確認、実 API 未検証 |
 | [API が断った指定には、原因とみられる引数と、どのモデルでも動く書き方をエラーに足す](error-hints.md) | 採用（2026-11-28） | 一次情報で確認（Anthropic の文言）、実 API 未検証 |
 | [プリセットごとに送れるものを対応表にし、Gemini には URL の画像を送り、Ollama の tool_choice と画像の URL は送る前に止める](provider-capabilities.md) | 採用（2026-11-28） | 一次情報で確認、実 API 未検証 |
+| [クラウドの API キーで呼べる経路をプリセットにする](cloud-api-keys.md) | 採用（2026-11-28） | 一次情報で確認、実 API 未検証 |
 | [非同期のクライアントは AsyncClient として分け、アダプターを同期版と共有する](async-client.md) | 採用（2026-11-23） | モックで確認、実 API 未検証 |
 | [headers= はすべてのアダプターで受け付け、同じ名前のヘッダーは利用者の値で置き換える](custom-headers.md) | 採用（2026-11-23） | モックで確認（RFC 9110） |
 | [ファイル（PDF など）は FilePart で渡し、各社が受け付ける種類はそのまま送る](file-input.md) | 採用（2026-11-23） | モックで確認、実 API 未検証 |

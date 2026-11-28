@@ -12,6 +12,11 @@
 
 - `Client("provider:model")` の文字列、または環境変数 `SWITCHLLM_MODEL` でプロバイダーを選ぶクライアント
 - 対応するプロバイダー: OpenAI（Responses API / Chat Completions）、Anthropic、Google Gemini、DeepSeek（`deepseek` のプリセット）、OpenAI 互換サーバー（`ollama` / `lmstudio` のプリセットと `register_provider()`）
+- クラウドの API キーで呼ぶプリセット: Azure OpenAI（`azure` / `azure-chat`）、Claude in Microsoft Foundry（`foundry`）、Claude in Amazon Bedrock（`bedrock`）、Vertex AI express mode（`vertex`）
+  - URL に入るリソース名やリージョンは、各社の SDK と同じ環境変数（`AZURE_OPENAI_ENDPOINT`・`ANTHROPIC_FOUNDRY_RESOURCE`・`AWS_REGION` など）から組み立てる。`base_url=` を渡せばそちらを使う。値がないか使えない値なら、`Client` を作るときに `ConfigurationError`
+  - Azure にはキーを `api-key` ヘッダーで送る。`bedrock` は URL の画像を、`azure-chat` は `reasoning_summary=True` を、送る前に `UnsupportedFeatureError` にする
+  - クラウドの認証（IAM・SigV4、OAuth、Entra ID）には対応しない
+- オプション `image_url=False`（`anthropic` のアダプター）と `reasoning_summary=False`（Chat Completions 互換）。対応しない接続先で、URL の画像と推論の要約を送る前に止める
 - テキストの送受信（`chat()`）とストリーミング（`stream()`）
 - 画像の入力（`ImagePart`）。URL の画像は各社の API が取りに行く（Gemini は `fileData.fileUri`。Ollama は base64 だけなので、URL は送る前に `UnsupportedFeatureError`）
 - プリセットごとに送れるものと、送る前に止まるものの対応表（public-api.md）。表とライブラリの振る舞いが一致することをテストで確かめる

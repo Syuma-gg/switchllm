@@ -24,6 +24,9 @@ from e2e_recording import (
     save,
     scrub,
 )
+from e2e_support import REPLAY_ENV, cloud_url_rewrites
+
+from switchllm.providers import PRESETS
 
 
 def _serve(*responses: httpx.Response) -> httpx.MockTransport:
@@ -173,6 +176,45 @@ def test_save_scrubs_secrets(tmp_path):
     path = tmp_path / "t.json"
     save(path, {"nodeid": "n", "models": []}, rec.exchanges, secrets=["sk-live-0123456789abcdef"])
     assert "sk-live" not in path.read_text(encoding="utf-8")
+
+
+def test_save_rewrites_cloud_urls_to_the_replay_values(tmp_path):
+    # クラウドの経路の URL にはリソース名やリージョンが入る。記録には決まった値で残し、再生でもその値で組み立てる
+    rec = Recorder(_serve(httpx.Response(200, json={"ok": True})))
+    with httpx.Client(transport=rec) as http:
+        http.post("https://real-resource.openai.azure.com/openai/v1/responses", json={})
+    path = tmp_path / "t.json"
+    rewrite = {"https://real-resource.openai.azure.com/openai/v1": "https://switchllm-e2e.openai.azure.com/openai/v1"}
+    save(path, {"nodeid": "n", "models": []}, rec.exchanges, secrets=[], rewrite=rewrite)
+    assert "real-resource" not in path.read_text(encoding="utf-8")
+    _, exchanges = load(path)
+    with httpx.Client(transport=httpx.MockTransport(Replayer(exchanges))) as http:
+        assert http.post("https://switchllm-e2e.openai.azure.com/openai/v1/responses", json={}).json() == {"ok": True}
+
+
+def test_cloud_url_rewrites_map_the_real_urls_to_the_replay_urls():
+    real = {
+        "AZURE_OPENAI_ENDPOINT": "https://real-resource.openai.azure.com",
+        "ANTHROPIC_FOUNDRY_RESOURCE": "real-foundry",
+        "AWS_REGION": "ap-northeast-1",
+    }
+    assert cloud_url_rewrites(real) == {
+        "https://real-resource.openai.azure.com/openai/v1": "https://switchllm-e2e.openai.azure.com/openai/v1",
+        "https://real-foundry.services.ai.azure.com/anthropic": "https://switchllm-e2e.services.ai.azure.com/anthropic",
+        "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic": "https://bedrock-mantle.us-east-1.api.aws/anthropic",
+    }
+
+
+def test_cloud_url_rewrites_skip_routes_without_env_and_unchanged_urls():
+    assert cloud_url_rewrites({}) == {}
+    assert cloud_url_rewrites(dict(REPLAY_ENV)) == {}
+
+
+def test_replay_env_builds_every_cloud_url():
+    # 再生では REPLAY_ENV を環境変数に入れる。URL を環境変数から組み立てるプリセットが、どれも作れること
+    resolvers = [p.resolve_base_url for p in PRESETS.values() if p.resolve_base_url is not None]
+    assert resolvers
+    assert all(r(REPLAY_ENV).startswith("https://") for r in resolvers)
 
 
 def test_recording_path_is_safe_on_windows():

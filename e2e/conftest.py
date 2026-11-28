@@ -21,7 +21,18 @@ from typing import Any
 import httpx
 import pytest
 from e2e_recording import RECORDINGS, AsyncRecorder, Recorder, Replayer, load, recording_path, save
-from e2e_support import VISION_ADAPTERS, adapter_of, pairs, relevant, requires_key, split_models, switch_premises
+from e2e_support import (
+    REPLAY_ENV,
+    REPLAY_ENV_CLEARED,
+    VISION_ADAPTERS,
+    adapter_of,
+    cloud_url_rewrites,
+    pairs,
+    relevant,
+    requires_key,
+    split_models,
+    switch_premises,
+)
 
 import switchllm
 from switchllm import AsyncClient, Client, SwitchLLMError
@@ -266,7 +277,24 @@ class _Exchanges:
             }
             if "pair" in params:
                 meta["pair"] = list(params["pair"])
-            save(self.path, meta, self.recorder.exchanges, secrets=_secrets(self.passed_keys))
+            save(
+                self.path,
+                meta,
+                self.recorder.exchanges,
+                secrets=_secrets(self.passed_keys),
+                rewrite=cloud_url_rewrites(os.environ),
+            )
+
+
+@pytest.fixture(autouse=True)
+def _replay_cloud_env(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """再生では、クラウドの経路の URL を、記録に残した決まった値で組み立てる（e2e_support.REPLAY_ENV）。"""
+    if request.config.stash[LIVE]:
+        return
+    for name in REPLAY_ENV_CLEARED:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in REPLAY_ENV.items():
+        monkeypatch.setenv(name, value)
 
 
 @pytest.fixture

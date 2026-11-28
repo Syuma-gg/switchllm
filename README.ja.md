@@ -36,6 +36,7 @@ APIキーは環境変数で渡す（`api_key=` 引数でも可）。
 | OpenAI（Chat Completions） | `openai-chat:<model>` | `OPENAI_API_KEY` |
 | DeepSeek | `deepseek:deepseek-flash` | `DEEPSEEK_API_KEY` |
 | Ollama / LM Studio（ローカル） | `ollama:llama3.2` / `lmstudio:<model>` | 不要 |
+| Azure OpenAI、Foundry・Bedrock の Claude、Vertex AI | `azure:<deployment>`、`foundry:<deployment>`、`bedrock:anthropic.claude-sonnet-5-5`、`vertex:gemini-2.5-flash` | 下の「クラウド」 |
 | その他の OpenAI 互換 API | `register_provider()` で登録する（下の「その他の OpenAI 互換 API」） | 登録時に指定 |
 
 モデル ID は頻繁に変わるので、各社のモデル一覧で確認してから指定する。
@@ -206,7 +207,7 @@ print(res.thinking)  # 推論の要約。モデルが返さなければ None
   - OpenAI は、最新の推論モデルで、要約に組織の認証が要ることがある
 - 要約を返すかはモデルが決めるので、`res.thinking` が `None` のこともある
 - 渡せるのは `True` か `False` だけ。OpenAI の `"concise"`・`"detailed"` は `extra_by_provider=` で渡す
-- `reasoning_effort="none"` と一緒に渡すと、送る前に `ConfigurationError`。OpenAI に向けた `openai-chat:` は、Chat Completions が推論の本文を返さないので `UnsupportedFeatureError`。`openai:` を使う（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md)）
+- `reasoning_effort="none"` と一緒に渡すと、送る前に `ConfigurationError`。OpenAI に向けた `openai-chat:` と `azure-chat:` は、Chat Completions が推論の本文を返さないので `UnsupportedFeatureError`。`openai:` か `azure:` を使う（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/reasoning-summary.md)）
 
 ### ファイル（PDF など）
 
@@ -286,6 +287,31 @@ except APIError as e:
 
 429・5xx・接続エラーは指数バックオフで自動リトライする（`max_retries=2`、`Retry-After` ヘッダーを尊重）。ストリーミングは最初のイベントを受け取る前だけリトライする。詳しくは [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md)。
 
+### クラウド（API キーで呼ぶ）
+
+Azure・AWS・Google Cloud が提供するモデルを、API キーで呼べる。送る形式は各社の API と同じなので、変わるのはモデルの文字列だけ。クラウドの認証（IAM・SigV4、OAuth、Entra ID）には対応しない。
+
+| クラウド | モデル文字列の例 | キー | URL を組み立てる環境変数 |
+|---|---|---|---|
+| Azure OpenAI（Responses API / Chat Completions） | `azure:<deployment>` / `azure-chat:<deployment>` | `AZURE_OPENAI_API_KEY` | `AZURE_OPENAI_ENDPOINT`（`https://<resource>.openai.azure.com`） |
+| Claude in Microsoft Foundry | `foundry:claude-sonnet-5-5`（deployment 名） | `ANTHROPIC_FOUNDRY_API_KEY` | `ANTHROPIC_FOUNDRY_RESOURCE`（または `ANTHROPIC_FOUNDRY_BASE_URL`） |
+| Claude in Amazon Bedrock | `bedrock:anthropic.claude-sonnet-5-5` | `AWS_BEARER_TOKEN_BEDROCK` | `AWS_REGION`（または `AWS_DEFAULT_REGION`） |
+| Vertex AI express mode（Gemini） | `vertex:gemini-2.5-flash` | `VERTEX_API_KEY` | なし（URL は固定） |
+
+```python
+# AWS_BEARER_TOKEN_BEDROCK と AWS_REGION を設定してある
+client = Client("bedrock:anthropic.claude-sonnet-5-5")
+client = client.with_model("bedrock:anthropic.claude-haiku-5-5")   # 同じリージョンとキー
+```
+
+- 環境変数は、各クラウドの公式 SDK と同じ名前（`VERTEX_API_KEY` だけは、Google の文書に名前がないので、このライブラリが決めた）。別の URL を使うなら `base_url=` を渡す。そのときは URL の環境変数を読まない
+- 値がないか、使えない値（`.` を含むリージョン、`http://` のエンドポイントなど）なら、`Client` を作るときに `ConfigurationError` になる（送る前）。キーはこの値で組み立てた URL へ送るので、先に確かめる
+- Azure OpenAI と Foundry では、`model` に deployment 名を書く
+- Bedrock の短期のキーは 12 時間で切れる。ライブラリはキーを作り直さないので、新しいキーを `api_key=` で渡す
+- 各社の API と違うところ: `bedrock` は URL の画像を、`azure-chat` は推論の要約を受け付けないので、どちらも送る前に `UnsupportedFeatureError` になる。Vertex AI express mode は個人の Google アカウント（@gmail.com）向けで、Gemini のモデルだけ
+- 生データ（署名・推論アイテム）は、同じ経路にだけ送り返す。`bedrock:` の履歴は、`anthropic:` や `foundry:` へは変換し直して送る
+- 実 API ではまだ確かめていない。出典と未確認の点は [cloud-endpoints.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/references/cloud-endpoints.md)
+
 ### その他の OpenAI 互換 API
 
 プリセットにないサーバー（クラウドの互換 API、自前の vLLM、社内ゲートウェイなど）は、名前を付けて登録する。base_url は各サービスの公式ドキュメントで確認すること。
@@ -307,11 +333,11 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 - **接続先ごとの指定は並べて書く。** 1つの接続先だけが読むリクエストの引数は `extra_by_provider=` に、`Client` のオプションは `options_by_provider=` に書く。使うのは選んだ接続先の分だけ。`extra=` と `**options` はどの接続先にも渡るので、どこでも受け付けるものだけにする
 - **`max_tokens` は省くか、推論の分を空けて指定する。** 省くと、各モデルの上限まで出す（必須の Anthropic には 64000 を送る）。長さや料金を抑えるために指定するなら、OpenAI・Gemini・Claude 5 系は推論のトークンもここに含めることを考えに入れる。上限で切れた答えは `stop_reason == "max_tokens"` で、本文がないこともある
 - **`temperature` と `stop` に頼らない。** `temperature` は、Anthropic では送らずに捨てて `DroppedParameterWarning` を出し、Gemini 3.6 以降と DeepSeek の思考モードはエラーにせずに無視する。`stop` は OpenAI Responses で `UnsupportedFeatureError` になる。長さや形はプロンプトで伝え（または `response_schema=` を使い）、切りたいところは受け取った本文を自分で切る
-- **画像は base64 で渡す。** `ImagePart.from_file()` と `ImagePart(data=..., media_type=...)` は、どのプリセットでも送れる。URL の画像は各社の API が取りに行き、Ollama は URL を受け付けない
+- **画像は base64 で渡す。** `ImagePart.from_file()` と `ImagePart(data=..., media_type=...)` は、どのプリセットでも送れる。URL の画像は各社の API が取りに行き、Ollama と Bedrock は URL を受け付けない
 - **ファイルは PDF かテキストで送る。** PDF は `deepseek`・`ollama`・`lmstudio` のプリセットを除いて送れる。ほかのテキストのファイル（CSV など）は、読み込んだ文字を `TextPart` に入れれば、どこでも送れる
 - **`reasoning_effort` は `"low"`・`"medium"`・`"high"` を使う。** 推論するモデルの多くが受け付ける段階。`"none"`・`"minimal"`・`"xhigh"`・`"max"` は、接続先によってはなく（送る前に `UnsupportedFeatureError`）、モデルによってもない（`BadRequestError`）。Gemini 2.5 は段階を受け付けないので、`thinkingBudget` を `extra_by_provider=` に書く
 - **`tool_choice` は指定しない。** どこでも既定は `"auto"`。強制（`"required"` やツールの名前）は、Claude 5 系のいくつかのモデル、DeepSeek の思考モード、Ollama が断る。使ってほしいツールはプロンプトで頼み、ツールを呼ばせたくなければ `tools` を渡さない
-- **`res.thinking` は、ないこともあるものとして扱う。** `reasoning_summary=True` を渡しても、要約を返すかはモデルが決める。OpenAI に向けた `openai-chat:` では `UnsupportedFeatureError` になり、Claude 4.5 系は 400 で断る
+- **`res.thinking` は、ないこともあるものとして扱う。** `reasoning_summary=True` を渡しても、要約を返すかはモデルが決める。OpenAI に向けた `openai-chat:` と `azure-chat:` では `UnsupportedFeatureError` になり、Claude 4.5 系は 400 で断る
 - **構造化出力では、すべてのプロパティを `required` に入れる。** 省ける項目は null も受け付ける形にする（OpenAI が求める）。DeepSeek には JSON Schema がないので、`response_schema=` は `UnsupportedFeatureError` になる（上の「構造化出力」）
 - **会話の途中の載せ替え**は、同じ `messages` のままでよい。生データは同じモデルにだけ送り返し（Anthropic はどの Claude のモデルにも送る）、ほかのモデルには履歴を変換し直して送る。載せ替え先が受け取れないもの（Ollama なら画像の URL や PDF など）が履歴にあると、送る前に `UnsupportedFeatureError` になる
 
@@ -332,11 +358,12 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 ## 既知の制限
 
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
-- 画像とファイルの入力は対応（ファイルは base64 だけ）、音声入力は未対応。URL の画像は各社の API が取りに行き、ライブラリは取りに行かない。Ollama は base64 の画像だけ。プリセットごとに送れるものと、送る前に止まるものは [public-api.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/public-api.md) の表にある
+- 画像とファイルの入力は対応（ファイルは base64 だけ）、音声入力は未対応。URL の画像は各社の API が取りに行き、ライブラリは取りに行かない。Ollama と `bedrock` のプリセットは base64 の画像だけ。プリセットごとに送れるものと、送る前に止まるものは [public-api.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/public-api.md) の表にある
 - 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`reasoning_summary=True` を渡すと頼める（上の「推論の要約」）。頼んでも、返すかはモデルが決める
 - Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否する。そのため `temperature=` は送らずに捨て、`DroppedParameterWarning` で知らせる（リクエストの残りはそのまま送る）。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する。Gemini 3.6 以降と DeepSeek の思考モードは、`temperature` をエラーにせずに無視する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/dropped-parameter-warning.md)）
 - 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）
 - Anthropic は max_tokens が必須なので、指定しないと 64000 で送る。今の Claude のモデルはどれもこの値を受け付け、Claude 5 系は推論の分もここに含める（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないので、モデルの上限まで出す（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-max-tokens.md)）
+- クラウドは API キーで呼ぶものだけ（上の「クラウド」）。IAM・SigV4、OAuth、Entra ID の認証には対応せず、Bedrock の短期のキーも作り直さない
 - OpenAI Responses には `stop` シーケンスが存在しないため、指定すると `UnsupportedFeatureError`
 - Responses API は既定でレスポンスを保存する。`extra={"store": False}` にしても、reasoning アイテムには既定で `encrypted_content` が付くので、`include` なしで再送できる（実 API では未確認）
 - Gemini の関数スキーマは `parameters`（OpenAPI のサブセット）で送る。複雑な JSON Schema を使うなら `Client(..., schema_field="parametersJsonSchema")`

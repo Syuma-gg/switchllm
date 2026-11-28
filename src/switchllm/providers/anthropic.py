@@ -44,7 +44,7 @@ class AnthropicProvider(Provider):
     adapter = "anthropic"
     default_base_url = "https://api.anthropic.com"
     api_key_env = ("ANTHROPIC_API_KEY",)
-    option_names = frozenset({"default_max_tokens", "anthropic_version", "beta"})
+    option_names = frozenset({"default_max_tokens", "anthropic_version", "beta", "image_url"})
     auth_header = "x-api-key"
     reserved_headers = (("anthropic-version", "anthropic_version"), ("anthropic-beta", "beta"))
     # エラーの文言に出てくる名前（Errors の文書の文言。docs/references/anthropic-messages.md の「エラー」）。
@@ -68,6 +68,12 @@ class AnthropicProvider(Provider):
                 if p.text:  # 空の text ブロックは拒否される
                     blocks.append({"type": "text", "text": p.text})
             elif isinstance(p, ImagePart):
+                if p.url and not self.options.get("image_url", True):
+                    # Bedrock の Messages API は URL の画像を受け付けない（docs/references/cloud-endpoints.md）
+                    raise UnsupportedFeatureError(
+                        f"{self.key!r} does not accept image URLs. Pass the image as base64 instead "
+                        "(ImagePart.from_file() or ImagePart(data=..., media_type=...))"
+                    )
                 src = (
                     {"type": "url", "url": p.url}
                     if p.url
@@ -187,9 +193,7 @@ class AnthropicProvider(Provider):
             body["stream"] = True
         body = deep_merge(body, req.extra)
 
-        headers = {"anthropic-version": version, "content-type": "application/json"}
-        if self.api_key:
-            headers["x-api-key"] = self.api_key
+        headers = {"anthropic-version": version, "content-type": "application/json", **self.auth_headers()}
         if self.options.get("beta"):
             headers["anthropic-beta"] = ",".join(self.options["beta"])
         return HTTPRequest(url=f"{self.base_url}/v1/messages", headers=self.request_headers(headers), body=body)

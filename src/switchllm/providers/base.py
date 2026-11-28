@@ -203,8 +203,10 @@ class Provider(ABC):
     #: 足したらここにも足す（``tests/test_client.py`` がソースと照合する）
     option_names: frozenset[str] = frozenset()
     #: APIキーを入れるヘッダー。``headers=`` にこの名前があれば（値が None でも）、APIキーがなくてもよい
-    #: （docs/design-docs/custom-headers.md）
+    #: （docs/design-docs/custom-headers.md）。プリセットが替えることがある（Azure の ``api-key``）
     auth_header: str = ""
+    #: キーの前に付ける認証の方式（``"Bearer"`` なら ``Authorization: Bearer <key>``）。空ならキーだけを入れる
+    auth_scheme: str = ""
     #: ``headers=`` で渡させないヘッダー（小文字の名前, 代わりに使うオプション）。専用のオプションがあり、
     #: ライブラリがその値を見て検査するもの
     reserved_headers: tuple[tuple[str, str], ...] = ()
@@ -267,8 +269,11 @@ class Provider(ABC):
         base_url: str | None = None,
         api_key_env: tuple[str, ...] | None = None,
         options: dict[str, Any] | None = None,
+        auth: tuple[str, str] | None = None,
     ) -> None:
         self.check_options(key, options or {})
+        if auth is not None:  # プリセットが決めるキーのヘッダー（ヘッダー名, 方式）。docs/design-docs/cloud-api-keys.md
+            self.auth_header, self.auth_scheme = auth
         self.key = key  # モデル文字列の "provider:" 部分（例: "ollama"）
         self.model = model
         self.base_url = (base_url or self.default_base_url).rstrip("/")
@@ -294,6 +299,12 @@ class Provider(ABC):
     def _user_sets(self, header: str) -> bool:
         """``headers=`` にこの名前のヘッダーがあるか（大文字と小文字を区別しない。値が None で止めるときも）。"""
         return bool(header) and header.lower() in {name.lower() for name in self.options.get("headers") or {}}
+
+    def auth_headers(self) -> dict[str, str]:
+        """APIキーを入れるヘッダー。キーがなければ（ローカルのサーバー、``headers=`` で渡すとき）空。"""
+        if not self.api_key:
+            return {}
+        return {self.auth_header: f"{self.auth_scheme} {self.api_key}" if self.auth_scheme else self.api_key}
 
     def request_headers(self, own: dict[str, str]) -> dict[str, str]:
         """アダプターが付けるヘッダーに、利用者の ``headers=`` を重ねる。

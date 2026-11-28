@@ -16,6 +16,7 @@
 | U36〜U37 | Anthropic の `max_tokens` の既定（[載せ替えの負担を減らす](../completed/2026-11-28-model-switch-friction.md)） |
 | U38 | 断られたエラーの案内（同上） |
 | U39 | Gemini の URL の画像（同上） |
+| U40〜U44 | クラウドの経路（[クラウドの API キー](cloud-api-keys.md)） |
 
 ## 手順
 
@@ -28,6 +29,9 @@
     - 同じプロバイダーの2つのモデルを隣に置くと、U8（Anthropic）と U17（DeepSeek）を確かめられる
     - Gemini の隣に別のプロバイダーを置くと、U5 を確かめられる。U5 の「Gemini 3 系以外」は、Gemini 2.5 などのモデルも並べたときだけ確かめられる
   - LM Studio に推論するモデル（`reasoning_content` を返すもの）を読み込むと、U11 の「ほかの互換サーバー」を確かめられる
+  - クラウドの経路（U40〜U44）は、そのクラウドのアカウントとキーを用意できたものだけを並べる（例: `azure:<deployment>,azure-chat:<deployment>,foundry:claude-sonnet-5-5,bedrock:anthropic.claude-sonnet-5-5,bedrock:anthropic.claude-haiku-5-5,vertex:gemini-2.5-flash`）。URL を組み立てる環境変数も要る（[クラウドの経路](../../references/cloud-endpoints.md)）
+    - `bedrock` の2つのモデルを隣に置くと、U43 の「別のモデルへ thinking ブロックを送り返す」を確かめられる
+    - `vertex` の隣に別のプロバイダーを置くと、U44 の「ダミーの署名」を確かめられる
 - [ ] ローカルの Ollama / LM Studio で同じ確認をする（料金なし）
 - [ ] 失敗した箇所を直し、同じ形のレスポンスをモックのテストにも足す
 - [ ] 下の前提を上から潰す。結果は各前提の「結果」に日付つきで書き、分かった仕様は `docs/references/` に書く
@@ -259,6 +263,38 @@ ID はほかの文書から参照しているので変えない。「文書で�
 - 実装: `ImagePart(url=...)` を `{"fileData": {"fileUri": URL, "mimeType": ...}}` で送る。URL は Gemini の API が取りに行く（[判断](../../design-docs/provider-capabilities.md)）
 - 不確実な理由: 文書は「supported in all of the Gemini API endpoints」とするが、公開の URL を渡す例は Interactions API の形だけで、generateContent の例がない。Gemini 2.0 系は不可。E2E の `test_image_url` は、このリポジトリの `e2e/assets/red.png` を GitHub の raw の URL で読ませる
 
+### U40 Azure OpenAI: Responses API を `api-key` ヘッダーで呼ぶ
+
+- 実装: `azure:` は `AZURE_OPENAI_ENDPOINT` に `/openai/v1` を足した URL へ、`openai` アダプターの本文を送る。キーは `api-key` ヘッダー、`model` は deployment 名（[クラウドの経路](../../references/cloud-endpoints.md)）
+- 不確実な理由: v1 の API に `api-key` で送る例はあるが、OpenAI と同じ本文（reasoning アイテムを戻す、`store: false`）で往復した例はない。エラーの本文の形も文書にない。E2E は `test_text`・`test_store_false`・`test_invalid_api_key`・`test_unknown_model`
+
+### U41 Azure OpenAI: Chat Completions を `max_completion_tokens` で呼ぶ
+
+- 実装: `azure-chat:` は同じ URL の `/chat/completions` へ送る。`max_tokens` を `max_completion_tokens` で送り、`reasoning_summary=True` は送る前に止める
+- 不確実な理由: 推論モデルが `max_tokens` を受け付けないことは文書にあるが、v1 の Chat Completions の REST の文書が開けなかった（404）。`stream_options.include_usage` と PDF（`file` のパート）は文書にない。E2E は `test_text`・`test_stream_text`・`test_pdf_file`・エラーの2件
+
+### U42 Claude in Microsoft Foundry: Claude API と同じ本文で呼ぶ
+
+- 実装: `foundry:` は `https://<resource>.services.ai.azure.com/anthropic/v1/messages` へ、`anthropic` アダプターの本文と `x-api-key`・`anthropic-version: 2026-10-21` を送る
+- 不確実な理由: Anthropic の文書の例は `2026-10-21`、Microsoft Learn の例は `2023-06-01` で、受け付ける版が書いていない。SSE のイベントの名前、テキストのファイル（`text` の source）、エラーの本文の形も文書にない。E2E は `test_text`・`test_stream_text`・`test_text_file`・エラーの2件と、`foundry` の2つのモデルの切り替え
+
+### U43 Claude in Amazon Bedrock: bedrock-mantle の Messages API で呼ぶ
+
+- 実装: `bedrock:` は `https://bedrock-mantle.<region>.api.aws/anthropic/v1/messages` へ、`anthropic` アダプターの本文と `x-api-key`・`anthropic-version: 2026-10-21` を送る。URL の画像は送る前に止める
+- 不確実な理由: 文書は「the same request body shape as the Claude API」とするが、base64 の PDF・テキストのファイル・effort・adaptive thinking は書いていない。同じ経路の別のモデルへ thinking ブロックを送り返せるか（U8 と同じこと）も書いていない。E2E は `test_text`・`test_stream_text`・`test_pdf_file`・`test_text_file`・エラーの2件と、`bedrock` の2つのモデルの切り替え
+
+### U44 Vertex AI express mode: Gemini API と同じ本文で呼ぶ
+
+- 実装: `vertex:` は `https://aiplatform.googleapis.com/v1/publishers/google/models/<model>:generateContent` へ、`gemini` アダプターの本文と `x-goog-api-key` を送る。ストリーミングは `:streamGenerateContent?alt=sse`
+- 不確実な理由: 文書に次のことがない
+  - `?alt=sse` で SSE を返すか（返さなければ、ストリームの解析が要る）
+  - エラーの本文の形
+  - `thinkingLevel` を小文字で受け付けるか（文書の値は大文字）
+  - `responseJsonSchema`（非推奨とされる）を受け付けるか、`parametersJsonSchema` を受け付けるか
+  - express mode で公開の HTTPS の URL の画像を取りに行くか
+  - ダミーの署名（U5 と同じこと）、`thoughtsTokenCount`
+- E2E は `test_text`・`test_stream_text`・`test_reasoning_effort_low_stream`・`test_structured_output`・`test_image_url`・`test_parameters_json_schema`・`test_usage_breakdown`・エラーの2件と、`vertex` の隣の別のプロバイダーとの切り替え
+
 ## 進捗ログ
 
 細かい経緯は、git の履歴（2026-11-17〜18 のコミット）にある。ここには、あとで効く気づきだけを残す。
@@ -270,6 +306,7 @@ ID はほかの文書から参照しているので変えない。「文書で�
 - 2026-11-17: U8 を直した（`81aeb9b`）。preserved thinking に対応するモデル（Opus 5.5・Sonnet 5.5・Haiku 5.5 など）は、送り返した thinking ブロックより前の内容が変わっていると 400 にすることがある。switchllm は同じ履歴から毎回同じリクエストを組み立てるので、`res.message` を加工しなければ当たらない（[Anthropic Messages](../../references/anthropic-messages.md) の「前置きの検査」）
 - 2026-11-17: smoke test を pytest の E2E テスト（`e2e/`）に置き換えた（`9c8120f`）。偽のサーバーで、料金をかけずに流れを確かめた
 - 2026-11-18: 実 API の記録と再生を足した（`340ef7b`）。`--record` で回すと、通ったテストのやりとりを `e2e/recordings/` に残す。`--models` がなければ記録を再生し、既定の `python -m pytest` にも入る。記録は sdist に入れない
+- 2026-11-28: クラウドの経路の前提 U40〜U44 を足した（[クラウドの API キー](cloud-api-keys.md)）。クラウドの経路の結果は、その経路の U 番号にだけ数え、各社に直接つなぐときの前提（U25 など）には数えない（`e2e_support.CLOUD_ROUTES`）
 
 ## 判断ログ
 

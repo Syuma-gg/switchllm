@@ -199,7 +199,7 @@ def test_restored_history_continues(client, note):
 
 
 @pytest.mark.only("openai")
-@pytest.mark.premise("U1")
+@pytest.mark.premise("U1", "U40")
 @pytest.mark.calls(2)
 def test_store_false(client, note):
     # store: false では、input に戻したアイテムの id を API が引けない。reasoning アイテムは encrypted_content で送る
@@ -208,7 +208,7 @@ def test_store_false(client, note):
 
 
 @pytest.mark.only("gemini")
-@pytest.mark.premise("U4")
+@pytest.mark.premise("U4", "U44")
 @pytest.mark.calls(2)
 def test_parameters_json_schema(client, note):
     other = client.with_model(client.model, schema_field="parametersJsonSchema")

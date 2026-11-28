@@ -129,6 +129,26 @@ class FakeAPI:
             self._loop.close()
 
 
+#: クラウドのプリセットが URL を組み立てる環境変数の、テストで使う値（docs/design-docs/cloud-api-keys.md）
+CLOUD_ENV = {
+    "AZURE_OPENAI_ENDPOINT": "https://my-resource.openai.azure.com",
+    "ANTHROPIC_FOUNDRY_RESOURCE": "my-foundry",
+    "AWS_REGION": "us-east-1",
+}
+#: 開発者の環境にあると、組み立てる URL が変わる環境変数。テストでは消す
+CLOUD_ENV_CLEARED = ("ANTHROPIC_FOUNDRY_BASE_URL", "AWS_DEFAULT_REGION")
+
+
+@pytest.fixture
+def cloud_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """クラウドのプリセットの URL を、決まった値で組み立てられるようにする。"""
+    for name in CLOUD_ENV_CLEARED:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in CLOUD_ENV.items():
+        monkeypatch.setenv(name, value)
+    return dict(CLOUD_ENV)
+
+
 @pytest.fixture(params=["sync", "async"])
 def api(request: pytest.FixtureRequest) -> Iterator[FakeAPI]:
     """同じテストを ``Client`` と ``AsyncClient`` の両方で回す（docs/design-docs/async-client.md）。"""

@@ -31,6 +31,7 @@ class OpenAIResponsesProvider(Provider):
     default_base_url = "https://api.openai.com/v1"
     api_key_env = ("OPENAI_API_KEY",)
     auth_header = "Authorization"
+    auth_scheme = "Bearer"
     # エラーの param（"reasoning.effort" など）か文言に出てくる名前（docs/design-docs/error-hints.md）
     error_fields = {
         "tool_choice": ("tool_choice",),
@@ -127,9 +128,7 @@ class OpenAIResponsesProvider(Provider):
             body["stream"] = True
         body = deep_merge(body, req.extra)
 
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        headers = {"Content-Type": "application/json", **self.auth_headers()}
         return HTTPRequest(url=f"{self.base_url}/responses", headers=self.request_headers(headers), body=body)
 
     # ------------------------------------------------------------------ #

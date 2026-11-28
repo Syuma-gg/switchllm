@@ -16,7 +16,7 @@ def _collect(events):
     return [ev.text for ev in events if ev.type == "text"], events[-1].response
 
 
-@pytest.mark.premise("U10", "U16")
+@pytest.mark.premise("U10", "U16", "U41", "U42", "U43", "U44")
 @pytest.mark.calls(1)
 def test_stream_text(client, note):
     deltas, res = _collect(client.stream("1から5まで数えて", max_tokens=MAX_TOKENS))

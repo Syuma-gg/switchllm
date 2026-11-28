@@ -54,3 +54,4 @@
 - Ollama で `tool_choice` の `"none"` や強制、URL の画像を使っていたコードは、`UnsupportedFeatureError` になる。0.1.0 は未公開なので、壊れる利用者のコードはない
 - E2E の `test_image_url` は、このリポジトリの `e2e/assets/red.png` を GitHub の raw の URL で読ませる。実 API で回す前に、main に push しておく
 - 対応表に行や列を足すときは、`tests/test_support_table.py` の `FEATURES` と `MODELS` にも足す
+- 2026-11-28: クラウドの経路の5つの列を足した。`bedrock` は URL の画像を受け付けないので、`anthropic` アダプターにも同じ名前のオプション `image_url` を足した（[判断](cloud-api-keys.md)）
