@@ -1,9 +1,20 @@
+import os
 import re
+import warnings
 
 import pytest
 
+import switchllm
 from sample_tools import WEATHER_TOOL
-from switchllm import Client, ConfigurationError, ImagePart, Message, StreamError, TextPart, UnsupportedFeatureError
+from switchllm import (
+    Client,
+    ConfigurationError,
+    DroppedParameterWarning,
+    ImagePart,
+    Message,
+    StreamError,
+    TextPart,
+)
 
 
 def test_request_shape(api):
@@ -193,19 +204,59 @@ def test_options_change_headers_and_default_max_tokens(api):
 
 
 @pytest.mark.parametrize("version", [None, "2026-10-21", "2099-01-01"])
-def test_temperature_is_rejected_before_sending_on_2026_10_21_and_later(api, version):
-    # 2026-10-21 からは temperature を送るだけで、どのモデルでも 400 になる（docs/design-docs/anthropic-api-version.md）。
-    # 送って失敗させず、古い版を選べば送れることを案内する。0 も「指定あり」
+def test_temperature_is_dropped_with_warning_on_2026_10_21_and_later(api, version):
+    # 2026-10-21 からは temperature を送るだけで、どのモデルでも 400 になる。送らずに捨て、捨てたことを警告で
+    # 知らせる。載せ替えてもコードは止まらない（docs/design-docs/dropped-parameter-warning.md）。0 も「指定あり」
+    api.reply_json({"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": {}})
     kw = {} if version is None else {"anthropic_version": version}
-    with pytest.raises(UnsupportedFeatureError, match="anthropic_version='2023-06-01'"):
-        api.client("anthropic:claude-sonnet-5-5", **kw).chat("hi", temperature=0)
+    with pytest.warns(DroppedParameterWarning) as rec:
+        res = api.client("anthropic:claude-sonnet-5-5", **kw).chat("hi", temperature=0)
+    assert res.text == "ok"
+    assert "temperature" not in api.body()
+    assert len(rec) == 1
+    message = str(rec[0].message)
+    assert "temperature=0 " in message  # 捨てた値
+    assert "anthropic_version='2023-06-01'" in message  # 古い版を選べば送れることを案内する
+
+
+def test_dropped_temperature_warning_points_at_the_caller(api):
+    # 警告は、ライブラリの中ではなく、chat() / stream() を呼んだ側を指す。同じ行の警告は Python の既定で
+    # 1回しか表示されないので、指す場所が呼んだ側でないと、どこで捨てたかが分からない
+    api.reply_json({"content": [], "stop_reason": "end_turn", "usage": {}})
+    api.reply_sse(
+        [
+            ("message_start", {"type": "message_start", "message": {"id": "msg_1", "model": "claude-sonnet-5-5", "content": [], "usage": {"input_tokens": 1, "output_tokens": 1}}}),
+            ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}}),
+            ("message_stop", {"type": "message_stop"}),
+        ]
+    )
+    client = api.client("anthropic:claude-sonnet-5-5")
+    with pytest.warns(DroppedParameterWarning) as rec:
+        client.chat("hi", temperature=0.5)
+        list(client.stream("hi", temperature=0.5))
+    assert len(rec) == 2
+    assert all("temperature" not in api.body(i) for i in range(2))
+    package_dir = os.path.dirname(switchllm.__file__)
+    assert all(not os.path.normcase(w.filename).startswith(os.path.normcase(package_dir)) for w in rec)
+    if api.mode == "sync":  # 非同期は、テストの道具（AsyncDriver）がイベントループで回すので、その中を指す
+        assert [w.filename for w in rec] == [__file__, __file__]
+
+
+def test_dropped_temperature_can_be_turned_into_an_error(api):
+    # 警告を例外にすれば、送る前に止まる（以前の UnsupportedFeatureError と同じく、リクエストを送らない）
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DroppedParameterWarning)
+        with pytest.raises(DroppedParameterWarning):
+            api.client("anthropic:claude-sonnet-5-5").chat("hi", temperature=0)
     assert api.requests == []
 
 
 def test_temperature_is_sent_on_older_api_version(api):
-    # 古い版なら今までどおり送る。モデルが拒否すれば API のエラーをそのまま返す
+    # 古い版なら今までどおり送り、警告しない。モデルが拒否すれば API のエラーをそのまま返す
     api.reply_json({"content": [], "stop_reason": "end_turn", "usage": {}})
-    api.client("anthropic:claude-opus-4-6", anthropic_version="2023-06-01").chat("hi", temperature=0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DroppedParameterWarning)
+        api.client("anthropic:claude-opus-4-6", anthropic_version="2023-06-01").chat("hi", temperature=0.5)
     assert api.requests[0].headers["anthropic-version"] == "2023-06-01"
     assert api.body()["temperature"] == 0.5
 
@@ -255,6 +306,6 @@ def test_empty_assistant_message_from_another_provider_is_not_sent(api):
 @pytest.mark.parametrize("value", ["x", None])
 @pytest.mark.parametrize("name, option", [("Anthropic-Version", "anthropic_version="), ("anthropic-beta", "beta=")])
 def test_version_and_beta_headers_point_to_their_options(name, option, value):
-    # temperature= を送る前の検査は anthropic_version= の版を見るので、ヘッダーで版を変えさせない（None で止めることも）
+    # temperature= を送るか捨てるかは anthropic_version= の版で決めるので、ヘッダーで版を変えさせない（None で止めることも）
     with pytest.raises(ConfigurationError, match=re.escape(f"'{name.lower()}' is set by the {option} option")):
         Client("anthropic:claude-sonnet-5-5", api_key="k", headers={name: value})

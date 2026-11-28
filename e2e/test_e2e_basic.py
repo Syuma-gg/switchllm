@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from e2e_support import MAX_TOKENS
 
-from switchllm import APIError, BadRequestError, Message, UnsupportedFeatureError
+from switchllm import APIError, BadRequestError, DroppedParameterWarning, Message, UnsupportedFeatureError
 
 
 @pytest.mark.premise("U12", "U13", "U25")
@@ -98,10 +98,12 @@ def test_temperature_zero(client, adapter, note):
     # 下限の 0 を、0 だからと落とさずに送る。thinking が既定で有効なモデルは temperature の指定を
     # 拒否することがあり、そのときは API のエラーをそのまま返す（モデルごとの一覧は持たない）
     if adapter == "anthropic":
-        # 既定の版（2026-10-21）は、どのモデルでも temperature を 400 にする。送る前に知らせる
-        with pytest.raises(UnsupportedFeatureError, match="anthropic_version"):
-            client.chat("「ok」とだけ返して", temperature=0, max_tokens=MAX_TOKENS)
-        note("送る前に UnsupportedFeatureError（呼ばない）")
+        # 既定の版（2026-10-21）は、どのモデルでも temperature を 400 にする。送らずに捨て、警告で知らせる。
+        # temperature を除いた残りのリクエストは、そのまま受け付けられる
+        with pytest.warns(DroppedParameterWarning, match="anthropic_version"):
+            res = client.chat("「ok」とだけ返して", temperature=0, max_tokens=MAX_TOKENS)
+        assert res.text.strip(), f"empty text (stop_reason={res.stop_reason})"
+        note("temperature を送らずに捨てた（DroppedParameterWarning）")
         return
     try:
         res = client.chat("「ok」とだけ返して", temperature=0, max_tokens=MAX_TOKENS)

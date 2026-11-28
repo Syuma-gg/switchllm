@@ -20,6 +20,15 @@ class UnsupportedFeatureError(SwitchLLMError):
     """選んだプロバイダーが対応していない機能を指定した。"""
 
 
+class DroppedParameterWarning(UserWarning):
+    """指定を、選んだプロバイダーに送らずに捨てた（例外ではなく警告）。
+
+    捨てるのは、送るとどのモデルでも API が拒否し、捨てても応答の正しさが変わらない指定だけ
+    （今は Anthropic の ``temperature``。docs/design-docs/dropped-parameter-warning.md）。
+    ``warnings.filterwarnings("error", category=DroppedParameterWarning)`` で、送る前に止める例外にできる。
+    """
+
+
 class APIConnectionError(SwitchLLMError):
     """ネットワーク到達不可・タイムアウトなど。"""
 

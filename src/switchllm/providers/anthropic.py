@@ -9,7 +9,7 @@ from typing import Any
 from .._http import HTTPRequest
 from ..errors import StreamError, UnsupportedFeatureError
 from ..types import FilePart, ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
-from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice
+from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice, warn_dropped
 
 ANTHROPIC_VERSION = "2026-10-21"
 # この版から temperature・top_p・top_k が、どのモデルでも 400 になる（docs/design-docs/anthropic-api-version.md）
@@ -135,11 +135,14 @@ class AnthropicProvider(Provider):
         version = str(self.options.get("anthropic_version", ANTHROPIC_VERSION))
         if req.temperature is not None:
             if version >= NO_SAMPLING_VERSION:  # 版は YYYY-MM-DD なので文字列の大小で比べられる
-                raise UnsupportedFeatureError(
-                    f"Anthropic API version {version} removed temperature (every model returns 400). "
-                    "Drop temperature=, or for older models that still accept it, pass anthropic_version='2023-06-01'"
+                # 送るとどのモデルでも 400 になるので、送らずに捨てて警告する。載せ替えてもコードを止めない
+                # （docs/design-docs/dropped-parameter-warning.md）
+                warn_dropped(
+                    f"temperature={req.temperature!r} was not sent: Anthropic API version {version} removed temperature "
+                    "(every model returns 400). For older models that still accept it, pass anthropic_version='2023-06-01'"
                 )
-            body["temperature"] = req.temperature
+            else:
+                body["temperature"] = req.temperature
         if req.stop:
             body["stop_sequences"] = req.stop
         if req.tools:

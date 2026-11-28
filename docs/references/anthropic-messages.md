@@ -19,7 +19,7 @@
 | 続く同じ role | 1つのメッセージにまとめる（並列のツールの結果は1つの user メッセージに入れる） |
 | max_tokens | `max_tokens`。**必須**で、指定がなければ 64000（`default_max_tokens=` で変えられる。下の「出力の上限」と[判断](../design-docs/anthropic-max-tokens.md)） |
 | stop | `stop_sequences` |
-| temperature | 既定の版（`2026-10-21`）では、送る前に `UnsupportedFeatureError`。`anthropic_version="2023-06-01"` なら `temperature`（下の「API の版」） |
+| temperature | 既定の版（`2026-10-21`）では、送らずに捨てて `DroppedParameterWarning`（[判断](../design-docs/dropped-parameter-warning.md)）。`anthropic_version="2023-06-01"` なら `temperature`（下の「API の版」） |
 | reasoning_effort | `output_config.effort`。`none` は `thinking: {"type": "disabled"}`、`minimal` は `UnsupportedFeatureError`（下の「推論の強さ」） |
 | ツール定義 | `{"name", "description", "input_schema"}` |
 | tool_choice | `{"type": "auto"}` / `{"type": "none"}` / `{"type": "any"}` / `{"type": "tool", "name"}`。指定がなければ送らない（ツールがあれば既定は `auto`） |

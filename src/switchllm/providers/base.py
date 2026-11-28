@@ -14,12 +14,14 @@ from __future__ import annotations
 import copy
 import os
 import re
+import sys
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Iterator
 
 from .._http import HTTPRequest
-from ..errors import ConfigurationError
+from ..errors import ConfigurationError, DroppedParameterWarning
 from ..tools import Tool
 from ..types import Message, Response, StreamEvent
 
@@ -103,6 +105,23 @@ def deep_merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
         else:
             out[k] = v
     return out
+
+
+# switchllm のパッケージのフォルダー（src/switchllm）。警告が指す場所を、この外の最初のフレームにする
+_PACKAGE_DIR = os.path.normcase(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) + os.sep
+
+
+def warn_dropped(message: str) -> None:
+    """指定を送らずに捨てたことを ``DroppedParameterWarning`` で知らせる。
+
+    警告は、ライブラリの外で ``chat()`` / ``stream()`` を呼んだ行を指す。呼ばれる深さは同期・非同期・ストリーミングで
+    違うので、``stacklevel`` を数えて決める（Python 3.12 の ``skip_file_prefixes`` と同じことを 3.10 でもする）。"""
+    frame = sys._getframe(1)  # warn_dropped を呼んだフレーム（stacklevel=2 にあたる）
+    level = 2
+    while frame is not None and os.path.normcase(frame.f_code.co_filename).startswith(_PACKAGE_DIR):
+        frame = frame.f_back
+        level += 1
+    warnings.warn(message, DroppedParameterWarning, stacklevel=level)
 
 
 def normalize_tool_choice(choice: ToolChoice) -> tuple[str, str | None]:

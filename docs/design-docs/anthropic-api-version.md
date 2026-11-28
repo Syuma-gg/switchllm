@@ -1,6 +1,6 @@
 # Anthropic の API の版は 2026-10-21 を既定にし、temperature は送る前に知らせる
 
-- 状態: 採用（2026-11-21、作者の判断）
+- 状態: 採用（2026-11-21、作者の判断）。`temperature` を送る前に `UnsupportedFeatureError` にする部分は、2026-11-28 に「送らずに捨て、`DroppedParameterWarning` で知らせる」へ変えた（[判断](dropped-parameter-warning.md)）。既定の版は変えていない
 - 検証: 一次情報で確認、実 API 未検証（U25）
 - コード: `providers/anthropic.py`（`ANTHROPIC_VERSION`、`build_request`）
 - テスト: `tests/test_anthropic.py`

@@ -27,7 +27,7 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 | 層 | モジュール | 役割 | import してよいもの |
 |---|---|---|---|
 | 0 | `types.py` | 共通データ型（Message / ToolCall / Response / Usage / StreamEvent / ProviderState / TextPart / ImagePart / FilePart） | 標準ライブラリ |
-| 0 | `errors.py` | 共通例外の階層、HTTP ステータスとの対応 | 標準ライブラリ |
+| 0 | `errors.py` | 共通例外の階層、HTTP ステータスとの対応、指定を捨てたときの警告（`DroppedParameterWarning`） | 標準ライブラリ |
 | 1 | `tools.py` | `Tool`、`@tool`（型ヒント → JSON Schema）、`run_tool_calls`、`arun_tool_calls` | 層0 |
 | 1 | `_http.py` | 送信、リトライ、SSE パース（同期と非同期。リトライの判断と SSE の分解は共有） | 層0、httpx |
 | 2 | `providers/` | 4つのアダプターとプリセット表 | 層0〜1、providers 内 |
@@ -112,7 +112,7 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 
 1. まず [scope.md](docs/product-specs/scope.md) で、共通化してよいか確かめる
 2. `ChatRequest` と、`Client` / `AsyncClient` の `chat()` / `stream()` に足す（引数が同じことは `tests/test_async_client.py` が検査する）
-3. 4アダプターすべてで対応する。対応できないアダプターは `UnsupportedFeatureError`
+3. 4アダプターすべてで対応する。対応できないアダプターは `UnsupportedFeatureError`。送らずに捨てるのは作者が決めた指定だけで、`providers/base.py` の `warn_dropped()` で警告する（[判断](docs/design-docs/dropped-parameter-warning.md)）
 
 ### プロバイダー別のオプションを足す
 

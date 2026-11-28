@@ -256,6 +256,8 @@ Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
 
 プロバイダーが返したエラーは、手を加えずに渡す。`e.message` は API が返した文言そのもの、`e.body` は本文の全体。
 
+そのプロバイダーのどのモデルも拒否する指定は、例外にせずに送らずに捨て、`DroppedParameterWarning` で知らせる（今は Anthropic の `temperature` だけ）。送る前に止めたいときは、`warnings.filterwarnings("error", category=DroppedParameterWarning)` で例外にする。
+
 ```python
 from switchllm import APIError
 
@@ -300,7 +302,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
 - 画像とファイルの入力は対応（ファイルは base64 だけ）、音声入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
 - 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`reasoning_summary=True` を渡すと頼める（上の「推論の要約」）。頼んでも、返すかはモデルが決める
-- Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md)）
+- Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否する。そのため `temperature=` は送らずに捨て、`DroppedParameterWarning` で知らせる（リクエストの残りはそのまま送る）。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する。Gemini 3.6 以降と DeepSeek の思考モードは、`temperature` をエラーにせずに無視する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/dropped-parameter-warning.md)）
 - 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）
 - Anthropic は max_tokens が必須なので、指定しないと 64000 で送る。今の Claude のモデルはどれもこの値を受け付け、Claude 5 系は推論の分もここに含める（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないので、モデルの上限まで出す（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-max-tokens.md)）
 - OpenAI Responses には `stop` シーケンスが存在しないため、指定すると `UnsupportedFeatureError`

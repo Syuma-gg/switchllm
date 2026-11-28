@@ -54,7 +54,7 @@
   - 各社の「要約を返す」指定（OpenAI `reasoning.summary`、Anthropic `thinking.display`、Gemini `includeThoughts`）を送り、返った要約を `Response.thinking` と `thinking` イベントに入れる
   - Chat Completions 互換には何も足さない（DeepSeek は頼まなくても返す）
   - `reasoning_effort="none"` との組み合わせは `ConfigurationError`、OpenAI 本家の Chat Completions は `UnsupportedFeatureError`（どちらも送る前）
-- Anthropic の API の版は、最新の `2026-10-21` を送る（`anthropic_version=` で変えられる）。この版はどのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`
+- Anthropic の API の版は、最新の `2026-10-21` を送る（`anthropic_version=` で変えられる）。この版はどのモデルでも `temperature` を拒否するので、`temperature=` は送らずに捨て、`DroppedParameterWarning` で知らせる。載せ替えてもコードは止まらず、警告を例外にすれば送る前に止められる
 
 #### ファイルの入力
 

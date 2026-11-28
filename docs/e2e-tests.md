@@ -51,7 +51,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | `test_max_tokens_omitted` | `max_tokens` を省いても答え、`stop_reason` が `end`。Anthropic には既定の 64000 をストリーミングなしで送る | | 1 | U37 |
 | `test_max_tokens_above_model_limit`（Anthropic だけ） | どのモデルの出力の上限も超える 200000 を送り、400 になるか、受け付けるかを記録する | ○ | 1 | U36 |
 | `test_stop_sequence` | `stop` で止まり、`stop_reason` が `end`。OpenAI Responses は送る前に `UnsupportedFeatureError`（呼ばない） | | 1 | |
-| `test_temperature_zero` | `temperature=0`（下限）を送る。thinking が既定で有効なモデルは拒否することがあり、そのときは API のエラーをそのまま返す。Anthropic は既定の版（`2026-10-21`）で送る前に `UnsupportedFeatureError`（呼ばない） | ○ | 1 | |
+| `test_temperature_zero` | `temperature=0`（下限）を送る。thinking が既定で有効なモデルは拒否することがあり、そのときは API のエラーをそのまま返す。Anthropic は既定の版（`2026-10-21`）で `temperature` を送らずに捨て、`DroppedParameterWarning` が出て、残りのリクエストに答える | ○ | 1 | |
 | `test_empty_user_message` | 空の入力。応答か API のエラーのどちらかで、ほかの例外（パースの失敗など）にならない | ○ | 1 | |
 
 ### ツール（`test_e2e_tools.py`）
@@ -149,7 +149,7 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 |---|---|---|---|---|
 | `test_invalid_api_key`（キーの要るものだけ） | 認証の失敗が `APIError` になり、API の文言と本文をそのまま持つ。Gemini は無効なキーを 400 で返すことがあるので、`AuthenticationError` か `BadRequestError` のどちらかとし、どちらだったかを残す | | 1 | |
 | `test_unknown_model` | 存在しないモデルが `NotFoundError` か `BadRequestError` になり、API の文言を持つ | ○ | 1 | |
-| `test_temperature_above_range` | `temperature=5`（どの API の上限も超える）。API のエラーをそのまま返すか、黙って無視される（DeepSeek の思考モード）。Anthropic は送る前に `UnsupportedFeatureError`（呼ばない） | ○ | 1 | |
+| `test_temperature_above_range` | `temperature=5`（どの API の上限も超える）。API のエラーをそのまま返すか、黙って無視される（DeepSeek の思考モード）。Anthropic は送らずに捨て、`DroppedParameterWarning` が出て答える | ○ | 1 | |
 
 ### 切り替え（`test_e2e_switch.py`）
 

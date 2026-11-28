@@ -29,6 +29,7 @@
 | `SwitchLLMError` | 例外 | このライブラリの例外の基底クラス |
 | `ConfigurationError` | 例外 | 設定の誤り（モデル文字列、APIキー未設定など） |
 | `UnsupportedFeatureError` | 例外 | 選んだプロバイダーが対応していない指定 |
+| `DroppedParameterWarning` | 警告 | 指定を送らずに捨てた（`UserWarning` を継承。今は Anthropic の `temperature` だけ。`warnings.filterwarnings("error", ...)` で例外にできる。[判断](../design-docs/dropped-parameter-warning.md)） |
 | `APIConnectionError` | 例外 | ネットワーク到達不可、タイムアウト |
 | `APIError` | 例外 | プロバイダーがエラーを返した（`message` / `provider` / `status_code` / `body`） |
 | `BadRequestError` | 例外 | 400 系 |
@@ -144,7 +145,7 @@
 | `json_schema` | `openai_chat` | `False` にすると、`response_schema=` を送る前に `UnsupportedFeatureError` にする。JSON Schema を受け付けない接続先のため（既定 `True`、`deepseek` のプリセットは `False`） |
 | `file_input` | `openai_chat` | `False` にすると、`FilePart` を送る前に `UnsupportedFeatureError` にする。ファイルを受け付けない接続先のため（既定 `True`、`deepseek`・`ollama`・`lmstudio` のプリセットは `False`。[判断](../design-docs/file-input.md)） |
 | `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 64000。Anthropic は必須。[判断](../design-docs/anthropic-max-tokens.md)） |
-| `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2026-10-21`）。`2026-10-21` 以降の版では、`temperature=` を送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/anthropic-api-version.md)） |
+| `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2026-10-21`）。`2026-10-21` 以降の版では、`temperature=` を送らずに捨て、`DroppedParameterWarning` を出す（[判断](../design-docs/dropped-parameter-warning.md)） |
 | `beta` | `anthropic` | `anthropic-beta` ヘッダーにする名前のリスト |
 | `schema_field` | `gemini` | 関数スキーマを入れるフィールド。既定 `parameters`、`parametersJsonSchema` も選べる（U4） |
 | `inject_dummy_signatures` | `gemini` | `False` にすると、ほかのプロバイダーの履歴にダミー署名を付けない（既定 `True`、U5） |

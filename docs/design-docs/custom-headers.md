@@ -46,7 +46,7 @@ HTTP の決まり（[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html)）:
   - キーを持つのがゲートウェイで、利用者はゲートウェイのキーだけを持つ場合のため
   - キーがないときは、ライブラリは認証のヘッダーを付けない
 - **Anthropic の `anthropic-version` と `anthropic-beta` は、`headers=` で渡すと `ConfigurationError` にする**
-  - 専用のオプション（`anthropic_version=`・`beta=`）があり、`temperature=` を送る前の検査は `anthropic_version=` の版を見る（[判断](anthropic-api-version.md)）。ヘッダーで版を変えると、検査と送る版が食い違う
+  - 専用のオプション（`anthropic_version=`・`beta=`）があり、`temperature=` を送るか捨てるかは `anthropic_version=` の版で決める（[判断](dropped-parameter-warning.md)）。ヘッダーで版を変えると、その判断と送る版が食い違う
   - 例外のメッセージで、どちらのオプションを使うかを案内する
 - `with_model()` での引き継ぎは、今までと同じ。同じプロバイダーなら引き継ぎ、別のプロバイダーへは引き継がない（認証の情報を別のサーバーへ送らないため。[判断](provider-specific-params.md)）
 

@@ -256,6 +256,8 @@ Every provider raises the same exception classes: `AuthenticationError` (401/403
 
 Errors returned by the provider are passed through unchanged. `e.message` is the API's own message, and `e.body` is the whole error body.
 
+When an option is not sent because every model of the provider would reject it, you get a `DroppedParameterWarning` instead of an exception (currently only `temperature` on Anthropic). To stop before sending instead, turn it into an error: `warnings.filterwarnings("error", category=DroppedParameterWarning)`.
+
 ```python
 from switchllm import APIError
 
@@ -300,7 +302,7 @@ The reasons are explained in the [design documents](https://github.com/Syuma-gg/
 - **Not yet verified against the real APIs.** The tests run against mocks that reproduce the formats in each provider's documentation. From a clone of the repository, please check connectivity with your own keys: `python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` (this costs a small amount; add `--collect-only` first to see how many calls it makes without calling the APIs)
 - Image and file input are supported (files as base64 only); audio input is not. Image URLs are not supported for Gemini (pass base64 instead)
 - Reasoning text: OpenAI, Claude 5 models, and Gemini return no reasoning summary unless you ask, so `res.thinking` is often `None`. Pass `reasoning_summary=True` to ask for it (see "Reasoning summaries" above). Even then, the model decides whether to return one
-- Anthropic: the default API version is `2026-10-21`, which rejects `temperature` on every model, so `temperature=` raises `UnsupportedFeatureError` before sending. For older models that still accept it, use `Client(..., anthropic_version="2023-06-01")`. Current Claude models reject a non-default `temperature` even on the older version ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md), in Japanese)
+- Anthropic: the default API version is `2026-10-21`, which rejects `temperature` on every model. So `temperature=` is not sent, and a `DroppedParameterWarning` tells you so; the rest of the request goes through. For older models that still accept it, use `Client(..., anthropic_version="2023-06-01")`. Current Claude models reject a non-default `temperature` even on the older version. Gemini 3.6 and later, and DeepSeek in thinking mode, ignore `temperature` without an error ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/dropped-parameter-warning.md), in Japanese)
 - Structured output: OpenAI requires every property to be listed in `required` (make an optional field nullable instead, for example `{"type": ["string", "null"]}`), and each provider supports a different subset of JSON Schema. Keywords a provider does not support are rejected with `BadRequestError` (Gemini ignores them)
 - Anthropic requires max_tokens, so it is sent as 64000 when you do not give one. Every current Claude model accepts this value, and Claude 5 models count their reasoning toward it (change it with `Client(..., default_max_tokens=...)`). The other providers send no limit unless you give one, so the model's own limit applies ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-max-tokens.md), in Japanese)
 - The OpenAI Responses API has no `stop` sequences, so specifying one raises `UnsupportedFeatureError`
