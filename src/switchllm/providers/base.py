@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 import re
 import sys
@@ -26,6 +27,22 @@ from ..tools import Tool
 from ..types import Message, Response, StreamEvent
 
 ToolChoice = Any  # None | "auto" | "none" | "required" | {"name": str}
+
+#: API が 400 系で断ったときに案内する共通の引数と、どのモデルでも動く書き方（docs/design-docs/error-hints.md）。
+#: 並びは案内を出す順。アダプターは ``Provider.error_fields`` に、各引数を送るときのフィールド名を持つ
+ERROR_HINTS = {
+    "tool_choice": (
+        "this model may not accept a forced tool_choice ('required' or a tool name). "
+        "To run on every model, leave tool_choice unset and ask for the tool in the prompt"
+    ),
+    "reasoning_effort": "models accept different reasoning_effort levels. 'low', 'medium' and 'high' work on most models",
+    "reasoning_summary": "some models can't return a reasoning summary. Drop reasoning_summary=True for this model",
+    "response_schema": (
+        "each provider supports a different subset of JSON Schema. "
+        "Simplify response_schema or remove the keyword named in the error"
+    ),
+    "temperature": "many reasoning models reject or ignore temperature. Leave it unset to run on every model",
+}
 
 #: ``reasoning_effort=`` で受け付ける推論の強さ。OpenAI の7段階で、各社の段階の名前はどれもこの中にある
 #: （docs/design-docs/reasoning-effort.md）。アダプターは名前を変えずに送り、名前のない段階は UnsupportedFeatureError
@@ -124,6 +141,23 @@ def warn_dropped(message: str) -> None:
     warnings.warn(message, DroppedParameterWarning, stacklevel=level)
 
 
+def sent_arguments(req: ChatRequest) -> set[str]:
+    """``ERROR_HINTS`` のうち、このリクエストで指定した共通の引数。tool_choice は強制したときだけ数える
+    （``auto`` と ``none`` はどのモデルでも受け付けるので、断られた原因として案内しない）。"""
+    sent = set()
+    if req.tool_choice is not None and normalize_tool_choice(req.tool_choice)[0] in ("required", "tool"):
+        sent.add("tool_choice")
+    if req.reasoning_effort is not None:
+        sent.add("reasoning_effort")
+    if req.reasoning_summary:
+        sent.add("reasoning_summary")
+    if req.response_schema is not None:
+        sent.add("response_schema")
+    if req.temperature is not None:
+        sent.add("temperature")
+    return sent
+
+
 def normalize_tool_choice(choice: ToolChoice) -> tuple[str, str | None]:
     """→ ("auto" | "none" | "required" | "tool", ツール名)"""
     if choice is None or choice == "auto":
@@ -174,6 +208,9 @@ class Provider(ABC):
     #: ``headers=`` で渡させないヘッダー（小文字の名前, 代わりに使うオプション）。専用のオプションがあり、
     #: ライブラリがその値を見て検査するもの
     reserved_headers: tuple[tuple[str, str], ...] = ()
+    #: 共通の引数（``ERROR_HINTS`` のキー）→ その引数を送るときに使う、このアダプターのフィールド名（小文字）。
+    #: API が 400 系で断り、本文にこの名前が出てきたら、その引数の案内を足す（docs/design-docs/error-hints.md）
+    error_fields: dict[str, tuple[str, ...]] = {}
     #: True なら、同じプロバイダーキーの別のモデルが生成した生データも再送する。
     #: プロバイダーが「モデルを替えても推論情報を捨てるな」と文書で求めているときだけ True にする
     #: （docs/design-docs/provider-state-resend.md）
@@ -272,6 +309,25 @@ class Provider(ABC):
     @staticmethod
     def system_text(messages: list[Message]) -> str:
         return "\n\n".join(m.text for m in messages if m.role == "system" and m.text)
+
+    def error_hints(self, req: ChatRequest, message: str, body: Any) -> list[tuple[str, str]]:
+        """API が 400 系で断ったときの案内を、(引数, 案内) の組で ``ERROR_HINTS`` の順に返す（docs/design-docs/error-hints.md）。
+
+        モデル名は見ない。``req`` で送った共通の引数のうち、このアダプターでのフィールド名
+        （``error_fields``）がエラーの文言か本文（OpenAI の ``param`` など）に出てくるものだけを案内する。"""
+        sent = sent_arguments(req)
+        if not sent:
+            return []
+        try:
+            body_text = json.dumps(body, ensure_ascii=False)
+        except (TypeError, ValueError):
+            body_text = str(body)
+        text = f"{message} {body_text}".lower()
+        return [
+            (arg, ERROR_HINTS[arg])
+            for arg in ERROR_HINTS
+            if arg in sent and any(name in text for name in self.error_fields.get(arg, ()))
+        ]
 
     # ---- 実装必須 ---- #
     @abstractmethod

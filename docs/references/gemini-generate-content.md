@@ -145,6 +145,15 @@
 - 上限: インラインは「100 MB per request or payload (50 MB for PDFs)」。それより大きいときは Files API（switchllm は扱わない）。1つのリクエストで、合わせて 1000 ページまでの PDF を読める（文脈の長さに収まる限り）
 - URL: `fileData` の `fileUri` は Files API の URI。公開された HTTPS の URL を渡す方法は Interactions の形の例しかなく、generateContent で使えるかは書かれていない（switchllm はファイルの URL を扱わない）
 
+## エラー
+
+- 本文は `{"error": ...}`。generateContent のエラーの形（`code`・`message`・`status`・`details`）は、読めた文書にない
+  - エラーの一覧のページは Interactions API のもので、`{"error": {"code": "invalid_request", "message": "..."}}` の形（code は小文字の snake_case）
+  - Google の API の一般の決まり（AIP-193）は `{"error": {"code": 429, "message", "status": "RESOURCE_EXHAUSTED", "details": [...]}}` の形
+- 文書は、エラーの文言でもフィールド名を snake_case で書く（「Tool call part is missing thought_signature.」）。引数の名前を出したエラーの例は、ほかにない
+- Gemini 4 と 3.6 以降は、`temperature`・`top_p`・`top_k` を「will return `400` errors in a future release」（今は黙って無視する）
+- switchllm は、送った共通の引数のフィールド名がエラーに出てきたら、`str(e)` に案内を足す（[判断](../design-docs/error-hints.md)）。snake_case と camelCase の両方の名前（`thinking_level`・`thinkingLevel` など）で探す（U38）
+
 ## 出典
 
 同じページを何度か確かめたものは、日付ごとに分けて書く。Gemini の文書（ai.google.dev）は、aistudio.google.com の同じパスへ転送されるようになった（2026-11-17 に気づいた）。リンクは転送されるので、元の URL のままにしている。
@@ -185,6 +194,15 @@
 - [File input methods](https://aistudio.google.com/docs/file-input-methods)
   - 2026-11-23: インラインは「100 MB per request or payload (50 MB for PDFs)」。対応する種類の一覧。公開 URL は 15 MB まで
 
+### エラー
+
+- [Troubleshooting](https://ai.google.dev/gemini-api/docs/troubleshooting)（https://aistudio.google.com/docs/troubleshooting に移った）
+  - 2026-11-28: 「Tool call part is missing thought_signature.」「Tool response part is missing thought_signature.」。「Do not retry on client errors (like `400`, `402`, or `403`)」。`temperature` などは将来 400 になる
+- [API errors](https://aistudio.google.com/docs/api-errors)
+  - 2026-11-28: 「All errors from the Interactions API return an `error` object containing a `code` and `message`.」。例の文言は「The value 'invalid_tool_type_xyz' is not supported for 'type' at 'tools[0]'.」。code の一覧（`invalid_request`・`failed_precondition`・`parameter_unknown` など）。generateContent の形は書かれていない
+- [AIP-193 Errors](https://google.aip.dev/193)
+  - 2026-11-28: 「All error responses **must** include an `ErrorInfo` within `details`.」。JSON の例は `code`・`message`・`status`・`details`。「the `code` field in the JSON is an HTTP status code」
+
 ## 関連する未検証の前提
 
-U4〜U7、U14、U16、U20、U26、U31、U34（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U4〜U7、U14、U16、U20、U26、U31、U34、U38（[実 API 検証](../exec-plans/active/real-api-verification.md)）

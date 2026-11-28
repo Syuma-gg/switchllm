@@ -53,7 +53,11 @@
 | `status_code` | HTTP ステータス（ストリーミング途中のエラーイベントでは `None`） |
 | `provider` | モデル文字列の `provider:` 部分 |
 
-`str(e)` は `[anthropic] <message> (HTTP 400)` の形で、前後にプロバイダー名と HTTP ステータスを付ける。ストリーミングの途中で届いたエラーイベント（`StreamError`）も、イベントの中の文言を `message` に、イベント全体を `body` に入れる。
+`str(e)` は `[anthropic] <message> (HTTP 400)` の形で、前後にプロバイダー名と HTTP ステータスを付ける。
+
+`BadRequestError`（400 系）で、送った共通の引数（強制する `tool_choice`・`reasoning_effort`・`reasoning_summary`・`response_schema`・`temperature`）の各社でのフィールド名がエラーの文言か本文に出てくると、`str(e)` の後ろに `\nHint (<引数>): <どのモデルでも動く書き方>` の行を足す。`message` と `body` は変えない。モデル名は見ない（[判断](design-docs/error-hints.md)）。
+
+ストリーミングの途中で届いたエラーイベント（`StreamError`）も、イベントの中の文言を `message` に、イベント全体を `body` に入れる。
 
 ## 検証状況
 

@@ -47,6 +47,15 @@ class AnthropicProvider(Provider):
     option_names = frozenset({"default_max_tokens", "anthropic_version", "beta"})
     auth_header = "x-api-key"
     reserved_headers = (("anthropic-version", "anthropic_version"), ("anthropic-beta", "beta"))
+    # エラーの文言に出てくる名前（Errors の文書の文言。docs/references/anthropic-messages.md の「エラー」）。
+    # reasoning_effort="none" は thinking を切って送るので、その名前も入れる（docs/design-docs/error-hints.md）
+    error_fields = {
+        "tool_choice": ("tool_choice",),
+        "reasoning_effort": ("output_config.effort", "thinking.type.disabled", "between_tools"),
+        "reasoning_summary": ("adaptive thinking", "thinking.type.adaptive", "display"),
+        "response_schema": ("output_config.format", "json_schema"),
+        "temperature": ("temperature",),
+    }
     # Anthropic は、モデルを切り替えるときも thinking ブロックを捨てずにそのまま送ることを求める。
     # 新しいモデルが読めないブロックは、API がエラーにせず、料金もかけずに捨てる
     # （docs/references/anthropic-messages.md の「モデルの切り替え」）

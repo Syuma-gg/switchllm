@@ -14,6 +14,7 @@
 | U28〜U31 | ファイルの入力（同上） |
 | U32〜U35 | 推論の要約（[推論の要約](../completed/2026-11-26-reasoning-summary.md)） |
 | U36〜U37 | Anthropic の `max_tokens` の既定（[載せ替えの負担を減らす](model-switch-friction.md)） |
+| U38 | 断られたエラーの案内（同上） |
 
 ## 手順
 
@@ -241,6 +242,15 @@ ID はほかの文書から参照しているので変えない。「文書で�
 
 - 実装: `max_tokens` を省いたら、`chat()`（ストリーミングなし）でも 64000 を送る
 - 不確実な理由: 公式 SDK は、ストリーミングなしで 10 分を超えそうなリクエストを送る前に止める（`max_tokens` から見積もる）。API の側が送る前に断るとは書かれていないが、確かめていない（E2E の `test_max_tokens_omitted`）
+
+### U38 すべて: 断られたエラーに、送った引数のフィールド名が出る
+
+- 実装: API が 400 系で断ったら、送った共通の引数（強制する `tool_choice`・`reasoning_effort`・`reasoning_summary`・`response_schema`・`temperature`）の各社でのフィールド名が、エラーの文言か本文に出てくるかを見て、`str(e)` に案内を足す（[判断](../../design-docs/error-hints.md)）
+- 不確実な理由:
+  - Anthropic は、ツールの強制と thinking の設定の文言が文書にあり、フィールド名が入っている。ほかのエラー（`response_schema` など）の文言は書かれていない
+  - OpenAI は `error.param` が引数を指すと文書にあるが、`reasoning.effort` を断ったときの本文の例はない
+  - Gemini（generateContent）と DeepSeek は、エラーの形も文言も書かれていない。Gemini は snake_case と camelCase のどちらで名前を出すかも分からない
+  - E2E は、断られたときに案内が付いた引数を記録する。Anthropic のツールの強制では、案内が付くことを確かめる（`test_forced_tool_choice`）
 
 ## 進捗ログ
 

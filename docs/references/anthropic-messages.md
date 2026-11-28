@@ -257,6 +257,20 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - 順番: 「Place PDFs before text in your requests」。switchllm はパーツの順を変えないので、`FilePart` を先に置く
 - beta のヘッダーは要らない（PDF のガイドの例は `anthropic-version: 2026-10-21` だけを送る）
 
+## エラー
+
+- 形は `{"type": "error", "error": {"type": "...", "message": "..."}, "request_id": "req_..."}`。`error.details.error_code` が付くこともあり、種類は増える
+- 原因の引数を指す項目（OpenAI の `param` のようなもの）はない。フィールド名は文言に入る
+- モデルが受け付けない設定の 400（`invalid_request_error`）の文言:
+  - ツールの強制: `tool_choice: type "tool" and "any" are not supported for this model.`
+  - Claude 4.7 以降の `thinking.type.enabled`・`disabled`: `"thinking.type.enabled" is not supported for this model.`（`disabled` も同じ形）。続けて「Use "thinking.type.adaptive" and "output_config.effort" to control thinking behavior.」
+  - Claude 4.5 以前の adaptive thinking: `adaptive thinking is not supported on this model`
+  - Sonnet 5.5 で thinking を切る: 「To turn thinking off on this model, send "thinking": {"type": "between_tools"} instead of {"type": "disabled"}.」
+  - Sonnet 5.5 で thinking を切ったまま effort を `xhigh` か `max` にする: `output_config.effort 'xhigh' is not supported when thinking is disabled on this model.`
+  - `between_tools` を Sonnet 5.5 以外に送る: `"thinking.type.between_tools" is not supported for this model.`
+- `display` と `temperature` のエラーの文言は、Errors のページにない
+- switchllm は、送った共通の引数のフィールド名がエラーに出てきたら、`str(e)` に案内を足す（[判断](../design-docs/error-hints.md)）。文言に `tool_choice`・`output_config.effort`・`thinking.type.disabled` などが入るので当たる（U38）
+
 ## 出典
 
 同じページを何度か確かめたものは、日付ごとに分けて書く。
@@ -286,6 +300,8 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
   - 2026-11-28: 「OTPM rate limits are evaluated in real time as output tokens are produced, counting only the actual tokens generated. The `max_tokens` parameter does not factor into OTPM rate limit calculations, so there is no rate limit downside to setting a higher `max_tokens` value.」
 - [Errors](https://platform.claude.com/docs/en/api/errors) の「Forced tool use not supported」
   - 2026-11-16: ツールの強制のエラーの文言と、`auto` と `none` は受け付けること
+- [Errors](https://platform.claude.com/docs/en/api/errors)（エラーの形と、モデルが受け付けない設定の文言）
+  - 2026-11-28: 「The API always returns errors as JSON, with a top-level `error` object that always includes a `type` and `message` value.」「The response also includes a `request_id` field for easier tracking and debugging.」。`error.details.error_code` は「The set of codes can grow.」。上の「エラー」の文言。`param` に当たる項目はない
 - [Errors](https://platform.claude.com/docs/en/api/errors) の「Long requests」
   - 2026-11-28: 「Consider using the streaming Messages API or Message Batches API for long-running requests, especially those over 10 minutes.」「Avoid setting a large `max_tokens` value without using the streaming Messages API or Message Batches API」「Some networks might drop idle connections after a variable period of time」「The Anthropic SDK validates that your non-streaming Messages API requests are not expected to exceed a 10-minute timeout.」。504 の項に「The API also returns `timeout_error` with other status codes, such as a 500 when a request reaches the server's time limit before the response starts.」
 - [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) の FAQ「How do I calculate total input tokens from the usage fields?」
@@ -337,4 +353,4 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 
 ## 関連する未検証の前提
 
-U8、U9、U14、U19、U24、U25、U30、U33、U36、U37（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U8、U9、U14、U19、U24、U25、U30、U33、U36〜U38（[実 API 検証](../exec-plans/active/real-api-verification.md)）

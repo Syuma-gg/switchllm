@@ -32,7 +32,7 @@
 | `DroppedParameterWarning` | 警告 | 指定を送らずに捨てた（`UserWarning` を継承。今は Anthropic の `temperature` だけ。`warnings.filterwarnings("error", ...)` で例外にできる。[判断](../design-docs/dropped-parameter-warning.md)） |
 | `APIConnectionError` | 例外 | ネットワーク到達不可、タイムアウト |
 | `APIError` | 例外 | プロバイダーがエラーを返した（`message` / `provider` / `status_code` / `body`） |
-| `BadRequestError` | 例外 | 400 系 |
+| `BadRequestError` | 例外 | 400 系。送った引数がモデルに断られたとみられるときは、`str(e)` に `Hint (<引数>): ...` の行が付く（`message` は API の文言のまま。[判断](../design-docs/error-hints.md)） |
 | `AuthenticationError` | 例外 | 401 / 403 |
 | `NotFoundError` | 例外 | 404 |
 | `RateLimitError` | 例外 | 429 |

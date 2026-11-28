@@ -31,6 +31,14 @@ class OpenAIResponsesProvider(Provider):
     default_base_url = "https://api.openai.com/v1"
     api_key_env = ("OPENAI_API_KEY",)
     auth_header = "Authorization"
+    # エラーの param（"reasoning.effort" など）か文言に出てくる名前（docs/design-docs/error-hints.md）
+    error_fields = {
+        "tool_choice": ("tool_choice",),
+        "reasoning_effort": ("reasoning.effort", "reasoning_effort"),
+        "reasoning_summary": ("reasoning.summary",),
+        "response_schema": ("text.format", "response_format", "json_schema"),
+        "temperature": ("temperature",),
+    }
 
     # ------------------------------------------------------------------ #
     def _user_content(self, m: Message) -> str | list[dict[str, Any]]:

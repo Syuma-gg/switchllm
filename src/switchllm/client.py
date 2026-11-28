@@ -13,13 +13,13 @@ import asyncio
 import json
 import os
 import time
-from contextlib import aclosing
+from contextlib import aclosing, contextmanager
 from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Sequence, Union
 
 import httpx
 
 from ._http import RetryPolicy, arequest_json, astream_sse, request_json, stream_sse
-from .errors import ConfigurationError, UnsupportedFeatureError
+from .errors import BadRequestError, ConfigurationError, UnsupportedFeatureError
 from .providers import ADAPTERS, PRESETS, create_provider
 from .providers.base import (
     REASONING_EFFORTS,
@@ -134,6 +134,19 @@ def _pick_extra(
         if name_key == key:
             chosen = value
     return deep_merge(extra or {}, chosen)
+
+
+@contextmanager
+def _hint_rejected(provider: Provider, req: ChatRequest) -> Iterator[None]:
+    """API が 400 系で断ったら、原因とみられる引数と、どのモデルでも動く書き方を ``str(e)`` に足す。
+    ``e.message`` は API の文言のまま変えない（docs/design-docs/error-hints.md）。"""
+    try:
+        yield
+    except BadRequestError as e:
+        hints = provider.error_hints(req, e.message, e.body)
+        if hints:
+            e.args = (str(e) + "".join(f"\nHint ({arg}): {text}" for arg, text in hints),)
+        raise
 
 
 def _pick_options(key: str, options: dict[str, Any], options_by_provider: Any) -> dict[str, Any]:
@@ -403,7 +416,8 @@ class Client(_BaseClient):
             reasoning_summary=reasoning_summary, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=False)
-        data = request_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
+        with _hint_rejected(self.provider, req):
+            data = request_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
         return _finish(req, self.provider.parse_response(data))
 
     def stream(
@@ -433,8 +447,9 @@ class Client(_BaseClient):
         )
         http_req = self.provider.build_request(req, stream=True)
         events = stream_sse(self._http, http_req, provider=self.provider.key, retry=self.retry)
-        for ev in self.provider.parse_stream(events):
-            yield _finish_event(req, ev)
+        with _hint_rejected(self.provider, req):  # HTTP の 400 は、最初のイベントを読もうとしたときに分かる
+            for ev in self.provider.parse_stream(events):
+                yield _finish_event(req, ev)
 
     # ------------------------------------------------------------------ #
     def close(self) -> None:
@@ -509,7 +524,8 @@ class AsyncClient(_BaseClient):
             reasoning_summary=reasoning_summary, extra=extra, extra_by_provider=extra_by_provider,
         )
         http_req = self.provider.build_request(req, stream=False)
-        data = await arequest_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
+        with _hint_rejected(self.provider, req):
+            data = await arequest_json(self._http, http_req, provider=self.provider.key, retry=self.retry)
         return _finish(req, self.provider.parse_response(data))
 
     async def stream(
@@ -541,8 +557,9 @@ class AsyncClient(_BaseClient):
         # 途中で閉じられたとき、内側のジェネレーター（と HTTP の応答）もその場で閉じる
         async with aclosing(astream_sse(self._http, http_req, provider=self.provider.key, retry=self.retry)) as events:
             async with aclosing(self.provider.aparse_stream(events)) as parsed:
-                async for ev in parsed:
-                    yield _finish_event(req, ev)
+                with _hint_rejected(self.provider, req):  # HTTP の 400 は、最初のイベントを読もうとしたときに分かる
+                    async for ev in parsed:
+                        yield _finish_event(req, ev)
 
     # ------------------------------------------------------------------ #
     async def aclose(self) -> None:

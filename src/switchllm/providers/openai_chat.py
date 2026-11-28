@@ -36,6 +36,13 @@ class OpenAIChatProvider(Provider):
     api_key_env = ("OPENAI_API_KEY",)
     option_names = frozenset({"max_tokens_field", "stream_usage", "json_schema", "file_input"})
     auth_header = "Authorization"
+    # エラーの文言か本文に出てくる名前。reasoning_summary は何も送らないので持たない（docs/design-docs/error-hints.md）
+    error_fields = {
+        "tool_choice": ("tool_choice",),
+        "reasoning_effort": ("reasoning_effort",),
+        "response_schema": ("response_format", "json_schema"),
+        "temperature": ("temperature",),
+    }
 
     def _max_tokens_field(self) -> str:
         """OpenAI 本家は ``max_tokens`` を非推奨とし、o-series とは互換性がないと記載している。

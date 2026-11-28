@@ -8,7 +8,16 @@ from __future__ import annotations
 from typing import Callable
 
 import pytest
-from e2e_support import MAX_TOKENS, TOOLS, answered, ask_tool_call, describe_reasoning, requires_key, tool_roundtrip
+from e2e_support import (
+    MAX_TOKENS,
+    TOOLS,
+    answered,
+    ask_tool_call,
+    describe_reasoning,
+    rejection,
+    requires_key,
+    tool_roundtrip,
+)
 
 from switchllm import BadRequestError, UnsupportedFeatureError, run_tool_calls
 
@@ -17,7 +26,7 @@ PROMPT = "「ok」とだけ返して"
 
 def _rejected(e: BadRequestError, note: Callable[[str], None]) -> None:
     assert e.status_code == 400 and e.message
-    note(f"API が拒否した: {e.message[:160]}")
+    note(rejection(e))
 
 
 def _rejected_before_sending(level: str, call: Callable[[], object], note: Callable[[str], None]) -> None:
@@ -45,7 +54,7 @@ def test_reasoning_effort_low_stream(client, model, note):
     note(f"受け付けた: {describe_reasoning(res)}、output_tokens={res.usage.output_tokens}")
 
 
-@pytest.mark.premise("U23", "U24", "U27")
+@pytest.mark.premise("U23", "U24", "U27", "U38")
 @pytest.mark.calls(1)
 def test_reasoning_effort_none(client, adapter, note):
     # 推論を切る。Anthropic は thinking: disabled で送る。切れないモデル（Claude Opus 5.5・Sonnet 5.5 など）は
@@ -62,7 +71,7 @@ def test_reasoning_effort_none(client, adapter, note):
     note(f"受け付けた: {describe_reasoning(res)}、output_tokens={res.usage.output_tokens}")
 
 
-@pytest.mark.premise("U23", "U26", "U27")
+@pytest.mark.premise("U23", "U26", "U27", "U38")
 @pytest.mark.calls(1)
 def test_reasoning_effort_minimal(client, adapter, note):
     # minimal は、モデルによってない段階（gpt-5.5、Gemini 4・3.8 Flash）。受け付けないモデルが 400 を返すか、

@@ -30,7 +30,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 ## 書き方の決まり
 
 - **文言ではなく構造を確かめる。** モデルの出力は毎回違う。確かめるのは、リクエストが受け付けられたか、ツールを呼んだか、`stop_reason` や usage が定義どおりか、`done` が1回だけか、など
-- **モデルが拒否してよい指定は、API のエラーをそのまま返すことを確かめる。** モデルごとの制限の一覧は持たない（[判断](exec-plans/active/real-api-verification.md) の 2026-11-17）。受け付けたか拒否したかは観察メモに残す
+- **モデルが拒否してよい指定は、API のエラーをそのまま返すことを確かめる。** モデルごとの制限の一覧は持たない（[判断](exec-plans/active/real-api-verification.md) の 2026-11-17）。受け付けたか拒否したかは観察メモに残す。拒否されたときは、switchllm がエラーに案内を足した引数も残す（`e2e_support.rejection()`、U38）
 - **skip と xfail を使わない。** 対象外のモデル（OpenAI だけの `store`、キーの要らないローカルのサーバーなど）には、最初からテストを作らない（収集のときに外す）
 - **呼ぶ回数を `@pytest.mark.calls(n)` で書く。** 収集したときに合計を表示する
 - **確かめる前提を `@pytest.mark.premise("U1", ...)` で書く。** プロバイダーに関係のない U 番号は数えない（`e2e/e2e_support.py` の `SCOPE`）
@@ -60,7 +60,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 |---|---|---|---|---|
 | `test_tool_roundtrip_three_turns` | ツールを呼ぶ → 結果を渡して答える → 次のターンでもう一度ツール。推論情報を送り返しても拒否されない | | 3 | U3、U4、U6、U7、U11 |
 | `test_tool_choice_none` | `tool_choice="none"` ではツールを呼ばない | | 1 | U9、U15 |
-| `test_forced_tool_choice[required/named]` | ツールの強制。受け付けるモデルでは指定どおりに呼び、拒否するモデルでは API のエラーをそのまま返す | | 2 | U15 |
+| `test_forced_tool_choice[required/named]` | ツールの強制。受け付けるモデルでは指定どおりに呼び、拒否するモデルでは API のエラーをそのまま返す。Anthropic で拒否されたら、エラーに `tool_choice` の案内が付く | | 2 | U15、U38 |
 | `test_tool_without_parameters` | 引数のないツール（空の `properties`）を受け付け、`arguments == {}` で呼ぶ | ○ | 2 | U4 |
 | `test_tool_schema_types` | str・int・float・bool・Literal・`list[str]`・省略できる引数を持つスキーマを受け付け、型どおりの値で呼ぶ | ○ | 1 | U4 |
 | `test_parallel_tool_calls` | 2つの都市を調べさせる。並列の呼び出しと、まとめて返す結果を受け付ける | ○ | 3 | |
@@ -111,8 +111,8 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
 | `test_reasoning_effort_low_stream` | どの社にもある `low` を、ストリーミングで送る。`done` が1回だけで本文が返る。クラウドの API が拒否したら失敗（送る形の誤り）。ローカルのサーバーは拒否を記録する | | 1 | U23、U24、U26、U27 |
-| `test_reasoning_effort_none` | 推論を切る。Anthropic は thinking を切る。切れないモデル（Claude Opus 5.5・Sonnet 5.5 など）は API のエラーをそのまま返す | ○ | 1 | U23、U24、U27 |
-| `test_reasoning_effort_minimal` | モデルによってない段階（gpt-5.5、Gemini 4・3.8 Flash）を送り、400 になるか、黙って受け付けるかを記録する | ○ | 1 | U23、U26、U27 |
+| `test_reasoning_effort_none` | 推論を切る。Anthropic は thinking を切る。切れないモデル（Claude Opus 5.5・Sonnet 5.5 など）は API のエラーをそのまま返す | ○ | 1 | U23、U24、U27、U38 |
+| `test_reasoning_effort_minimal` | モデルによってない段階（gpt-5.5、Gemini 4・3.8 Flash）を送り、400 になるか、黙って受け付けるかを記録する | ○ | 1 | U23、U26、U27、U38 |
 | `test_reasoning_effort_with_tools` | `low` を指定したまま、ツールの往復で推論情報を送り返す | | 2 | U23〜U26 |
 | `test_turn_reasoning_off_after_tool_call`（Gemini 以外） | 推論したツールの呼び出しのあと、`none` で結果を渡す。Anthropic で、thinking を切ったリクエストに前の thinking ブロックを送り返せるかを見る | ○ | 2 | U24 |
 

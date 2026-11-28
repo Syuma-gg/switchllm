@@ -6,7 +6,7 @@ import json
 from typing import Any, Callable
 
 import pytest
-from e2e_support import ASK_TOOL, MAX_TOKENS, TOOLS, json_schema_supported
+from e2e_support import ASK_TOOL, MAX_TOKENS, TOOLS, json_schema_supported, rejection
 
 from switchllm import BadRequestError, Message, UnsupportedFeatureError, run_tool_calls
 
@@ -87,7 +87,7 @@ def test_structured_output_with_tools(client, model, note):
         first = client.chat(msgs, tools=TOOLS, response_schema=WEATHER, max_tokens=MAX_TOKENS)
     except BadRequestError as e:
         assert e.status_code == 400 and e.message
-        note(f"API が拒否した: {e.message[:160]}")
+        note(rejection(e))
         return
     assert first.tool_calls, f"no tool call (stop_reason={first.stop_reason}, text={first.text[:80]!r})"
     assert first.parsed is None  # ツールを呼んだ応答（tool_use）は読まない

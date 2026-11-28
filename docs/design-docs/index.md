@@ -25,6 +25,7 @@
 | [Anthropic の API の版は 2026-10-21 を既定にし、temperature は送る前に知らせる](anthropic-api-version.md) | 採用（2026-11-21）。temperature の扱いは 2026-11-28 に下の判断へ変えた | 一次情報で確認、実 API 未検証 |
 | [Anthropic で max_tokens を省いたら 64000 を送る](anthropic-max-tokens.md) | 採用（2026-11-28） | 一次情報で確認、実 API 未検証 |
 | [Anthropic の temperature は送らずに捨て、DroppedParameterWarning で知らせる](dropped-parameter-warning.md) | 採用（2026-11-28） | 一次情報で確認、実 API 未検証 |
+| [API が断った指定には、原因とみられる引数と、どのモデルでも動く書き方をエラーに足す](error-hints.md) | 採用（2026-11-28） | 一次情報で確認（Anthropic の文言）、実 API 未検証 |
 | [非同期のクライアントは AsyncClient として分け、アダプターを同期版と共有する](async-client.md) | 採用（2026-11-23） | モックで確認、実 API 未検証 |
 | [headers= はすべてのアダプターで受け付け、同じ名前のヘッダーは利用者の値で置き換える](custom-headers.md) | 採用（2026-11-23） | モックで確認（RFC 9110） |
 | [ファイル（PDF など）は FilePart で渡し、各社が受け付ける種類はそのまま送る](file-input.md) | 採用（2026-11-23） | モックで確認、実 API 未検証 |

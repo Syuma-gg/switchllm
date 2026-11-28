@@ -265,7 +265,7 @@ Every provider raises the same exception classes: `AuthenticationError` (401/403
 
 Errors returned by the provider are passed through unchanged. `e.message` is the API's own message, and `e.body` is the whole error body.
 
-When an option is not sent because every model of the provider would reject it, you get a `DroppedParameterWarning` instead of an exception (currently only `temperature` on Anthropic). To stop before sending instead, turn it into an error: `warnings.filterwarnings("error", category=DroppedParameterWarning)`.
+Some settings are accepted by some models and rejected by others: a forced `tool_choice`, `reasoning_effort` levels, `reasoning_summary=True`, parts of `response_schema`, and `temperature`. When the API rejects one of them with a 400 and the error names it, `str(e)` gets a `Hint (...)` line that says which argument it was and how to write it so that it works on every model. The decision looks at what was sent and what the error says, not at the model name ([details](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/error-hints.md), in Japanese).
 
 ```python
 from switchllm import APIError
@@ -274,9 +274,12 @@ try:
     client.chat("...", tools=[get_weather], tool_choice="required")
 except APIError as e:
     print(e)          # [anthropic] tool_choice: type "tool" and "any" are not supported for this model. (HTTP 400)
+                      # Hint (tool_choice): this model may not accept a forced tool_choice ('required' or a tool name). ...
     print(e.message)  # only the API's message
     print(e.body)     # {"type": "error", "error": {...}, "request_id": "req_..."}
 ```
+
+When an option is not sent because every model of the provider would reject it, you get a `DroppedParameterWarning` instead of an exception (currently only `temperature` on Anthropic). To stop before sending instead, turn it into an error: `warnings.filterwarnings("error", category=DroppedParameterWarning)`.
 
 429s, 5xx errors, and connection errors are retried automatically with exponential backoff (`max_retries=2`, honoring the `Retry-After` header). Streams are retried only before the first event arrives. See [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md) (in Japanese) for details.
 

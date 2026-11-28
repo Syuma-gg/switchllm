@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from e2e_support import MAX_TOKENS
+from e2e_support import MAX_TOKENS, rejection
 
 from switchllm import APIError, BadRequestError, DroppedParameterWarning, Message, UnsupportedFeatureError
 
@@ -73,7 +73,7 @@ def test_max_tokens_above_model_limit(client, note):
         res = client.chat("「ok」とだけ返して", max_tokens=200_000)
     except BadRequestError as e:
         assert e.status_code == 400 and e.message
-        note(f"API が拒否した: {e.message[:160]}")
+        note(rejection(e))
         return
     assert res.text.strip(), f"empty text (stop_reason={res.stop_reason})"
     note(f"受け付けた: stop_reason={res.stop_reason}")
@@ -109,7 +109,7 @@ def test_temperature_zero(client, adapter, note):
         res = client.chat("「ok」とだけ返して", temperature=0, max_tokens=MAX_TOKENS)
     except BadRequestError as e:
         assert e.status_code == 400 and e.message
-        note(f"API が拒否した: {e.message[:160]}")
+        note(rejection(e))
         return
     assert res.text.strip()
     note("受け付けた")

@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 import json
 
 import pytest
-from e2e_support import ASK_AGAIN, MAX_TOKENS, TOOLS, answered, ask_tool_call, describe_reasoning, tool_roundtrip
+from e2e_support import ASK_AGAIN, MAX_TOKENS, TOOLS, answered, ask_tool_call, describe_reasoning, rejection, tool_roundtrip
 
 from switchllm import BadRequestError, Message, run_tool_calls, tool
 
@@ -71,17 +71,19 @@ def test_tool_choice_none(client):
     assert not res.tool_calls, "tool was called although tool_choice='none'"
 
 
-@pytest.mark.premise("U15")
+@pytest.mark.premise("U15", "U38")
 @pytest.mark.calls(1)
 @pytest.mark.parametrize("choice", ["required", {"name": "get_weather"}], ids=["required", "named"])
-def test_forced_tool_choice(client, choice, note):
+def test_forced_tool_choice(client, adapter, choice, note):
     # 受け付けるモデルでは指定どおりに呼ぶ。拒否するモデル（Anthropic の一部、DeepSeek の思考モードなど）では
-    # API のエラーをそのまま返す（モデルごとの一覧は持たない）
+    # API のエラーをそのまま返す（モデルごとの一覧は持たない）。エラーに tool_choice の案内が付くかも見る（U38）
     try:
         res = client.chat("東京の天気を教えて。", tools=TOOLS, tool_choice=choice, max_tokens=MAX_TOKENS)
     except BadRequestError as e:
         assert e.status_code == 400 and e.message
-        note(f"API が拒否した: {e.message[:160]}")
+        if adapter == "anthropic":  # 文言に tool_choice が入ることが、Errors の文書で分かっている
+            assert "\nHint (tool_choice): " in str(e), str(e)
+        note(rejection(e))
         return
     assert res.tool_calls and res.tool_calls[0].name == "get_weather", f"stop_reason={res.stop_reason}"
     note("受け付けて、指定どおりに呼んだ")

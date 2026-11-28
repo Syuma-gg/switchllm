@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from e2e_support import MAX_TOKENS
+from e2e_support import MAX_TOKENS, rejection
 
 from switchllm import AuthenticationError, BadRequestError, DroppedParameterWarning, NotFoundError, parse_model
 
@@ -47,7 +47,7 @@ def test_temperature_above_range(client, adapter, note):
         res = client.chat("「ok」とだけ返して", temperature=5, max_tokens=MAX_TOKENS)
     except BadRequestError as e:
         assert e.status_code == 400 and e.message
-        note(f"API が拒否した: {e.message[:160]}")
+        note(rejection(e))
         return
     assert res.text.strip()
     note("受け付けた（無視されたとみられる）")

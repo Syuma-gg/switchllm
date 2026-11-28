@@ -9,7 +9,7 @@ import struct
 import zlib
 from typing import Annotated, Any
 
-from switchllm import Client, Message, Response, parse_model, run_tool_calls, tool
+from switchllm import APIError, Client, Message, Response, parse_model, run_tool_calls, tool
 from switchllm.providers import PRESETS
 
 # 思考が既定で有効なモデル（Claude 5・Gemini 3・DeepSeek）では、max_tokens に思考の分も入る。
@@ -116,6 +116,7 @@ SCOPE: dict[str, frozenset[str]] = {
     "U35": frozenset({"ollama", "lmstudio"}),
     "U36": frozenset({"anthropic"}),
     "U37": frozenset({"anthropic"}),
+    "U38": frozenset({"openai", "openai_chat", "anthropic", "gemini"}),  # どの接続先でも、断られたときに案内が付くか
 }
 
 
@@ -144,6 +145,12 @@ def switch_premises(a: str, b: str) -> tuple[str, ...]:
 def answered(res: Response, where: str = "") -> None:
     """リクエストが受け付けられ、何かしら答えたこと。ツールをもう一度呼ぶのも答えのうちに入れる。"""
     assert res.text.strip() or res.tool_calls, f"empty response{where} (stop_reason={res.stop_reason})"
+
+
+def rejection(e: APIError) -> str:
+    """API が断ったときに記録する文。switchllm がエラーに足した案内の引数も書く（docs/design-docs/error-hints.md、U38）。"""
+    hinted = [line[len("Hint ("):].split(")", 1)[0] for line in str(e).splitlines() if line.startswith("Hint (")]
+    return f"API が拒否した（案内: {'、'.join(hinted) or 'なし'}）: {e.message[:160]}"
 
 
 def ask_tool_call(client: Client, prompt: str = ASK_TOOL, **kw: Any) -> tuple[list[Message], Response]:

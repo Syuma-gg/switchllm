@@ -265,7 +265,7 @@ Client("anthropic:claude-sonnet-5-5", base_url="https://gateway.example.com",
 
 プロバイダーが返したエラーは、手を加えずに渡す。`e.message` は API が返した文言そのもの、`e.body` は本文の全体。
 
-そのプロバイダーのどのモデルも拒否する指定は、例外にせずに送らずに捨て、`DroppedParameterWarning` で知らせる（今は Anthropic の `temperature` だけ）。送る前に止めたいときは、`warnings.filterwarnings("error", category=DroppedParameterWarning)` で例外にする。
+モデルによって断られる指定がある（強制する `tool_choice`、`reasoning_effort` の段階、`reasoning_summary=True`、`response_schema` の一部、`temperature`）。API がこれらを 400 系で断り、エラーにその名前が出てくると、`str(e)` に `Hint (...)` の行が付く。どの引数が原因かと、どのモデルでも動く書き方を示す。モデル名ではなく、送ったものとエラーの中身で判断する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/error-hints.md)）。
 
 ```python
 from switchllm import APIError
@@ -274,9 +274,12 @@ try:
     client.chat("...", tools=[get_weather], tool_choice="required")
 except APIError as e:
     print(e)          # [anthropic] tool_choice: type "tool" and "any" are not supported for this model. (HTTP 400)
+                      # Hint (tool_choice): this model may not accept a forced tool_choice ('required' or a tool name). ...
     print(e.message)  # API の文言だけ
     print(e.body)     # {"type": "error", "error": {...}, "request_id": "req_..."}
 ```
+
+そのプロバイダーのどのモデルも拒否する指定は、例外にせずに送らずに捨て、`DroppedParameterWarning` で知らせる（今は Anthropic の `temperature` だけ）。送る前に止めたいときは、`warnings.filterwarnings("error", category=DroppedParameterWarning)` で例外にする。
 
 429・5xx・接続エラーは指数バックオフで自動リトライする（`max_retries=2`、`Retry-After` ヘッダーを尊重）。ストリーミングは最初のイベントを受け取る前だけリトライする。詳しくは [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md)。
 

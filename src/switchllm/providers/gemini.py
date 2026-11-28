@@ -30,6 +30,15 @@ class GeminiProvider(Provider):
     api_key_env = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
     option_names = frozenset({"schema_field", "inject_dummy_signatures"})
     auth_header = "x-goog-api-key"
+    # エラーの文言に出てくる名前。文書は snake_case で書くが、本文の検査は camelCase で返すことがあるので両方
+    # （小文字にして比べる。docs/design-docs/error-hints.md）
+    error_fields = {
+        "tool_choice": ("tool_config", "toolconfig", "function_calling_config", "functioncallingconfig"),
+        "reasoning_effort": ("thinking_level", "thinkinglevel"),
+        "reasoning_summary": ("include_thoughts", "includethoughts"),
+        "response_schema": ("response_json_schema", "responsejsonschema", "response_schema", "responseschema"),
+        "temperature": ("temperature",),
+    }
 
     def _user_parts(self, m: Message) -> list[dict[str, Any]]:
         parts: list[dict[str, Any]] = []

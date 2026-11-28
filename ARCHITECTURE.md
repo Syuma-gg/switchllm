@@ -113,6 +113,7 @@ providers/     Provider   parse_response() / stream_parser(): 各社の JSON →
 1. まず [scope.md](docs/product-specs/scope.md) で、共通化してよいか確かめる
 2. `ChatRequest` と、`Client` / `AsyncClient` の `chat()` / `stream()` に足す（引数が同じことは `tests/test_async_client.py` が検査する）
 3. 4アダプターすべてで対応する。対応できないアダプターは `UnsupportedFeatureError`。送らずに捨てるのは作者が決めた指定だけで、`providers/base.py` の `warn_dropped()` で警告する（[判断](docs/design-docs/dropped-parameter-warning.md)）
+4. モデルによって断られうる引数なら、`providers/base.py` の `ERROR_HINTS` に案内を、各アダプターの `error_fields` にフィールド名を足す（[判断](docs/design-docs/error-hints.md)）
 
 ### プロバイダー別のオプションを足す
 

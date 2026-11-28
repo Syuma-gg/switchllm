@@ -138,6 +138,12 @@ switchllm は、`reasoning_summary=True` のとき `summary: "auto"` を送る�
   - 表計算は、シートごとに先頭の 1,000 行まで読み、モデルが作った要約と見出しを足す
 - 上限: 「each file must be under 50 MB. The combined limit across all files in the request is 50 MB」。ページ数の上限は書かれていない
 
+## エラー
+
+- 本文の `error` に `message`・`type`・`param`・`code` がある。Error codes のガイドは、`error.param` が原因の引数を指す例（`service_tier`）と、`error.code` で原因を見分けることを書く。本文の全体の例はない
+- モデルが受け付けない値（`reasoning.effort` の段階など）のエラーの文言は、文書にない
+- switchllm は、送った共通の引数のフィールド名がエラーに出てきたら、`str(e)` に案内を足す（[判断](../design-docs/error-hints.md)）。`param` か文言に `reasoning.effort`・`tool_choice`・`temperature` などが出てくれば当たる（U38）
+
 ## 出典
 
 同じページを何度か確かめたものは、日付ごとに分けて書く。
@@ -181,6 +187,11 @@ switchllm は、`reasoning_summary=True` のとき `summary: "auto"` を送る�
 - [File inputs](https://developers.openai.com/api/docs/guides/pdf-files)
   - 2026-11-23: 対応する種類の表。「For **PDF files**, the API extracts both text and page images」。PDF 以外は文字だけ。表計算の 1,000 行。「each file must be under 50 MB」。`file_data` のコードの例が data URL で、curl の例は base64 とだけ書く。Chat Completions は「accepts only PDF files as `file` content parts」
 
+### エラー
+
+- [Error codes](https://developers.openai.com/api/docs/guides/error-codes)
+  - 2026-11-28: 「The API returns the message "Invalid `service_tier` argument: The requested service tier is not allowed for this project." as an `invalid_request_error` with `error.param` set to `service_tier`」。「inspect `error.code` to identify the specific cause」。本文の全体の例と、`unsupported_value` などの code は書かれていない
+
 ## 関連する未検証の前提
 
-U1〜U3、U22、U23、U28、U32（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U1〜U3、U22、U23、U28、U32、U38（[実 API 検証](../exec-plans/active/real-api-verification.md)）

@@ -168,6 +168,13 @@ LM Studio:
   - 受け付けないサーバーなら、API のエラーになる
   - 受け付けないと分かっているなら、`file_input=False` を渡すと、送る前に `UnsupportedFeatureError` にする
 
+## エラー
+
+- 接続先によって形が違う。OpenAI 本家は `error` に `message`・`type`・`param`・`code`（[OpenAI Responses](openai-responses.md) の「エラー」）
+- DeepSeek: 本文の形は書かれていない。400（Invalid Format）と 422（Invalid Parameters）は、どちらも「according to the hints in the error message」に直すとある。思考モードで `tool_choice` の `required` かツール名を送ると 400（Create Chat Completion のページ）。文言は書かれていない
+- Ollama・LM Studio: エラーの形の記述はない
+- switchllm は、送った共通の引数のフィールド名がエラーに出てきたら、`str(e)` に案内を足す（[判断](../design-docs/error-hints.md)）。文言か本文に `tool_choice`・`reasoning_effort`・`response_format`・`temperature` が出てくれば当たる（U38）
+
 ## 出典
 
 同じページを何度か確かめたものは、日付ごとに分けて書く。
@@ -201,6 +208,10 @@ LM Studio:
   - 2026-11-20: 「Include the word "json" in the system or user prompt, and provide an example of the desired JSON format」。`content` が空白だけで返ることがある。`max_tokens` を十分に取る
 - [DeepSeek: Tool Calls](https://api-docs.deepseek.com/guides/tool_calls)
   - 2026-11-20: strict モード（beta）は `base_url="https://api.deepseek.com/beta"` で、ツールの引数にだけ効く
+- [Error codes](https://api-docs.deepseek.com/quick_start/error_codes)
+  - 2026-11-28: 「400 - Invalid Format」は「Invalid request body format.」、「422 - Invalid Parameters」は「Your request contains invalid parameters.」で、どちらも「Please modify your request ... according to the hints in the error message.」。本文の JSON の例はない
+- [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode)（エラー）
+  - 2026-11-28: `tool_choice` の `required` とツール名の扱いは書かれていない。「Setting `tool_choice` to `none` disables tool calling even when `tools` is provided.」。`temperature` などは「setting these parameters will not trigger an error but will also have no effect」
 
 ### Ollama
 
@@ -229,4 +240,4 @@ LM Studio:
 
 ## 関連する未検証の前提
 
-U10、U11、U12、U15、U16、U17、U18、U21、U23、U27、U29、U35（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U10、U11、U12、U15、U16、U17、U18、U21、U23、U27、U29、U35、U38（[実 API 検証](../exec-plans/active/real-api-verification.md)）
