@@ -7,7 +7,7 @@ Chat Completions 互換のサーバーには何も足さない。OpenAI 本家�
 from __future__ import annotations
 
 import pytest
-from e2e_support import MAX_TOKENS, describe_reasoning, requires_key, tool_roundtrip
+from e2e_support import REASONING_MAX_TOKENS, describe_reasoning, requires_key, tool_roundtrip
 
 from switchllm import UnsupportedFeatureError, parse_model
 from switchllm.providers import PRESETS
@@ -31,7 +31,7 @@ def test_reasoning_summary_stream(client, model, note):
             list(client.stream(PROMPT, reasoning_summary=True))
         note("送る前に UnsupportedFeatureError（呼ばない）")
         return
-    events = list(client.stream(PROMPT, reasoning_summary=True, max_tokens=MAX_TOKENS))
+    events = list(client.stream(PROMPT, reasoning_summary=True, max_tokens=REASONING_MAX_TOKENS))
     assert [e.type for e in events].count("done") == 1 and events[-1].type == "done", [e.type for e in events]
     res = events[-1].response
     assert res.text.strip(), f"empty text (stop_reason={res.stop_reason})"

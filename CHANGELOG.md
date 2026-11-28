@@ -21,6 +21,7 @@
 - 画像の入力（`ImagePart`）。URL の画像は各社の API が取りに行く（Gemini は `fileData.fileUri`。Ollama は base64 だけなので、URL は送る前に `UnsupportedFeatureError`）
 - プリセットごとに送れるものと、送る前に止まるものの対応表（public-api.md）。表とライブラリの振る舞いが一致することをテストで確かめる
 - Chat Completions 互換のオプション `tool_choice=False`・`image_url=False`（`ollama` のプリセットは両方 `False`）。対応しない接続先で、`tool_choice` の `"none"` と強制、URL の画像を送る前に止める
+- 受信の待ちの既定は 600 秒（公式の OpenAI・Anthropic の SDK と同じ）。受信の待ちのタイムアウトはリトライしない（API が生成している最中のことが多く、送り直すと同じ生成を重ねて頼むため）。接続できないときなどは、これまでどおりリトライする
 - 共通の例外（基底は `SwitchLLMError`）と自動リトライ。プロバイダーが返したエラーは、文言（`message`）と本文の全体（`body`）をそのまま持つ
 - 型情報（`py.typed`）
 

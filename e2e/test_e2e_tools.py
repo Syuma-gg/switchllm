@@ -19,7 +19,7 @@ from e2e_support import (
     tool_roundtrip,
 )
 
-from switchllm import BadRequestError, Message, UnsupportedFeatureError, run_tool_calls, tool
+from switchllm import BadRequestError, Message, UnsupportedFeatureError, parse_model, run_tool_calls, tool
 
 
 @tool
@@ -90,7 +90,7 @@ def test_tool_choice_none(client, model, note):
 @pytest.mark.premise("U15", "U38")
 @pytest.mark.calls(1)
 @pytest.mark.parametrize("choice", ["required", {"name": "get_weather"}], ids=["required", "named"])
-def test_forced_tool_choice(client, adapter, model, choice, note):
+def test_forced_tool_choice(client, model, choice, note):
     # 受け付けるモデルでは指定どおりに呼ぶ。拒否するモデル（Anthropic の一部、DeepSeek の思考モードなど）では
     # API のエラーをそのまま返す（モデルごとの一覧は持たない）。エラーに tool_choice の案内が付くかも見る（U38）
     if not tool_choice_supported(model):
@@ -103,7 +103,9 @@ def test_forced_tool_choice(client, adapter, model, choice, note):
         res = client.chat("東京の天気を教えて。", tools=TOOLS, tool_choice=choice, max_tokens=MAX_TOKENS)
     except BadRequestError as e:
         assert e.status_code == 400 and e.message
-        if adapter == "anthropic":  # 文言に tool_choice が入ることが、Errors の文書で分かっている
+        if parse_model(model)[0] == "anthropic":
+            # Anthropic 本家の文言に tool_choice が入ることは、Errors の文書で分かっている。Foundry・Bedrock は
+            # 同じアダプターでも文言が文書にないので、案内が付いたかを記録するだけにする（U42・U43）
             assert "\nHint (tool_choice): " in str(e), str(e)
         note(rejection(e))
         return

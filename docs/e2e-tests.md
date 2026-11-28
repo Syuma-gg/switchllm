@@ -25,6 +25,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 - 実行の前に、すべてのモデルのクライアントを作る。キーが足りなければ、API を呼ぶ前に止まる
 - クラウドの経路（`azure:<deployment>`・`azure-chat:<deployment>`・`foundry:<deployment>`・`bedrock:anthropic.<model>`・`vertex:<model>`）は、キーのほかに URL を組み立てる環境変数（`AZURE_OPENAI_ENDPOINT`・`ANTHROPIC_FOUNDRY_RESOURCE`・`AWS_REGION`）も要る（[クラウドの経路](references/cloud-endpoints.md)）。足りなければ、同じく API を呼ぶ前に止まる
   - 記録には、URL のリソース名とリージョンを決まった値（`e2e_support.REPLAY_ENV`）に置き換えて残す。再生では、その値を環境変数に入れて同じ URL を組み立てる
+- `gemini:` と `vertex:` には Gemini 3 以降のモデルを並べる。Gemini 2.5 は `thinkingLevel` を受け付けないので（2026-12-01 から非推奨）、推論の強さのテストが失敗する
 - 実 API で回したときは、最後に「U 番号ごとの結果」（[実 API 検証](exec-plans/active/real-api-verification.md) の前提と対応）と、テストごとの観察メモ（推論情報が返ったか、API が拒否したときの文言など）を表示する。各前提の「結果」には、ここから書き写す
 - `--vision-models` に挙げた Chat Completions 互換のモデルでは、画像のテストも回す（OpenAI・Anthropic・Gemini のモデルでは常に回す）
 - Claude Code が実行するときは、モデルと料金の目安を伝えて、ユーザーの了承を得てから（[CLAUDE.md](../CLAUDE.md)）
@@ -63,7 +64,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 |---|---|---|---|---|
 | `test_tool_roundtrip_three_turns` | ツールを呼ぶ → 結果を渡して答える → 次のターンでもう一度ツール。推論情報を送り返しても拒否されない | | 3 | U3、U4、U6、U7、U11 |
 | `test_tool_choice_none` | `tool_choice="none"` ではツールを呼ばない。Ollama は送る前に `UnsupportedFeatureError`（呼ばない） | | 1 | U9、U15 |
-| `test_forced_tool_choice[required/named]` | ツールの強制。受け付けるモデルでは指定どおりに呼び、拒否するモデルでは API のエラーをそのまま返す。Anthropic で拒否されたら、エラーに `tool_choice` の案内が付く。Ollama は送る前に `UnsupportedFeatureError`（呼ばない） | | 2 | U15、U38 |
+| `test_forced_tool_choice[required/named]` | ツールの強制。受け付けるモデルでは指定どおりに呼び、拒否するモデルでは API のエラーをそのまま返す。Anthropic 本家（`anthropic:`）で拒否されたら、エラーに `tool_choice` の案内が付く。`foundry`・`bedrock` は文言が文書にないので、案内が付いたかを記録するだけ（U42・U43）。Ollama は送る前に `UnsupportedFeatureError`（呼ばない） | | 2 | U15、U38 |
 | `test_tool_without_parameters` | 引数のないツール（空の `properties`）を受け付け、`arguments == {}` で呼ぶ | ○ | 2 | U4 |
 | `test_tool_schema_types` | str・int・float・bool・Literal・`list[str]`・省略できる引数を持つスキーマを受け付け、型どおりの値で呼ぶ | ○ | 1 | U4 |
 | `test_parallel_tool_calls` | 2つの都市を調べさせる。並列の呼び出しと、まとめて返す結果を受け付ける | ○ | 3 | |
@@ -125,7 +126,7 @@ JSON Schema を受け付けない接続先（`deepseek` のプリセット）で
 
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
-| `test_reasoning_summary_stream` | ストリーミングで頼む。`done` が1回だけで本文が返る。クラウドの API（OpenAI・Anthropic・Gemini・DeepSeek）は、`Response.thinking` と `thinking` イベントに要約が入る。ローカルのサーバーは、何も足さずに送って推論テキストが返ったかを記録する | | 1 | U32〜U35 |
+| `test_reasoning_summary_stream` | ストリーミングで頼む。推論だけで上限に届かないよう、`max_tokens` は 16000（`REASONING_MAX_TOKENS`）。`done` が1回だけで本文が返る。クラウドの API（OpenAI・Anthropic・Gemini・DeepSeek）は、`Response.thinking` と `thinking` イベントに要約が入る。ローカルのサーバーは、何も足さずに送って推論テキストが返ったかを記録する | | 1 | U32〜U35 |
 | `test_reasoning_summary_with_tools`（OpenAI・Anthropic・Gemini） | 要約を頼んだまま、ツールの往復で推論情報（要約の入った thinking ブロック、reasoning アイテム、署名）を送り返す | | 2 | U32〜U34 |
 
 ### 非同期（`test_e2e_async.py`）

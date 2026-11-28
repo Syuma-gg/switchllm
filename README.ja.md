@@ -36,7 +36,7 @@ APIキーは環境変数で渡す（`api_key=` 引数でも可）。
 | OpenAI（Chat Completions） | `openai-chat:<model>` | `OPENAI_API_KEY` |
 | DeepSeek | `deepseek:deepseek-flash` | `DEEPSEEK_API_KEY` |
 | Ollama / LM Studio（ローカル） | `ollama:llama3.2` / `lmstudio:<model>` | 不要 |
-| Azure OpenAI、Foundry・Bedrock の Claude、Vertex AI | `azure:<deployment>`、`foundry:<deployment>`、`bedrock:anthropic.claude-sonnet-5-5`、`vertex:gemini-2.5-flash` | 下の「クラウド」 |
+| Azure OpenAI、Foundry・Bedrock の Claude、Vertex AI | `azure:<deployment>`、`foundry:<deployment>`、`bedrock:anthropic.claude-sonnet-5-5`、`vertex:gemini-3-flash-preview` | 下の「クラウド」 |
 | その他の OpenAI 互換 API | `register_provider()` で登録する（下の「その他の OpenAI 互換 API」） | 登録時に指定 |
 
 モデル ID は頻繁に変わるので、各社のモデル一覧で確認してから指定する。
@@ -285,7 +285,7 @@ except APIError as e:
 
 そのプロバイダーのどのモデルも拒否する指定は、例外にせずに送らずに捨て、`DroppedParameterWarning` で知らせる（今は Anthropic の `temperature` だけ）。送る前に止めたいときは、`warnings.filterwarnings("error", category=DroppedParameterWarning)` で例外にする。
 
-429・5xx・接続エラーは指数バックオフで自動リトライする（`max_retries=2`、`Retry-After` ヘッダーを尊重）。ストリーミングは最初のイベントを受け取る前だけリトライする。詳しくは [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md)。
+429・5xx・接続エラーは指数バックオフで自動リトライする（`max_retries=2`、`Retry-After` ヘッダーを尊重）。ストリーミングは最初のイベントを受け取る前だけリトライする。応答は最大 600 秒待つ（`timeout=` で変えられる）。待ちを超えた応答はリトライしない。プロバイダーはまだ生成している最中のことが多く、送り直すと同じ生成の料金を重ねて払うことになるため。長い生成は `stream()` で受ける。詳しくは [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md)。
 
 ### クラウド（API キーで呼ぶ）
 
@@ -296,7 +296,7 @@ Azure・AWS・Google Cloud が提供するモデルを、API キーで呼べる�
 | Azure OpenAI（Responses API / Chat Completions） | `azure:<deployment>` / `azure-chat:<deployment>` | `AZURE_OPENAI_API_KEY` | `AZURE_OPENAI_ENDPOINT`（`https://<resource>.openai.azure.com`） |
 | Claude in Microsoft Foundry | `foundry:claude-sonnet-5-5`（deployment 名） | `ANTHROPIC_FOUNDRY_API_KEY` | `ANTHROPIC_FOUNDRY_RESOURCE`（または `ANTHROPIC_FOUNDRY_BASE_URL`） |
 | Claude in Amazon Bedrock | `bedrock:anthropic.claude-sonnet-5-5` | `AWS_BEARER_TOKEN_BEDROCK` | `AWS_REGION`（または `AWS_DEFAULT_REGION`） |
-| Vertex AI express mode（Gemini） | `vertex:gemini-2.5-flash` | `VERTEX_API_KEY` | なし（URL は固定） |
+| Vertex AI express mode（Gemini） | `vertex:gemini-3-flash-preview` | `VERTEX_API_KEY` | なし（URL は固定） |
 
 ```python
 # AWS_BEARER_TOKEN_BEDROCK と AWS_REGION を設定してある

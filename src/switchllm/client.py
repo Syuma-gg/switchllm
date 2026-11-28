@@ -33,6 +33,9 @@ from .tools import Tool, ToolLike, as_tool
 from .types import FilePart, ImagePart, Message, Response, StreamEvent, TextPart
 
 MODEL_ENV = "SWITCHLLM_MODEL"
+#: 受信の待ちの既定（秒）。公式の OpenAI・Anthropic の SDK と同じ 10 分。接続の待ちは 10 秒（docs/RELIABILITY.md）
+DEFAULT_TIMEOUT = 600.0
+CONNECT_TIMEOUT = 10.0
 
 MessagesLike = Union[str, Message, dict, Sequence[Union[Message, dict]]]
 
@@ -280,7 +283,7 @@ class _BaseClient:
         options = _pick_options(key, provider_options, options_by_provider)
         self.provider: Provider = create_provider(key, name, api_key=api_key, base_url=base_url, options=options)
         self._owns_http = http_client is None
-        self._http = http_client or self._http_type(timeout=httpx.Timeout(timeout, connect=10.0))
+        self._http = http_client or self._http_type(timeout=httpx.Timeout(timeout, connect=CONNECT_TIMEOUT))
         self.retry = RetryPolicy(max_retries=max_retries, backoff=retry_backoff, sleep=self._retry_sleep)
         self._init_kwargs: dict[str, Any] = dict(
             api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
@@ -355,7 +358,7 @@ class Client(_BaseClient):
         *,
         api_key: str | None = None,
         base_url: str | None = None,
-        timeout: float = 120.0,
+        timeout: float = DEFAULT_TIMEOUT,
         max_retries: int = 2,
         retry_backoff: float = 0.5,
         http_client: httpx.Client | None = None,
@@ -482,7 +485,7 @@ class AsyncClient(_BaseClient):
         *,
         api_key: str | None = None,
         base_url: str | None = None,
-        timeout: float = 120.0,
+        timeout: float = DEFAULT_TIMEOUT,
         max_retries: int = 2,
         retry_backoff: float = 0.5,
         http_client: httpx.AsyncClient | None = None,

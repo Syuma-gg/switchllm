@@ -16,6 +16,9 @@ from switchllm.providers import PRESETS
 # 思考が既定で有効なモデル（Claude 5・Gemini 3・DeepSeek）では、max_tokens に思考の分も入る。
 # 小さいと、答える前に max_tokens で止まる。課金は実際に出力した分だけなので、大きめにしておく
 MAX_TOKENS = 4000
+# 考えさせる問い（推論の要約のテスト）で使う上限。推論だけで MAX_TOKENS に届くと、本文がなく失敗する。
+# どの接続先の上限（DeepSeek の思考モードは 128K、Anthropic の既定は 64000）にも収まる
+REASONING_MAX_TOKENS = 16000
 
 ASK_TOOL = "get_weather ツールを必ず使って、東京の天気を調べてから答えて。"
 ASK_AGAIN = "ありがとう。同じように get_weather ツールを使って、大阪の天気も調べて。"

@@ -40,7 +40,9 @@ def _rejected_before_sending(level: str, call: Callable[[], object], note: Calla
 @pytest.mark.calls(1)
 def test_reasoning_effort_low_stream(client, model, note):
     # low はどの社にもある段階なので、クラウドの API が拒否したら送る形の誤り（Gemini の大文字・小文字など）。
-    # ローカルのサーバーは、推論しないモデルや、reasoning_effort を受け付けないサーバーがありうる（U27）
+    # ただし Gemini 2.5 は thinkingLevel を受け付けない（2026-12-01 から非推奨）ので、gemini・vertex には
+    # Gemini 3 以降のモデルを並べる（docs/e2e-tests.md）。ローカルのサーバーは、推論しないモデルや、
+    # reasoning_effort を受け付けないサーバーがありうる（U27）
     try:
         events = list(client.stream(PROMPT, reasoning_effort="low", max_tokens=MAX_TOKENS))
     except BadRequestError as e:

@@ -131,6 +131,26 @@ async def _asleep(retry: RetryPolicy, seconds: float) -> None:
         await waited
 
 
+def _retry_transport(e: httpx.TransportError, attempt: int, retry: RetryPolicy) -> bool:
+    """接続の失敗のあとで送り直すか。受信の待ちのタイムアウト（``httpx.ReadTimeout``）は送り直さない。
+    API はまだ生成している最中のことが多く、送り直すと同じ生成を重ねて頼み、待ちも料金も重なるため
+    （docs/design-docs/read-timeout.md）。接続できなかったときなどは、リクエストが届いていないので送り直す。"""
+    return attempt < retry.max_retries and not isinstance(e, httpx.ReadTimeout)
+
+
+def _connection_error(provider: str, e: httpx.TransportError, client: httpx.Client | httpx.AsyncClient,
+                      *, streaming: bool) -> APIConnectionError:
+    if not isinstance(e, httpx.ReadTimeout):
+        return APIConnectionError(f"[{provider}] {e!r}")
+    read = client.timeout.read
+    waited = f" ({read:g}s)" if read is not None else ""
+    advice = "pass a longer timeout=" if streaming else "use stream() for long generations, or pass a longer timeout="
+    return APIConnectionError(
+        f"[{provider}] no response within the read timeout{waited}: {e!r}. Not retried, because the request "
+        f"may still be running (and billed); {advice}"
+    )
+
+
 def request_json(
     client: httpx.Client, req: HTTPRequest, *, provider: str, retry: RetryPolicy
 ) -> dict[str, Any]:
@@ -139,11 +159,11 @@ def request_json(
         try:
             resp = client.request(req.method, req.url, headers=req.headers, json=req.body)
         except httpx.TransportError as e:
-            if attempt < retry.max_retries:
+            if _retry_transport(e, attempt, retry):
                 retry.sleep(retry.delay(attempt, None))
                 attempt += 1
                 continue
-            raise APIConnectionError(f"[{provider}] {e!r}") from e
+            raise _connection_error(provider, e, client, streaming=False) from e
 
         if resp.status_code < 400:
             return _success_json(provider, resp)
@@ -163,11 +183,11 @@ async def arequest_json(
         try:
             resp = await client.request(req.method, req.url, headers=req.headers, json=req.body)
         except httpx.TransportError as e:
-            if attempt < retry.max_retries:
+            if _retry_transport(e, attempt, retry):
                 await _asleep(retry, retry.delay(attempt, None))
                 attempt += 1
                 continue
-            raise APIConnectionError(f"[{provider}] {e!r}") from e
+            raise _connection_error(provider, e, client, streaming=False) from e
 
         if resp.status_code < 400:
             return _success_json(provider, resp)
@@ -256,11 +276,11 @@ def stream_sse(
                 return
         except httpx.TransportError as e:
             # 途中まで受信済みなら再送すると重複するので、そのまま失敗させる
-            if not started and attempt < retry.max_retries:
+            if not started and _retry_transport(e, attempt, retry):
                 retry.sleep(retry.delay(attempt, None))
                 attempt += 1
                 continue
-            raise APIConnectionError(f"[{provider}] {e!r}") from e
+            raise _connection_error(provider, e, client, streaming=True) from e
 
 
 async def astream_sse(
@@ -286,8 +306,8 @@ async def astream_sse(
                         yield item
                 return
         except httpx.TransportError as e:
-            if not started and attempt < retry.max_retries:
+            if not started and _retry_transport(e, attempt, retry):
                 await _asleep(retry, retry.delay(attempt, None))
                 attempt += 1
                 continue
-            raise APIConnectionError(f"[{provider}] {e!r}") from e
+            raise _connection_error(provider, e, client, streaming=True) from e

@@ -36,6 +36,7 @@ from e2e_support import (
 
 import switchllm
 from switchllm import AsyncClient, Client, SwitchLLMError
+from switchllm.client import CONNECT_TIMEOUT, DEFAULT_TIMEOUT
 from switchllm.providers import ADAPTERS, PRESETS
 
 LIVE = pytest.StashKey[bool]()
@@ -220,7 +221,7 @@ def _secrets(extra: list[str]) -> list[str]:
     return [os.environ[e] for e in envs if os.environ.get(e)] + extra
 
 
-TIMEOUT = httpx.Timeout(120.0, connect=10.0)
+TIMEOUT = httpx.Timeout(DEFAULT_TIMEOUT, connect=CONNECT_TIMEOUT)  # 利用者が Client を作ったときと同じ待ち
 
 
 class _Exchanges:

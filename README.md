@@ -36,7 +36,7 @@ Pass API keys through environment variables (or the `api_key=` argument).
 | OpenAI (Chat Completions) | `openai-chat:<model>` | `OPENAI_API_KEY` |
 | DeepSeek | `deepseek:deepseek-flash` | `DEEPSEEK_API_KEY` |
 | Ollama / LM Studio (local) | `ollama:llama3.2` / `lmstudio:<model>` | Not needed |
-| Azure OpenAI, Claude on Foundry or Bedrock, Vertex AI | `azure:<deployment>`, `foundry:<deployment>`, `bedrock:anthropic.claude-sonnet-5-5`, `vertex:gemini-2.5-flash` | See "Cloud platforms" below |
+| Azure OpenAI, Claude on Foundry or Bedrock, Vertex AI | `azure:<deployment>`, `foundry:<deployment>`, `bedrock:anthropic.claude-sonnet-5-5`, `vertex:gemini-3-flash-preview` | See "Cloud platforms" below |
 | Other OpenAI-compatible APIs | Register with `register_provider()` (see "Other OpenAI-compatible APIs" below) | Set when registering |
 
 Model IDs change often, so check each provider's model list before you use one.
@@ -285,7 +285,7 @@ except APIError as e:
 
 When an option is not sent because every model of the provider would reject it, you get a `DroppedParameterWarning` instead of an exception (currently only `temperature` on Anthropic). To stop before sending instead, turn it into an error: `warnings.filterwarnings("error", category=DroppedParameterWarning)`.
 
-429s, 5xx errors, and connection errors are retried automatically with exponential backoff (`max_retries=2`, honoring the `Retry-After` header). Streams are retried only before the first event arrives. See [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md) (in Japanese) for details.
+429s, 5xx errors, and connection errors are retried automatically with exponential backoff (`max_retries=2`, honoring the `Retry-After` header). Streams are retried only before the first event arrives. The client waits up to 600 seconds for a response (change it with `timeout=`). A response that doesn't arrive in time is not retried, because the provider is probably still generating it and a retry would pay for it again; use `stream()` for long generations. See [RELIABILITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/RELIABILITY.md) (in Japanese) for details.
 
 ### Cloud platforms (API keys)
 
@@ -296,7 +296,7 @@ Models offered on Azure, AWS and Google Cloud can be called with an API key. The
 | Azure OpenAI (Responses API / Chat Completions) | `azure:<deployment>` / `azure-chat:<deployment>` | `AZURE_OPENAI_API_KEY` | `AZURE_OPENAI_ENDPOINT` (`https://<resource>.openai.azure.com`) |
 | Claude in Microsoft Foundry | `foundry:claude-sonnet-5-5` (the deployment name) | `ANTHROPIC_FOUNDRY_API_KEY` | `ANTHROPIC_FOUNDRY_RESOURCE` (or `ANTHROPIC_FOUNDRY_BASE_URL`) |
 | Claude in Amazon Bedrock | `bedrock:anthropic.claude-sonnet-5-5` | `AWS_BEARER_TOKEN_BEDROCK` | `AWS_REGION` (or `AWS_DEFAULT_REGION`) |
-| Vertex AI express mode (Gemini) | `vertex:gemini-2.5-flash` | `VERTEX_API_KEY` | Nothing (fixed URL) |
+| Vertex AI express mode (Gemini) | `vertex:gemini-3-flash-preview` | `VERTEX_API_KEY` | Nothing (fixed URL) |
 
 ```python
 # AWS_BEARER_TOKEN_BEDROCK and AWS_REGION are set

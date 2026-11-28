@@ -21,6 +21,11 @@
 ## 手順
 
 - [x] 下の前提を1回の実行で確かめられるようにする（2026-11-17。pytest の E2E テスト `e2e/`。[E2E テスト](../../e2e-tests.md)）
+- [x] 実行の前に、E2E の誤りを直す（2026-11-28 の精査で見つけ、同じ日に直した。どれも、直さずに回すと料金を払って失敗する）
+  - `test_forced_tool_choice` は、アダプターが `anthropic` なら案内（`Hint (tool_choice)`）を必ず求めるので、`foundry`・`bedrock` でも求める。両者のエラーの文言は文書にない（U42・U43）。求めるのは `anthropic:` だけにし、クラウドは記録だけにした
+  - `test_reasoning_effort_low_stream`・`test_reasoning_effort_with_tools` は、キーの要る接続先が 400 を返したら失敗にする。Gemini 2.5 は `thinkingLevel` を受け付けないので、`vertex` と `gemini` には Gemini 3 以降のモデルを並べる（[E2E テスト](../../e2e-tests.md) の回し方に書き、README の例を `vertex:gemini-3-flash-preview` にした）
+  - `test_reasoning_summary_stream` は、考えさせる問いを `MAX_TOKENS`（4000）で送り、本文があることを求める。推論で上限に届くと本文がなく失敗するので、このテストの上限を 16000 にした（料金は実際に出した分だけ）
+- [ ] 先にローカルの Ollama か LM Studio（料金なし）で `--record` から再生までを1回通し、記録と再生の仕組みが動くことを確かめる
 - [ ] 各社のキーで E2E テストを `--record` 付きで実行し、記録をコミットする。記録は、それ以降の `python -m pytest` で毎回再生される
   - **料金が発生するので、実行前にユーザーの確認を取る**
   - 呼び出しの回数は、まず `--collect-only` で確かめる（API は呼ばない）。モデルと料金の目安を伝えて了承を得てから実行する
@@ -29,7 +34,7 @@
     - 同じプロバイダーの2つのモデルを隣に置くと、U8（Anthropic）と U17（DeepSeek）を確かめられる
     - Gemini の隣に別のプロバイダーを置くと、U5 を確かめられる。U5 の「Gemini 3 系以外」は、Gemini 2.5 などのモデルも並べたときだけ確かめられる
   - LM Studio に推論するモデル（`reasoning_content` を返すもの）を読み込むと、U11 の「ほかの互換サーバー」を確かめられる
-  - クラウドの経路（U40〜U44）は、そのクラウドのアカウントとキーを用意できたものだけを並べる（例: `azure:<deployment>,azure-chat:<deployment>,foundry:claude-sonnet-5-5,bedrock:anthropic.claude-sonnet-5-5,bedrock:anthropic.claude-haiku-5-5,vertex:gemini-2.5-flash`）。URL を組み立てる環境変数も要る（[クラウドの経路](../../references/cloud-endpoints.md)）
+  - クラウドの経路（U40〜U44）は、そのクラウドのアカウントとキーを用意できたものだけを並べる（例: `azure:<deployment>,azure-chat:<deployment>,foundry:claude-sonnet-5-5,bedrock:anthropic.claude-sonnet-5-5,bedrock:anthropic.claude-haiku-5-5,vertex:gemini-3-flash-preview`）。URL を組み立てる環境変数も要る（[クラウドの経路](../../references/cloud-endpoints.md)）
     - `bedrock` の2つのモデルを隣に置くと、U43 の「別のモデルへ thinking ブロックを送り返す」を確かめられる
     - `vertex` の隣に別のプロバイダーを置くと、U44 の「ダミーの署名」を確かめられる
 - [ ] ローカルの Ollama / LM Studio で同じ確認をする（料金なし）

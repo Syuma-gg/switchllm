@@ -3,7 +3,7 @@
 領域ごとの状態。テストや検証の状況が変わったら更新する（最終更新: 2026-11-28）。
 
 - CI: GitHub Actions（`.github/workflows/test.yml`）で、Ubuntu の Python 3.10〜3.15 と Windows の 3.10・3.15 で回す（2026-11-14 に、全ジョブが通ることを確かめた）
-- カバレッジ（分岐を含む）: 99.15%（2026-11-28、Python 3.12。テスト 1558 件）。基準は `pyproject.toml` の `fail_under = 99` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）
+- カバレッジ（分岐を含む）: 99.15%（2026-11-28、Python 3.12。テスト 1570 件）。基準は `pyproject.toml` の `fail_under = 99` で、上がったら引き上げる（[品質検査の方針](quality-gates.md)）
   - 到達していない行は3つ。`types.py` の `_part_to_dict` の、知らないパーツを変えずに返す行（2026-11-18 の履歴の保存で足した）と、`providers/base.py` の `error_hints` の、エラーの本文を JSON にできないときの2行（2026-11-28 のエラーの案内で足した）。どちらもテストがない
   - 残りは分岐の一部で、多くは、パーツの型で分ける `isinstance` の連鎖の、どれにも当たらない側（送る前の検査で `TypeError` にするので、今は通らない）
 - 実 API に対する E2E テストは `e2e/` にあり、`--models` を渡したときだけ実 API を呼ぶ（料金が発生するため。[E2E テスト](e2e-tests.md)）。渡さなければ、実 API で記録したやりとりを再生し、既定の実行と CI にも入る（[テストの方針](testing.md)）。まだ実 API では回しておらず、記録は 0 件
@@ -33,7 +33,7 @@
 | 領域 | 評価 | テスト | まだ確かめていないこと |
 |---|---|---|---|
 | Client、モデル文字列、APIキー、オプション、`options_by_provider=`、`headers=` | B | `tests/test_client.py`（`options_by_provider=` のテストは、実装にわざと入れた誤り 10 通りを、どれも見つけた。2026-11-28）、`tests/test_consistency.py` | 実 API（E2E の `test_e2e_headers.py`） |
-| リトライ、例外 | B | `tests/test_http.py`、`tests/test_error_hints.py`（エラーの案内。実装にわざと入れた誤り 15 通りを、どれも見つけた。2026-11-28） | 実際の 429 / 5xx / 切断での挙動 |
+| リトライ、例外 | B | `tests/test_http.py`（受信の待ちのタイムアウトと既定の待ちは、実装にわざと入れた誤り 9 通りを、どれも見つけた。2026-11-28）、`tests/test_error_hints.py`（エラーの案内。実装にわざと入れた誤り 15 通りを、どれも見つけた。2026-11-28） | 実際の 429 / 5xx / 切断での挙動 |
 | プロバイダーの切り替え | B | `tests/test_cross_provider.py`、`tests/test_consistency.py`、`tests/test_client.py` | 実 API（U5、U8、U16、U17） |
 | 共通型 | B | `tests/test_types.py` | — |
 | 履歴の保存・復元 | B | `tests/test_history.py` | 実 API（E2E の `test_restored_history_continues`） |

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 
 from switchllm import (
     APIConnectionError,
     APIError,
+    AsyncClient,
     AuthenticationError,
     BadRequestError,
+    Client,
     NotFoundError,
     RateLimitError,
     ServerError,
@@ -44,12 +48,70 @@ def test_connection_error_is_retried_then_succeeds(api):
 
 def test_connection_error_after_retries_becomes_api_connection_error(api):
     for _ in range(3):
-        api.fail(httpx.ReadTimeout("timed out"))
+        api.fail(httpx.ConnectError("refused"))
     client, _ = _client(api, max_retries=2)
-    with pytest.raises(APIConnectionError, match=r"\[anthropic\].*ReadTimeout") as e:
+    with pytest.raises(APIConnectionError, match=r"\[anthropic\].*ConnectError") as e:
         client.chat("hi")
-    assert isinstance(e.value.__cause__, httpx.ReadTimeout)  # 元の例外を辿れる
+    assert isinstance(e.value.__cause__, httpx.ConnectError)  # 元の例外を辿れる
     assert len(api.requests) == 3
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [httpx.ConnectTimeout("connect timed out"), httpx.PoolTimeout("no connection"), httpx.ReadError("reset")],
+    ids=["connect", "pool", "read-error"],
+)
+def test_transport_errors_other_than_read_timeout_are_still_retried(api, exc):
+    api.fail(exc)
+    api.reply_json(ANTHROPIC_OK)
+    client, slept = _client(api)
+    assert client.chat("hi").text == "ok"
+    assert len(api.requests) == 2 and len(slept) == 1
+
+
+def test_read_timeout_is_not_retried(api):
+    # 受信の待ちを超えたのは、API がまだ生成している最中のことが多い。送り直すと同じ生成を重ねて頼み、
+    # 待ちも料金も重なるので、リトライせずに知らせる（docs/design-docs/read-timeout.md）
+    api.fail(httpx.ReadTimeout("timed out"))
+    client, slept = _client(api, max_retries=2)
+    with pytest.raises(APIConnectionError) as e:
+        client.chat("hi")
+    assert len(api.requests) == 1 and slept == []
+    assert isinstance(e.value.__cause__, httpx.ReadTimeout)
+    text = str(e.value)
+    assert text.startswith("[anthropic]") and "ReadTimeout" in text
+    assert "not retried" in text.lower() and "stream()" in text and "timeout=" in text
+
+
+def test_stream_read_timeout_before_first_event_is_not_retried(api):
+    api.fail(httpx.ReadTimeout("timed out"))
+    client, slept = _client(api, max_retries=2)
+    with pytest.raises(APIConnectionError, match="(?i)not retried.*timeout="):
+        list(client.stream("hi"))
+    assert len(api.requests) == 1 and slept == []
+
+
+def test_default_timeout_waits_600_seconds_for_a_response():
+    # 推論の長い呼び出しが切れないよう、公式の OpenAI・Anthropic の SDK と同じ 10 分にする。接続は 10 秒のまま
+    client = Client("anthropic:claude-sonnet-5-5", api_key="k")
+    try:
+        timeout = client._http.timeout
+        assert (timeout.read, timeout.write, timeout.pool, timeout.connect) == (600.0, 600.0, 600.0, 10.0)
+    finally:
+        client.close()
+    aclient = AsyncClient("anthropic:claude-sonnet-5-5", api_key="k")
+    try:
+        assert aclient._http.timeout.read == 600.0 and aclient._http.timeout.connect == 10.0
+    finally:
+        asyncio.run(aclient.aclose())
+
+
+def test_timeout_argument_still_changes_the_wait():
+    client = Client("anthropic:claude-sonnet-5-5", api_key="k", timeout=30)
+    try:
+        assert client._http.timeout.read == 30 and client._http.timeout.connect == 10.0
+    finally:
+        client.close()
 
 
 def test_stream_connection_error_before_first_event_is_retried(api):
