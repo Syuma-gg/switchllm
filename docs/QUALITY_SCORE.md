@@ -40,7 +40,7 @@
 | 構造化出力（`response_schema=`） | B | `tests/test_structured_output.py` | 実 API（E2E の `test_e2e_structured.py`。U19〜U22） |
 | 推論の強さ（`reasoning_effort=`） | B | `tests/test_reasoning_effort.py` | 実 API（E2E の `test_e2e_reasoning.py`。U23〜U27） |
 | 推論の要約（`reasoning_summary=`） | B | `tests/test_reasoning_summary.py`（実装にわざと入れた誤り 16 通りを、どれも見つけた。2026-11-26） | 実 API（E2E の `test_e2e_reasoning_summary.py`。U32〜U35） |
-| Anthropic の API の版 | B | `tests/test_anthropic.py` | 実 API（U25） |
+| Anthropic の API の版、`max_tokens` の既定 | B | `tests/test_anthropic.py`（既定の `max_tokens` のテストは、実装にわざと入れた誤り 4 通りを、どれも見つけた。2026-11-28） | 実 API（U25、U36、U37） |
 | `@tool`、`run_tool_calls`、`arun_tool_calls` | B | `tests/test_tools.py` | 生成したスキーマを各社が受け付けるか |
 | 画像の入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py`、`tests/test_file_input.py` | 実 API |
 | ファイルの入力（`FilePart`） | B | `tests/test_file_input.py`、`tests/test_history.py` | 実 API（E2E の `test_e2e_files.py`。U28〜U31） |

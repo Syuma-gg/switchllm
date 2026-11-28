@@ -17,7 +17,7 @@
 | assistant（再送しないとき） | `text` と `tool_use`（`input` はオブジェクト） |
 | ツール結果 | user メッセージの中の `tool_result`（`tool_use_id`。エラーは `is_error: true`） |
 | 続く同じ role | 1つのメッセージにまとめる（並列のツールの結果は1つの user メッセージに入れる） |
-| max_tokens | `max_tokens`。**必須**で、指定がなければ 4096（`default_max_tokens=` で変えられる） |
+| max_tokens | `max_tokens`。**必須**で、指定がなければ 64000（`default_max_tokens=` で変えられる。下の「出力の上限」と[判断](../design-docs/anthropic-max-tokens.md)） |
 | stop | `stop_sequences` |
 | temperature | 既定の版（`2026-10-21`）では、送る前に `UnsupportedFeatureError`。`anthropic_version="2023-06-01"` なら `temperature`（下の「API の版」） |
 | reasoning_effort | `output_config.effort`。`none` は `thinking: {"type": "disabled"}`、`minimal` は `UnsupportedFeatureError`（下の「推論の強さ」） |
@@ -164,6 +164,28 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - `adaptive` と `enabled` で使え、`disabled` と `between_tools` では無効（「there is nothing to display」）
 - 会話の途中で `display` を変えてよい（「Switching `display` values between turns in a conversation is supported」）。`signature` は `display` によらず同じ。省いたブロックを送り返すときも、手を加えずに送る
 
+## 出力の上限（`max_tokens`）
+
+- 必須で、省いたときの既定はない。リファレンスのほかの任意のパラメータには「optional」と付いているが、`max_tokens` には付いていない。最小は 0（0 はプロンプトキャッシュを温めるだけで、応答を作らない）
+- 上限はモデルによる（「Different models have different maximum values for this parameter」）。同期の Messages API では次のとおり
+  - 128K: Claude 5 系（Fable・Mythos・Opus・Sonnet・Haiku）、Opus 4.8・4.7・4.6、Sonnet 4.6
+  - 64K: Opus 4.5・Sonnet 4.5・Haiku 4.5・Sonnet 4（Sonnet 4 は提供終了。Google Cloud と Bedrock を除く）
+  - 32K: Opus 4.1・Opus 4（提供終了。Google Cloud などを除く）
+  - Message Batches API では、Claude 5 系の一部と Opus 4.8〜4.6・Sonnet 4.6 が、beta ヘッダー `output-300k-2026-03-24` で 300K まで
+- Models API（`GET /v1/models/{model_id}`）が、トップレベルの `max_tokens` で、そのモデルに送れる `max_tokens` の最大を返す。`max_input_tokens` は文脈の窓
+- モデルの上限を超える `max_tokens` を送ったときに、400 になるか切り詰められるかは書かれていない（U36）
+- 入力と `max_tokens` の和が文脈の窓を超えるとき:
+  - Claude 4.5 以降は受け付け、生成が窓に達したら `stop_reason: "model_context_window_exceeded"` で止まる
+  - それより前のモデルは検証エラー。beta ヘッダー `model-context-window-exceeded-2025-08-26` で同じ動きにできる
+  - 入力だけで窓を超えると、どのモデルでも 400（「prompt is too long」）
+- thinking のトークンも `max_tokens` に含まれる（「Thinking tokens are a subset of your `max_tokens` parameter」）
+- レート制限: 出力のトークンの上限（OTPM）は、実際に出したトークンだけを数える。`max_tokens` は数えないので、大きくしても制限の上で損はない
+- 時間のかかるリクエスト:
+  - 10 分を超えるようなものは、ストリーミングか Message Batches API を勧めている。大きな `max_tokens` をストリーミングなしで送ることも勧めていない。ネットワークが、何も流れない接続を途中で切ることがあるため
+  - 公式 SDK は、ストリーミングなしで 10 分を超えそうなリクエストを、送る前に止める。API の側が送る前に断るとは書かれていない（U37）
+  - サーバーにも時間の上限があり、応答を始める前に達すると `timeout_error` を返す。長さは書かれていない
+- switchllm は、省かれたら 64000 を送る。提供中のモデルすべての上限に収まる値で、モデル名を見て変えない（[判断](../design-docs/anthropic-max-tokens.md)）
+
 ## 注意点
 
 - thinking とツールを一緒に使うとき、thinking ブロックを signature ごと手を加えずに返す必要がある（[判断](../design-docs/provider-state-resend.md)）
@@ -245,6 +267,7 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
   - 2026-11-20: `output_config.format` は `type: "json_schema"` と `schema` の2つの項目
   - 2026-11-21: `output_config.effort` は「Valid values are `low`, `medium`, `high`, `xhigh`, or `max`」。`budget_tokens` は「Must be ≥1024 and less than `max_tokens`」「Thinking tokens count toward your `max_tokens` limit」
   - 2026-11-26: `thinking` のスキーマは、自動取得の要約でしか読めなかった。`ThinkingConfigAdaptive` と `ThinkingConfigEnabled` の `type` は必須。`display` は `summarized` か `omitted` で「The default depends on the model」
+  - 2026-11-28: 「`max_tokens: number`」「The maximum number of tokens to generate before stopping.」「minimum: 0」「Different models have different maximum values for this parameter.」。`max_tokens` に「optional」の印がない（`stop_sequences` などには「optional」と付いている）。上限を超えたときの扱いと、ストリーミングなしの長いリクエストの扱いは、読めた範囲には書かれていなかった（ページが長く、前の 8 万字ほどしか原文で読めていない）
 - [Versioning](https://platform.claude.com/docs/en/api/versioning)
   - 2026-11-20: 版は `2026-10-21`・`2023-06-01`・`2023-01-01`。「Anthropic recommends using the latest API version whenever possible」。`2026-10-21` では「The `temperature`, `top_p`, and `top_k` request parameters are removed. A request that sends any of them returns a 400 error on every model」
   - 2026-11-21: 提供を終える日は書かれていない。「if you are using the API as documented in this reference, Anthropic will not break your usage」
@@ -254,8 +277,17 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 - [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview)
   - 2026-11-17: Claude API ID に `claude-sonnet-5-5` と `claude-haiku-5-5` がある（U13）
   - 2026-11-21: Models API の `capabilities.thinking.types.disabled.supported` は「`false` when the model rejects `"disabled"` with a 400 error」
+  - 2026-11-28: 「All models」の表の Max output（上の「出力の上限」）。脚注「Max output: Synchronous Messages API limit. On the Message Batches API, Claude Opus 5.5, Claude Opus 5, Claude Sonnet 5.5, Claude Sonnet 5, Claude Haiku 5.5, Claude Opus 4.8, Claude Opus 4.7, Claude Opus 4.6, and Claude Sonnet 4.6 support up to 300k output tokens with the output-300k-2026-03-24 beta header.」。Haiku 3.5 は表にない
+- [Get a Model](https://platform.claude.com/docs/en/api/models/retrieve)
+  - 2026-11-28: トップレベルの `max_tokens` は「Maximum value for the `max_tokens` parameter when using this model.」、`max_input_tokens` は「Maximum input context window size in tokens for this model.」。どちらも `number or null`。例の値は 0 で、実際の値ではない。Batches の 300K を含むかは書かれていない
+- [Context windows](https://platform.claude.com/docs/en/build-with-claude/context-windows)
+  - 2026-11-28: 「If the input alone already exceeds the model's context window, the API returns a 400 `invalid_request_error` ("prompt is too long") on every model.」「On Claude 4.5 models and newer, if input tokens plus `max_tokens` exceeds the context window size, the API accepts the request. If generation then reaches the context window limit, it stops with `stop_reason: "model_context_window_exceeded"`. On earlier models, the API returns a validation error instead.」「Thinking tokens are a subset of your `max_tokens` parameter, are billed as output tokens, and count toward rate limits.」「A single Messages API request to a model with a 1M-token context window can generate up to 128k output tokens (`max_tokens`).」
+- [Rate limits](https://platform.claude.com/docs/en/api/rate-limits)
+  - 2026-11-28: 「OTPM rate limits are evaluated in real time as output tokens are produced, counting only the actual tokens generated. The `max_tokens` parameter does not factor into OTPM rate limit calculations, so there is no rate limit downside to setting a higher `max_tokens` value.」
 - [Errors](https://platform.claude.com/docs/en/api/errors) の「Forced tool use not supported」
   - 2026-11-16: ツールの強制のエラーの文言と、`auto` と `none` は受け付けること
+- [Errors](https://platform.claude.com/docs/en/api/errors) の「Long requests」
+  - 2026-11-28: 「Consider using the streaming Messages API or Message Batches API for long-running requests, especially those over 10 minutes.」「Avoid setting a large `max_tokens` value without using the streaming Messages API or Message Batches API」「Some networks might drop idle connections after a variable period of time」「The Anthropic SDK validates that your non-streaming Messages API requests are not expected to exceed a 10-minute timeout.」。504 の項に「The API also returns `timeout_error` with other status codes, such as a 500 when a request reaches the server's time limit before the response starts.」
 - [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) の FAQ「How do I calculate total input tokens from the usage fields?」
   - 2026-11-17: 「`input_tokens` does NOT represent all input tokens, only the portion after your last cache breakpoint」「total_input_tokens = cache_read_input_tokens + cache_creation_input_tokens + input_tokens」（U14）
 
@@ -267,6 +299,7 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
   - 2026-11-17: 「`none` prevents Claude from using any tools」。ツールの強制を受け付けないモデルでも「`tool_choice: {"type": "auto"}` (the default) and `tool_choice: {"type": "none"}` still work」（U9）
 - [Streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
   - 2026-11-15: イベントの流れの最後は「A final `message_stop` event」
+  - 2026-11-28: 「This is especially useful for requests with large `max_tokens` values, where the SDK requires streaming to avoid HTTP timeouts.」。例は `max_tokens` 128000 をストリーミングで送っている。ストリーミングが必須とは書かれていない
 - [Streaming Messages](https://docs.anthropic.com/en/api/messages-streaming)（日付の記録なし）
 - [OpenAI SDK compatibility](https://docs.anthropic.com/en/api/openai-sdk)（日付の記録なし）
 
@@ -304,4 +337,4 @@ preserved thinking に対応するモデル（Fable 5.2・Mythos 5.2・Fable 5.1
 
 ## 関連する未検証の前提
 
-U8、U9、U14、U19、U24、U25、U30、U33（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U8、U9、U14、U19、U24、U25、U30、U33、U36、U37（[実 API 検証](../exec-plans/active/real-api-verification.md)）

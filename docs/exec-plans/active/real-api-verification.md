@@ -13,6 +13,7 @@
 | U23〜U27 | 推論の強さと Anthropic の API の版（同上） |
 | U28〜U31 | ファイルの入力（同上） |
 | U32〜U35 | 推論の要約（[推論の要約](../completed/2026-11-26-reasoning-summary.md)） |
+| U36〜U37 | Anthropic の `max_tokens` の既定（[載せ替えの負担を減らす](model-switch-friction.md)） |
 
 ## 手順
 
@@ -230,6 +231,16 @@ ID はほかの文書から参照しているので変えない。「文書で�
 
 - 実装: 何も足さずに送り、返った `reasoning_content` か `reasoning` を `Response.thinking` に入れる
 - 不確実な理由: 互換 API が推論のテキストを返すか、返すならどのフィールドかが、どちらの文書にも書いていない
+
+### U36 Anthropic: モデルの上限を超える `max_tokens`
+
+- 実装: `max_tokens=` の値を確かめずに送る。省いたときの 64000 は、提供中のモデルすべての上限（64K〜128K）に収まる（[判断](../../design-docs/anthropic-max-tokens.md)）
+- 不確実な理由: 上限を超える値を送ったときに、400 になるか、切り詰めて受け付けるかが、どの文書にも書いていない。上限が 64000 より小さいモデル（提供を終えた Opus 4.1・Opus 4）で省いたときの動きもこれで決まる（E2E の `test_max_tokens_above_model_limit`）
+
+### U37 Anthropic: ストリーミングなしで `max_tokens` 64000 を送る
+
+- 実装: `max_tokens` を省いたら、`chat()`（ストリーミングなし）でも 64000 を送る
+- 不確実な理由: 公式 SDK は、ストリーミングなしで 10 分を超えそうなリクエストを送る前に止める（`max_tokens` から見積もる）。API の側が送る前に断るとは書かれていないが、確かめていない（E2E の `test_max_tokens_omitted`）
 
 ## 進捗ログ
 

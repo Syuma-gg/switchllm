@@ -14,7 +14,9 @@ from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_too
 ANTHROPIC_VERSION = "2026-10-21"
 # この版から temperature・top_p・top_k が、どのモデルでも 400 になる（docs/design-docs/anthropic-api-version.md）
 NO_SAMPLING_VERSION = "2026-10-21"
-DEFAULT_MAX_TOKENS = 4096  # Anthropic は max_tokens が必須
+# Anthropic は max_tokens が必須。省かれたら、提供中のモデルすべての出力の上限（64K〜128K）に収まる値を送る。
+# ほかの社は上限を送らずにモデルの上限まで出すので、それに近づける（docs/design-docs/anthropic-max-tokens.md）
+DEFAULT_MAX_TOKENS = 64000
 
 _STOP = {
     "end_turn": "end",

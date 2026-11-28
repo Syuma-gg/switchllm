@@ -143,7 +143,7 @@
 | `stream_usage` | `openai_chat` | `False` にすると、ストリーミングで `stream_options.include_usage` を送らない（既定 `True`、U10） |
 | `json_schema` | `openai_chat` | `False` にすると、`response_schema=` を送る前に `UnsupportedFeatureError` にする。JSON Schema を受け付けない接続先のため（既定 `True`、`deepseek` のプリセットは `False`） |
 | `file_input` | `openai_chat` | `False` にすると、`FilePart` を送る前に `UnsupportedFeatureError` にする。ファイルを受け付けない接続先のため（既定 `True`、`deepseek`・`ollama`・`lmstudio` のプリセットは `False`。[判断](../design-docs/file-input.md)） |
-| `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 4096。Anthropic は必須） |
+| `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 64000。Anthropic は必須。[判断](../design-docs/anthropic-max-tokens.md)） |
 | `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2026-10-21`）。`2026-10-21` 以降の版では、`temperature=` を送る前に `UnsupportedFeatureError` にする（[判断](../design-docs/anthropic-api-version.md)） |
 | `beta` | `anthropic` | `anthropic-beta` ヘッダーにする名前のリスト |
 | `schema_field` | `gemini` | 関数スキーマを入れるフィールド。既定 `parameters`、`parametersJsonSchema` も選べる（U4） |

@@ -48,6 +48,8 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | `test_system_prompt` | system がモデルに届く（各社で入れる場所が違う） | | 1 | |
 | `test_hand_written_history` | 手で作った assistant メッセージ（生データなし）を、共通型から変換して送れる | | 1 | U2 |
 | `test_max_tokens_lower_boundary` | `max_tokens=16` で `stop_reason` が `max_tokens` になる。16 は OpenAI の `max_output_tokens` の下限 | ○ | 1 | |
+| `test_max_tokens_omitted` | `max_tokens` を省いても答え、`stop_reason` が `end`。Anthropic には既定の 64000 をストリーミングなしで送る | | 1 | U37 |
+| `test_max_tokens_above_model_limit`（Anthropic だけ） | どのモデルの出力の上限も超える 200000 を送り、400 になるか、受け付けるかを記録する | ○ | 1 | U36 |
 | `test_stop_sequence` | `stop` で止まり、`stop_reason` が `end`。OpenAI Responses は送る前に `UnsupportedFeatureError`（呼ばない） | | 1 | |
 | `test_temperature_zero` | `temperature=0`（下限）を送る。thinking が既定で有効なモデルは拒否することがあり、そのときは API のエラーをそのまま返す。Anthropic は既定の版（`2026-10-21`）で送る前に `UnsupportedFeatureError`（呼ばない） | ○ | 1 | |
 | `test_empty_user_message` | 空の入力。応答か API のエラーのどちらかで、ほかの例外（パースの失敗など）にならない | ○ | 1 | |

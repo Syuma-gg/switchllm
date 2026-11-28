@@ -20,7 +20,7 @@ def test_request_shape(api):
     assert req.headers["anthropic-version"] == "2026-10-21"  # 最新の版（docs/design-docs/anthropic-api-version.md）
     body = api.body()
     assert body["system"] == "A\n\nB"  # 複数の system はトップレベルに集約
-    assert body["max_tokens"] == 4096  # 必須なので既定値を入れる
+    assert body["max_tokens"] == 64000  # 必須なので既定値を入れる（下の test_default_max_tokens_fits_current_models）
     assert body["messages"] == [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
     assert body["tools"] == [{"name": "get_weather", "description": "現在の天気を返す", "input_schema": WEATHER_TOOL["parameters"]}]
     assert body["tool_choice"] == {"type": "any"}
@@ -158,6 +158,29 @@ def test_stream_with_truncated_tool_json_keeps_raw_arguments(api):
     assert res.stop_reason == "tool_use"  # ツール呼び出しがあれば常に tool_use（public-api.md）
     # 同じモデルへ送り返すときの生データは、API が受け付ける形（input はオブジェクト）
     assert res.message.provider_state.raw[0]["input"] == {}
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_default_max_tokens_fits_current_models(api, stream):
+    # max_tokens を省いたときは、提供中のモデルすべての出力の上限（64K〜128K）に収まる 64000 を送る。
+    # thinking も max_tokens に含まれるので、4096 では考える問いが答える前に切れた。ほかの社は上限を送らず、
+    # モデルの上限まで出すので、それに近づける（docs/design-docs/anthropic-max-tokens.md）
+    client = api.client("anthropic:claude-sonnet-5-5")
+    if stream:
+        api.reply_sse(
+            [
+                ("message_start", {"type": "message_start", "message": {"id": "msg_1", "model": "claude-sonnet-5-5", "content": [], "usage": {"input_tokens": 1, "output_tokens": 1}}}),
+                ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}}),
+                ("message_stop", {"type": "message_stop"}),
+            ]
+        )
+        list(client.stream("hi"))
+    else:
+        api.reply_json({"content": [], "stop_reason": "end_turn", "usage": {}})
+        client.chat("hi")
+    body = api.body()
+    assert body["max_tokens"] == 64000
+    assert body.get("stream", False) is stream
 
 
 def test_options_change_headers_and_default_max_tokens(api):

@@ -302,7 +302,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 - 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`reasoning_summary=True` を渡すと頼める（上の「推論の要約」）。頼んでも、返すかはモデルが決める
 - Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否するので、`temperature=` は送る前に `UnsupportedFeatureError`。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-api-version.md)）
 - 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）
-- Anthropic は max_tokens が必須なので、指定しないと 4096 で送る（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないため、長い出力では Anthropic だけ `stop_reason="max_tokens"` で切れることがある
+- Anthropic は max_tokens が必須なので、指定しないと 64000 で送る。今の Claude のモデルはどれもこの値を受け付け、Claude 5 系は推論の分もここに含める（`Client(..., default_max_tokens=...)` で変えられる）。ほかのプロバイダーは指定しなければ上限を送らないので、モデルの上限まで出す（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/anthropic-max-tokens.md)）
 - OpenAI Responses には `stop` シーケンスが存在しないため、指定すると `UnsupportedFeatureError`
 - Responses API は既定でレスポンスを保存する。`extra={"store": False}` にしても、reasoning アイテムには既定で `encrypted_content` が付くので、`include` なしで再送できる（実 API では未確認）
 - Gemini の関数スキーマは `parameters`（OpenAPI のサブセット）で送る。複雑な JSON Schema を使うなら `Client(..., schema_field="parametersJsonSchema")`

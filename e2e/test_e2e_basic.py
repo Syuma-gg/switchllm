@@ -52,6 +52,33 @@ def test_max_tokens_lower_boundary(client, note):
     note(f"本文 {len(res.text)} 文字、output_tokens={res.usage.output_tokens}")
 
 
+@pytest.mark.premise("U37")
+@pytest.mark.calls(1)
+def test_max_tokens_omitted(client, note):
+    # max_tokens を省いても答える。ほかの社には上限を送らない。Anthropic は必須なので 64000 を、
+    # ストリーミングなしで送る（公式 SDK はこの大きさなら送る前に止めるが、API が断るとは書かれていない）
+    res = client.chat("「ok」とだけ返して")
+    assert res.text.strip(), f"empty text (stop_reason={res.stop_reason})"
+    assert res.stop_reason == "end"
+    note(f"output_tokens={res.usage.output_tokens}")
+
+
+@pytest.mark.only("anthropic")
+@pytest.mark.premise("U36")
+@pytest.mark.calls(1)
+def test_max_tokens_above_model_limit(client, note):
+    # どのモデルの出力の上限（128K まで）も超える値。ライブラリは先回りして弾かない。
+    # API が 400 にするか、切り詰めて受け付けるかを記録する（文書に書かれていない）
+    try:
+        res = client.chat("「ok」とだけ返して", max_tokens=200_000)
+    except BadRequestError as e:
+        assert e.status_code == 400 and e.message
+        note(f"API が拒否した: {e.message[:160]}")
+        return
+    assert res.text.strip(), f"empty text (stop_reason={res.stop_reason})"
+    note(f"受け付けた: stop_reason={res.stop_reason}")
+
+
 @pytest.mark.calls(1)
 def test_stop_sequence(client, adapter, note):
     prompt = "1から9まで、数字をカンマ区切りで1行に書いて。ほかには何も書かないで。"
