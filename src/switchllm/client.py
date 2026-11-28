@@ -20,7 +20,7 @@ import httpx
 
 from ._http import RetryPolicy, arequest_json, astream_sse, request_json, stream_sse
 from .errors import ConfigurationError, UnsupportedFeatureError
-from .providers import PRESETS, create_provider
+from .providers import ADAPTERS, PRESETS, create_provider
 from .providers.base import (
     REASONING_EFFORTS,
     ChatRequest,
@@ -37,8 +37,13 @@ MODEL_ENV = "SWITCHLLM_MODEL"
 MessagesLike = Union[str, Message, dict, Sequence[Union[Message, dict]]]
 
 # with_model() で別のプロバイダーへ引き継ぐ設定。api_key / base_url / プロバイダー別のオプション
-# （headers= など）は、キーや認証ヘッダーを別のサーバーへ送らないよう、同じプロバイダーのときだけ引き継ぐ
+# （headers= など）は、キーや認証ヘッダーを別のサーバーへ送らないよう、同じプロバイダーのときだけ引き継ぐ。
+# options_by_provider= は接続先ごとに分けて書いてあり、切り替え先の分しか使わないので引き継ぐ
 _TRANSPORT_SETTINGS = ("timeout", "max_retries", "retry_backoff")
+_CARRIED_TO_OTHER_PROVIDERS = (*_TRANSPORT_SETTINGS, "options_by_provider")
+
+# 選んだ接続先が知らないオプションを渡されたときに、書き分ける方法を案内する
+_OPTIONS_HINT = "To pass an option only to some providers, use options_by_provider={'<provider>': {...}}"
 
 
 def parse_model(model: str) -> tuple[str, str]:
@@ -131,6 +136,34 @@ def _pick_extra(
     return deep_merge(extra or {}, chosen)
 
 
+def _pick_options(key: str, options: dict[str, Any], options_by_provider: Any) -> dict[str, Any]:
+    """``Client(..., **options)`` に、選んだ接続先の ``options_by_provider`` の分を重ねる（接続先の分が優先）。
+
+    選ばれなかった接続先の分も、オプション名と中身を検査する。打ち間違いに、その接続先へ載せ替えてから
+    気づかないようにするため（docs/design-docs/provider-specific-params.md）。"""
+    if options_by_provider is None:
+        options_by_provider = {}
+    if not isinstance(options_by_provider, dict):
+        raise TypeError(f"options_by_provider must be a dict of provider name to options, got {type(options_by_provider).__name__}")
+    chosen: dict[str, Any] = {}
+    for name, value in options_by_provider.items():
+        name_key = str(name).strip().lower()
+        preset = PRESETS.get(name_key)
+        if preset is None:
+            raise ConfigurationError(
+                f"options_by_provider has unknown provider {name!r}. Known: {', '.join(sorted(PRESETS))}"
+            )
+        if not isinstance(value, dict):
+            raise TypeError(f"options_by_provider[{name!r}] must be a dict, got {value!r}")
+        ADAPTERS[preset.adapter].check_options(name_key, value)
+        if name_key == key:
+            chosen = value
+    preset = PRESETS.get(key)
+    if preset is not None:  # 知らない接続先なら、create_provider() が知らせる
+        ADAPTERS[preset.adapter].check_options(key, options, hint=_OPTIONS_HINT)
+    return deep_merge(options, chosen)
+
+
 def _check_tool_choice(tool_choice: Any, tools: list[Tool]) -> None:
     """送る前に分かる tool_choice の誤りを ConfigurationError にする（API に送って料金を払う前に）。"""
     if tool_choice is None:
@@ -218,6 +251,7 @@ class _BaseClient:
         max_retries: int,
         retry_backoff: float,
         http_client: Any,
+        options_by_provider: Any,
         provider_options: dict[str, Any],
     ) -> None:
         if http_client is not None and not isinstance(http_client, self._http_type):
@@ -230,15 +264,14 @@ class _BaseClient:
         if not model:
             raise ConfigurationError(f"pass a model like 'openai:gpt-5.5' or set ${MODEL_ENV}")
         key, name = parse_model(model)
-        self.provider: Provider = create_provider(
-            key, name, api_key=api_key, base_url=base_url, options=provider_options
-        )
+        options = _pick_options(key, provider_options, options_by_provider)
+        self.provider: Provider = create_provider(key, name, api_key=api_key, base_url=base_url, options=options)
         self._owns_http = http_client is None
         self._http = http_client or self._http_type(timeout=httpx.Timeout(timeout, connect=10.0))
         self.retry = RetryPolicy(max_retries=max_retries, backoff=retry_backoff, sleep=self._retry_sleep)
         self._init_kwargs: dict[str, Any] = dict(
             api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
-            retry_backoff=retry_backoff, **provider_options,
+            retry_backoff=retry_backoff, options_by_provider=options_by_provider, **provider_options,
         )
 
     # ------------------------------------------------------------------ #
@@ -251,7 +284,7 @@ class _BaseClient:
         if key == self.provider.key:
             kw = dict(self._init_kwargs)
         else:
-            kw = {k: self._init_kwargs[k] for k in _TRANSPORT_SETTINGS}
+            kw = {k: self._init_kwargs[k] for k in _CARRIED_TO_OTHER_PROVIDERS}
         kw.update(overrides)
         return kw
 
@@ -313,11 +346,13 @@ class Client(_BaseClient):
         max_retries: int = 2,
         retry_backoff: float = 0.5,
         http_client: httpx.Client | None = None,
+        options_by_provider: dict[str, dict[str, Any]] | None = None,
         **provider_options: Any,
     ) -> None:
         self._setup(
             model, api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
-            retry_backoff=retry_backoff, http_client=http_client, provider_options=provider_options,
+            retry_backoff=retry_backoff, http_client=http_client, options_by_provider=options_by_provider,
+            provider_options=provider_options,
         )
 
     def with_model(self, model: str, **overrides: Any) -> Client:
@@ -325,7 +360,8 @@ class Client(_BaseClient):
 
         同じプロバイダー（``anthropic:a`` → ``anthropic:b``）なら、api_key / base_url /
         プロバイダー別のオプションも引き継ぐ。別のプロバイダーへは timeout / max_retries /
-        retry_backoff だけを引き継ぐ（キーや ``headers=`` の認証情報を別のサーバーへ送らないため）。
+        retry_backoff と ``options_by_provider`` だけを引き継ぐ（キーや ``headers=`` の認証情報を別のサーバーへ
+        送らないため。``options_by_provider`` は切り替え先の分しか使わない）。
         ``overrides`` はどちらの場合も最後に上書きする。"""
         return Client(model, http_client=self._http, **self._with_model_kwargs(model, overrides))
 
@@ -435,11 +471,13 @@ class AsyncClient(_BaseClient):
         max_retries: int = 2,
         retry_backoff: float = 0.5,
         http_client: httpx.AsyncClient | None = None,
+        options_by_provider: dict[str, dict[str, Any]] | None = None,
         **provider_options: Any,
     ) -> None:
         self._setup(
             model, api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries,
-            retry_backoff=retry_backoff, http_client=http_client, provider_options=provider_options,
+            retry_backoff=retry_backoff, http_client=http_client, options_by_provider=options_by_provider,
+            provider_options=provider_options,
         )
 
     def with_model(self, model: str, **overrides: Any) -> AsyncClient:

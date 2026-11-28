@@ -204,6 +204,23 @@ def test_with_model_other_provider_does_not_carry_key_or_headers(api):
     assert other.retry.max_retries == 0  # 通信の設定は引き継ぐ
 
 
+def test_with_model_carries_options_by_provider_to_other_provider(api):
+    # options_by_provider= は接続先ごとに分けて書いてあるので、別の接続先へも引き継ぐ。切り替え先の分だけが使われ、
+    # 元の接続先の headers= などは送らない
+    api.reply_json({"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]})
+    api.reply_json(OK)
+    client = api.client(
+        "anthropic:claude-sonnet-5-5", headers={"X-Secret": "s3cret"}, options_by_provider=OPTIONS_BY_PROVIDER
+    )
+    other = client.with_model("ollama:llama3.2")
+    other.chat("hi", max_tokens=5)
+    other.with_model("anthropic:claude-haiku-5-5", api_key="test-key").chat("hi")  # 戻ってきても使える
+    ollama, claude = api.body(0), api.body(1)
+    assert ollama["max_completion_tokens"] == 5
+    assert "x-secret" not in api.requests[0].headers
+    assert claude["max_tokens"] == 1234 and claude["model"] == "claude-haiku-5-5"
+
+
 def test_with_model_overrides_win(api):
     api.reply_json({"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]})
     client = api.client("anthropic:claude-sonnet-5-5")
@@ -225,6 +242,67 @@ def test_with_model_overrides_win(api):
 def test_unknown_option_is_rejected(model, options):
     with pytest.raises(ConfigurationError, match="unknown option"):
         Client(model, api_key="k", **options)
+
+
+def test_unknown_option_error_points_to_options_by_provider():
+    # 別の接続先のオプションを付けたまま載せ替えた人に、書き分ける方法を案内する
+    with pytest.raises(ConfigurationError, match="options_by_provider="):
+        Client("anthropic:claude-sonnet-5-5", api_key="k", schema_field="parametersJsonSchema")
+
+
+# options_by_provider= の例。設定でモデルを載せ替えても、Client を作るコードは変わらない
+OPTIONS_BY_PROVIDER = {
+    "anthropic": {"default_max_tokens": 1234},
+    "gemini": {"schema_field": "parametersJsonSchema"},
+    "ollama": {"max_tokens_field": "max_completion_tokens"},
+}
+
+
+def test_options_by_provider_uses_only_the_chosen_providers_part(api):
+    # 以前は、どの接続先のオプションも、ほかの接続先の Client では ConfigurationError だった
+    api.reply_json(OK)
+    api.reply_json({"candidates": [{"content": {"parts": [{"text": "ok"}]}, "finishReason": "STOP"}]})
+    api.reply_json({"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]})
+    api.reply_json({"output": [], "status": "completed"})
+    api.client("anthropic:claude-sonnet-5-5", options_by_provider=OPTIONS_BY_PROVIDER).chat("hi")
+    api.client("gemini:gemini-flash-latest", options_by_provider=OPTIONS_BY_PROVIDER).chat("hi", tools=[WEATHER_TOOL])
+    api.client("ollama:llama3.2", options_by_provider=OPTIONS_BY_PROVIDER).chat("hi", max_tokens=5)
+    api.client("openai:gpt-5.5", options_by_provider=OPTIONS_BY_PROVIDER).chat("hi")  # 自分の分がない接続先
+    claude, gemini, ollama, openai = (api.body(i) for i in range(4))
+    assert claude["max_tokens"] == 1234
+    assert gemini["tools"][0]["functionDeclarations"][0]["parametersJsonSchema"] == WEATHER_TOOL["parameters"]
+    assert ollama["max_completion_tokens"] == 5 and "max_tokens" not in ollama
+    assert openai["model"] == "gpt-5.5"
+
+
+def test_options_by_provider_wins_over_options_and_merges_headers(api):
+    # extra_by_provider= と同じく、選んだ接続先の分を深くマージし、同じ名前はこちらが優先
+    api.reply_json(OK)
+    api.client(
+        "Anthropic:claude-sonnet-5-5",
+        default_max_tokens=100,
+        headers={"X-Team": "a"},
+        options_by_provider={"ANTHROPIC": {"default_max_tokens": 200, "headers": {"X-Env": "prod"}}},  # 大文字小文字を区別しない
+    ).chat("hi")
+    assert api.body()["max_tokens"] == 200
+    assert api.requests[0].headers["x-team"] == "a" and api.requests[0].headers["x-env"] == "prod"
+
+
+@pytest.mark.parametrize(
+    ("options_by_provider", "error", "message"),
+    [
+        ({"anthropic": {"default_max_token": 1}}, ConfigurationError, "unknown option.*'anthropic'.*default_max_token"),  # 選ばれなかった接続先の打ち間違い
+        ({"gemini": {"beta": ["b"]}}, ConfigurationError, "unknown option.*'gemini'.*beta"),  # 別の接続先のオプション
+        ({"anthropic": {"headers": {"x-api-key": 1}}}, TypeError, "headers must be"),  # 中身の型も検査する
+        ({"antropic": {}}, ConfigurationError, "unknown provider 'antropic'"),
+        ({"anthropic": 32000}, TypeError, r"options_by_provider\['anthropic'\] must be a dict"),
+        ([("anthropic", {})], TypeError, "options_by_provider must be a dict"),
+    ],
+)
+def test_options_by_provider_checks_every_entry(options_by_provider, error, message):
+    # 選ばれなかった接続先の分も、Client を作るときに検査する。本番で載せ替えてから気づかないように
+    with pytest.raises(error, match=message):
+        Client("openai:gpt-5.5", api_key="k", options_by_provider=options_by_provider)
 
 
 def test_register_provider_rejects_unknown_option():

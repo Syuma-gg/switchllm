@@ -18,7 +18,7 @@
 | [プリセットは base_url を確認したものだけ](verified-presets.md) | 採用（2026-11-09） | 公式ドキュメントで確認 |
 | [公開 API を最小にする](minimal-public-api.md) | 採用（2026-11-09） | — |
 | [品質検査をハーネスで回し、数字のために品質を落とさない](quality-gate-harness.md) | 採用（2026-11-14）、テンプレート化（2026-11-15） | — |
-| [プロバイダー固有の指定は、各社の分を並べて渡す](provider-specific-params.md) | 採用（2026-11-15） | — |
+| [プロバイダー固有の指定は、各社の分を並べて渡す](provider-specific-params.md) | 採用（2026-11-15）、`Client(...)` のオプションに広げた（2026-11-28） | — |
 | [構造化出力は response_schema= で JSON Schema を受け取る](structured-output.md) | 採用（2026-11-20） | 一次情報で確認、実 API 未検証 |
 | [推論の強さは reasoning_effort= で段階の名前を受け取る](reasoning-effort.md) | 採用（2026-11-21） | 一次情報で確認、実 API 未検証 |
 | [推論の要約は reasoning_summary=True で頼む](reasoning-summary.md) | 採用（2026-11-26） | 一次情報で確認、実 API 未検証 |

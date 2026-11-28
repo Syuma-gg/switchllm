@@ -180,14 +180,15 @@ class Provider(ABC):
     resend_across_models: bool = False
 
     @classmethod
-    def check_options(cls, key: str, options: dict[str, Any]) -> None:
+    def check_options(cls, key: str, options: dict[str, Any], *, hint: str = "") -> None:
         """知らないオプション名を ConfigurationError にする。打ち間違いや、
-        別のアダプター用のオプションを黙って無視しないため。"""
+        別のアダプター用のオプションを黙って無視しないため。``hint`` はメッセージの最後に足す案内。"""
         accepted = cls.option_names | COMMON_OPTIONS
         unknown = sorted(set(options) - accepted)
         if unknown:
             raise ConfigurationError(
                 f"unknown option(s) for {key!r}: {', '.join(unknown)}. Options for this provider: {', '.join(sorted(accepted))}"
+                + (f". {hint}" if hint else "")
             )
         if "headers" in options:
             cls._check_headers(options["headers"])

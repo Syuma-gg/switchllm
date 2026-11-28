@@ -125,16 +125,17 @@
 |---|---|
 | `chat(extra=...)` / `stream(extra=...)` | どのプロバイダーにも、リクエスト本体にそのままマージする |
 | `chat(extra_by_provider=...)` / `stream(extra_by_provider=...)` | `{"anthropic": {...}, "openai": {...}}` の形。モデル文字列の `provider:` 部分と同じ名前の分だけを `extra` に深くマージする（同じキーはこちらが優先）。知らない名前は `ConfigurationError` |
+| `Client(options_by_provider=...)` / `AsyncClient(options_by_provider=...)` | `{"anthropic": {...}, "gemini": {...}}` の形。下の「プロバイダー別のオプション」を、接続先ごとに並べて書く。モデル文字列の `provider:` 部分と同じ名前の分だけを `**options` に深くマージする（同じ名前はこちらが優先）。選ばれなかった分も、`Client` を作るときにオプション名と中身を検査する。知らない名前は `ConfigurationError`、値が dict でなければ `TypeError` |
 | `Client.with_model(model, **overrides)` | 接続を共有したまま、別モデルのクライアントを作る。`AsyncClient.with_model()` も同じで、`AsyncClient` を返す |
 
 `with_model()` が引き継ぐもの:
 
 - 同じプロバイダーなら、api_key / base_url / オプション
-- 別のプロバイダーへは、timeout / max_retries / retry_backoff だけ
+- 別のプロバイダーへは、timeout / max_retries / retry_backoff と `options_by_provider`（切り替え先の分しか使わない）だけ
 
 ### プロバイダー別のオプション
 
-`Client(..., **options)`・`AsyncClient(..., **options)` と `register_provider(..., **options)` で渡す。アダプターごとに下の名前だけを受け付け、それ以外は `ConfigurationError` にする。
+`Client(..., **options)`・`AsyncClient(..., **options)` と `register_provider(..., **options)` で渡す。アダプターごとに下の名前だけを受け付け、それ以外は `ConfigurationError` にする。接続先によって違うオプションを1つのコードで渡すときは、`options_by_provider=` に並べる。
 
 <!-- options:start -->
 | 名前 | アダプター | 意味 |

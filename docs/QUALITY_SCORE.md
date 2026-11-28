@@ -32,7 +32,7 @@
 
 | 領域 | 評価 | テスト | まだ確かめていないこと |
 |---|---|---|---|
-| Client、モデル文字列、APIキー、オプション、`headers=` | B | `tests/test_client.py`、`tests/test_consistency.py` | 実 API（E2E の `test_e2e_headers.py`） |
+| Client、モデル文字列、APIキー、オプション、`options_by_provider=`、`headers=` | B | `tests/test_client.py`（`options_by_provider=` のテストは、実装にわざと入れた誤り 10 通りを、どれも見つけた。2026-11-28）、`tests/test_consistency.py` | 実 API（E2E の `test_e2e_headers.py`） |
 | リトライ、例外 | B | `tests/test_http.py` | 実際の 429 / 5xx / 切断での挙動 |
 | プロバイダーの切り替え | B | `tests/test_cross_provider.py`、`tests/test_consistency.py`、`tests/test_client.py` | 実 API（U5、U8、U16、U17） |
 | 共通型 | B | `tests/test_types.py` | — |

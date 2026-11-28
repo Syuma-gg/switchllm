@@ -233,7 +233,16 @@ client.chat("...", extra_by_provider={
 
 `extra=` merges the same thing into the request body for every provider. If you give both, the `extra_by_provider` part wins.
 
-`client.with_model("anthropic:claude-haiku-5-5")` creates a client for another model that shares the connection (useful for fallbacks and comparisons). For the same provider it keeps `api_key` / `base_url` / options; for a different provider it does not, so keys and auth headers are never sent to another server.
+Client options that only one provider understands (such as Anthropic's `default_max_tokens`) go side by side in `options_by_provider=`, in the same shape. Only the chosen provider's part is used, so the same code works when the model string comes from configuration. Every part is checked when the client is created, so a typo shows up before you switch to that provider.
+
+```python
+client = Client(options_by_provider={   # the model comes from $SWITCHLLM_MODEL
+    "anthropic": {"default_max_tokens": 32000},
+    "gemini": {"schema_field": "parametersJsonSchema"},
+})
+```
+
+`client.with_model("anthropic:claude-haiku-5-5")` creates a client for another model that shares the connection (useful for fallbacks and comparisons). For the same provider it keeps `api_key` / `base_url` / options; for a different provider it keeps only `options_by_provider=` (each provider uses its own part), so keys and auth headers are never sent to another server.
 
 `headers=` adds HTTP headers to every request, for every provider (for example, for a gateway in front of the APIs).
 

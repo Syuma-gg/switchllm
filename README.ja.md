@@ -233,7 +233,16 @@ client.chat("...", extra_by_provider={
 
 `extra=` は、どのプロバイダーにも同じものをリクエスト本体にそのままマージする。両方を指定すると、`extra_by_provider` の分が優先される。
 
-`client.with_model("anthropic:claude-haiku-5-5")` で、接続を共有したまま別のモデルのクライアントを作れる（フォールバックや比較に使う）。同じプロバイダーなら `api_key` / `base_url` / オプションを引き継ぎ、別のプロバイダーへは引き継がない（キーや認証ヘッダーを別のサーバーへ送らないため）。
+1つの接続先だけが読む `Client` のオプション（Anthropic の `default_max_tokens` など）は、同じ形で `options_by_provider=` に並べる。使うのは選んだ接続先の分だけなので、モデル文字列を設定から読んでも同じコードで動く。どの接続先の分も `Client` を作るときに検査するので、打ち間違いには、その接続先へ切り替える前に気づける。
+
+```python
+client = Client(options_by_provider={   # モデルは $SWITCHLLM_MODEL から読む
+    "anthropic": {"default_max_tokens": 32000},
+    "gemini": {"schema_field": "parametersJsonSchema"},
+})
+```
+
+`client.with_model("anthropic:claude-haiku-5-5")` で、接続を共有したまま別のモデルのクライアントを作れる（フォールバックや比較に使う）。同じプロバイダーなら `api_key` / `base_url` / オプションを引き継ぎ、別のプロバイダーへは `options_by_provider=` だけを引き継ぐ（それぞれ自分の分だけを使う。キーや認証ヘッダーを別のサーバーへ送らないため）。
 
 `headers=` で、どのプロバイダーにも HTTP ヘッダーを足せる（API の前にゲートウェイを置くときなど）。
 
