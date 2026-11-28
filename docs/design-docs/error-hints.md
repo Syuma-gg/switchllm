@@ -4,11 +4,11 @@
 - 検証: 一次情報で確認（Anthropic の文言。ほかの社は形だけ）、実 API 未検証（U38）
 - コード: `providers/base.py`（`ERROR_HINTS`、`sent_arguments()`、`Provider.error_fields`、`Provider.error_hints()`）、各アダプターの `error_fields`、`client.py`（`_hint_rejected()`）
 - テスト: `tests/test_error_hints.py`、`e2e/test_e2e_tools.py`（`test_forced_tool_choice`）
-- 計画: [載せ替えの負担を減らす](../exec-plans/active/model-switch-friction.md) の 4
+- 計画: [載せ替えの負担を減らす](../exec-plans/completed/2026-11-28-model-switch-friction.md) の 4
 
 ## 背景
 
-- モデルによって受け付けない指定がある（[載せ替えの負担を減らす](../exec-plans/active/model-switch-friction.md) の 4）
+- モデルによって受け付けない指定がある（[載せ替えの負担を減らす](../exec-plans/completed/2026-11-28-model-switch-friction.md) の 4）
   - 強制する `tool_choice` を、Claude Opus 5.5・Sonnet 5.5 などと、DeepSeek の思考モードが 400 にする
   - gpt-5.5 は `reasoning_effort` の `max` と `minimal` を受け付けない。Claude Opus 5.5 は `none` を使えない
   - Anthropic 4.5 系は、`reasoning_summary=True` で送る adaptive thinking を 400 にする

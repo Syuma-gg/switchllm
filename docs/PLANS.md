@@ -21,7 +21,6 @@
 |---|---|
 | [実 API 検証](exec-plans/active/real-api-verification.md) | 未検証の前提を、実際の API で確かめる |
 | [v0.1 公開](exec-plans/active/v0.1-release.md) | PyPI に最初の版を公開する |
-| [載せ替えの負担を減らす](exec-plans/active/model-switch-friction.md) | モデルを載せ替えるとき、文字列のほかに直すコードを減らす（`max_tokens` の既定、`temperature`、`Client` のオプション、モデルごとの制限、各社にない機能、手引き） |
 
 ## 完了
 
@@ -32,3 +31,4 @@
 | [モデルの層の機能を足す](exec-plans/completed/2026-11-23-model-layer-features.md) | 2026-11-23 |
 | [推論の要約を返させる共通の指定](exec-plans/completed/2026-11-26-reasoning-summary.md) | 2026-11-26 |
 | [文書の整理](exec-plans/completed/2026-11-27-docs-refactor.md) | 2026-11-27 |
+| [載せ替えの負担を減らす](exec-plans/completed/2026-11-28-model-switch-friction.md) | 2026-11-28 |

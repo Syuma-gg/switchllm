@@ -25,7 +25,7 @@
 
 ### `Client(...)` のオプション（2026-11-28）
 
-背景: 知らないオプション名を `ConfigurationError` にしたので、`Client(..., default_max_tokens=...)` のような接続先ごとのオプションを付けたまま設定で載せ替えると、`Client` を作るところで落ちた。呼び出しの引数には `extra_by_provider=` があるが、`Client(...)` のオプションには、接続先ごとに書き分ける仕組みがなかった（[載せ替えの負担を減らす](../exec-plans/active/model-switch-friction.md) の 3）。
+背景: 知らないオプション名を `ConfigurationError` にしたので、`Client(..., default_max_tokens=...)` のような接続先ごとのオプションを付けたまま設定で載せ替えると、`Client` を作るところで落ちた。呼び出しの引数には `extra_by_provider=` があるが、`Client(...)` のオプションには、接続先ごとに書き分ける仕組みがなかった（[載せ替えの負担を減らす](../exec-plans/completed/2026-11-28-model-switch-friction.md) の 3）。
 
 - **`Client(...)` と `AsyncClient(...)` に `options_by_provider=` を足す**（作者の判断）
   - 形は `extra_by_provider=` と同じで、キーはモデル文字列の `provider:` 部分（大文字小文字を区別しない）

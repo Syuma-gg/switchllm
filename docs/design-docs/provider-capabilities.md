@@ -4,7 +4,7 @@
 - 検証: 一次情報で確認、実 API 未検証（U39）
 - コード: `providers/gemini.py`（`_url_media_type()`、`_user_parts`）、`providers/openai_chat.py`（`tool_choice`・`image_url` のオプション、`_reject_tool_choice()`）、`providers/__init__.py`（`ollama` のプリセット）
 - テスト: `tests/test_support_table.py`（対応表の全セル）、`tests/test_gemini.py`、`tests/test_openai_chat.py`、`e2e/test_e2e_images.py`（`test_image_url`）、`e2e/test_e2e_tools.py`
-- 計画: [載せ替えの負担を減らす](../exec-plans/active/model-switch-friction.md) の 5
+- 計画: [載せ替えの負担を減らす](../exec-plans/completed/2026-11-28-model-switch-friction.md) の 5
 
 ## 背景
 

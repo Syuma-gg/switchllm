@@ -4,13 +4,13 @@
 - 検証: 一次情報で確認、実 API 未検証（U25）
 - コード: `errors.py`（`DroppedParameterWarning`）、`providers/base.py`（`warn_dropped()`）、`providers/anthropic.py`（`build_request`）
 - テスト: `tests/test_anthropic.py`（`temperature` を含むテスト）、`e2e/test_e2e_basic.py`（`test_temperature_zero`）、`e2e/test_e2e_errors.py`（`test_temperature_above_range`）
-- 計画: [載せ替えの負担を減らす](../exec-plans/active/model-switch-friction.md) の 2
+- 計画: [載せ替えの負担を減らす](../exec-plans/completed/2026-11-28-model-switch-friction.md) の 2
 
 ## 背景
 
 - Anthropic の API の版 `2026-10-21`（switchllm の既定）では、`temperature` を送ると、どのモデルでも、既定の値でも 400 になる。古い版 `2023-06-01` でも、今の Claude（Claude 5 系と Opus 4.8・4.7）は既定でない値を 400 にする（[判断](anthropic-api-version.md)）
 - 2026-11-21 からは、送る前に `UnsupportedFeatureError` にしていた。そのため、`temperature=` を付けたコードは、Anthropic へ載せ替えたときだけ止まった
-- ほかの接続先は止まらない（[載せ替えの負担を減らす](../exec-plans/active/model-switch-friction.md) の 2）
+- ほかの接続先は止まらない（[載せ替えの負担を減らす](../exec-plans/completed/2026-11-28-model-switch-friction.md) の 2）
   - Gemini 3.6 以降と DeepSeek の思考モードは、API の側がエラーにせず黙って無視する
   - OpenAI などは、そのまま受け付ける
 - `temperature` は出力のばらつきを変えるだけで、指定が効かなくても、応答の形と正しさは変わらない。一方、`stop` や画像の URL を捨てると、応答の中身や、モデルに届く情報が変わる

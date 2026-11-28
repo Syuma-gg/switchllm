@@ -13,7 +13,7 @@
 | U23〜U27 | 推論の強さと Anthropic の API の版（同上） |
 | U28〜U31 | ファイルの入力（同上） |
 | U32〜U35 | 推論の要約（[推論の要約](../completed/2026-11-26-reasoning-summary.md)） |
-| U36〜U37 | Anthropic の `max_tokens` の既定（[載せ替えの負担を減らす](model-switch-friction.md)） |
+| U36〜U37 | Anthropic の `max_tokens` の既定（[載せ替えの負担を減らす](../completed/2026-11-28-model-switch-friction.md)） |
 | U38 | 断られたエラーの案内（同上） |
 | U39 | Gemini の URL の画像（同上） |
 

@@ -56,6 +56,8 @@ python examples/agent_loop.py
 
 モデル文字列は最初の `:` で区切るので、`ollama:llama3.2:3b` のようにモデル名にコロンを含んでもよい。
 
+ほとんどのコードは、ほかに直すところがない。接続先によって違う少しの引数と、載せ替えてもコードを直さずに済む書き方は、下の「コードを直さずにモデルを載せ替える」にある。
+
 ## 使い方
 
 ### テキスト・ストリーミング
@@ -114,7 +116,8 @@ def place_order(order: dict) -> str:
 - `tool_choice`: `"auto"`（既定）/ `"none"` / `"required"` / `{"name": "get_weather"}`
   - 指定しなければ送らない（各社とも既定は auto）
   - `tools` にない名前を指定すると、送る前に `ConfigurationError`
-  - `"required"` と名前の指定を受け付けないモデルもある（Anthropic の Opus 5.5・Sonnet 5.5 など）。そのときは API のエラーをそのまま `BadRequestError` で返し、黙って `"auto"` に替えることはしない
+  - `"required"` と名前の指定を受け付けないモデルもある（Anthropic の Opus 5.5・Sonnet 5.5 など）。そのときは API のエラーを `BadRequestError` で返し（エラーに `tool_choice` が出てくれば案内を付ける。下の「例外」）、黙って `"auto"` に替えることはしない
+  - Ollama には `tool_choice` がない。`"none"` と強制は送る前に `UnsupportedFeatureError` になり、`"auto"` は送らないだけ
 - 並列ツール呼び出しにも対応（Anthropic・Gemini では結果を1メッセージにまとめて送る）
 - `run_tool_calls` は、モデルが決めた引数で関数を実行する。危険な操作をする関数では引数を検証すること（[SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md)）
 
@@ -296,6 +299,23 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 ```
 
 登録せずに `Client("openai-chat:<model>", base_url="...", api_key="...")` と直接指定してもよい。`openai-chat` は、接続先が OpenAI 本家のときだけ max_tokens を `max_completion_tokens` として送り（OpenAI は `max_tokens` を非推奨にしている）、それ以外のサーバーには `max_tokens` で送る。
+
+## コードを直さずにモデルを載せ替える
+
+ほとんどのコードは、モデルの文字列を変えるだけでそのまま動く。ただし、接続先によって違う引数がいくつかあり、あるモデルが受け付ける指定を別のモデルが断ることもある。ライブラリはモデルの一覧を持たないので、送る前に止めるのは、その接続先のどのモデルにもないものだけで、ほかは API のエラーで返る。次のように書いておけば、載せ替えてもコードを直さずに済む。
+
+- **接続先ごとの指定は並べて書く。** 1つの接続先だけが読むリクエストの引数は `extra_by_provider=` に、`Client` のオプションは `options_by_provider=` に書く。使うのは選んだ接続先の分だけ。`extra=` と `**options` はどの接続先にも渡るので、どこでも受け付けるものだけにする
+- **`max_tokens` は省くか、推論の分を空けて指定する。** 省くと、各モデルの上限まで出す（必須の Anthropic には 64000 を送る）。長さや料金を抑えるために指定するなら、OpenAI・Gemini・Claude 5 系は推論のトークンもここに含めることを考えに入れる。上限で切れた答えは `stop_reason == "max_tokens"` で、本文がないこともある
+- **`temperature` と `stop` に頼らない。** `temperature` は、Anthropic では送らずに捨てて `DroppedParameterWarning` を出し、Gemini 3.6 以降と DeepSeek の思考モードはエラーにせずに無視する。`stop` は OpenAI Responses で `UnsupportedFeatureError` になる。長さや形はプロンプトで伝え（または `response_schema=` を使い）、切りたいところは受け取った本文を自分で切る
+- **画像は base64 で渡す。** `ImagePart.from_file()` と `ImagePart(data=..., media_type=...)` は、どのプリセットでも送れる。URL の画像は各社の API が取りに行き、Ollama は URL を受け付けない
+- **ファイルは PDF かテキストで送る。** PDF は `deepseek`・`ollama`・`lmstudio` のプリセットを除いて送れる。ほかのテキストのファイル（CSV など）は、読み込んだ文字を `TextPart` に入れれば、どこでも送れる
+- **`reasoning_effort` は `"low"`・`"medium"`・`"high"` を使う。** 推論するモデルの多くが受け付ける段階。`"none"`・`"minimal"`・`"xhigh"`・`"max"` は、接続先によってはなく（送る前に `UnsupportedFeatureError`）、モデルによってもない（`BadRequestError`）。Gemini 2.5 は段階を受け付けないので、`thinkingBudget` を `extra_by_provider=` に書く
+- **`tool_choice` は指定しない。** どこでも既定は `"auto"`。強制（`"required"` やツールの名前）は、Claude 5 系のいくつかのモデル、DeepSeek の思考モード、Ollama が断る。使ってほしいツールはプロンプトで頼み、ツールを呼ばせたくなければ `tools` を渡さない
+- **`res.thinking` は、ないこともあるものとして扱う。** `reasoning_summary=True` を渡しても、要約を返すかはモデルが決める。OpenAI に向けた `openai-chat:` では `UnsupportedFeatureError` になり、Claude 4.5 系は 400 で断る
+- **構造化出力では、すべてのプロパティを `required` に入れる。** 省ける項目は null も受け付ける形にする（OpenAI が求める）。DeepSeek には JSON Schema がないので、`response_schema=` は `UnsupportedFeatureError` になる（上の「構造化出力」）
+- **会話の途中の載せ替え**は、同じ `messages` のままでよい。生データは同じモデルにだけ送り返し（Anthropic はどの Claude のモデルにも送る）、ほかのモデルには履歴を変換し直して送る。載せ替え先が受け取れないもの（Ollama なら画像の URL や PDF など）が履歴にあると、送る前に `UnsupportedFeatureError` になる
+
+プリセットごとに送れるものと、送る前に止まるものは、[public-api.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/public-api.md) の表にある。モデルが指定を断ったときは、`str(e)` に、原因の引数と、どのモデルでも動く書き方が付く（上の「例外」）。捨てられた指定を自分のテストで見つけるには、`DroppedParameterWarning` を例外にする。
 
 ---
 

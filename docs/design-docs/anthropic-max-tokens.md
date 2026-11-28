@@ -4,7 +4,7 @@
 - 検証: 一次情報で確認、実 API 未検証（U36、U37）
 - コード: `providers/anthropic.py`（`DEFAULT_MAX_TOKENS`）
 - テスト: `tests/test_anthropic.py`（`test_default_max_tokens_fits_current_models`）、`e2e/test_e2e_basic.py`（`test_max_tokens_omitted`、`test_max_tokens_above_model_limit`）
-- 計画: [載せ替えの負担を減らす](../exec-plans/active/model-switch-friction.md) の 1
+- 計画: [載せ替えの負担を減らす](../exec-plans/completed/2026-11-28-model-switch-friction.md) の 1
 
 ## 背景
 

@@ -56,6 +56,8 @@ python examples/agent_loop.py
 
 The model string is split at the first `:`, so model names may contain colons, as in `ollama:llama3.2:3b`.
 
+Most code needs no other change. The few arguments that differ between providers, and how to write them so that a switch needs no code change, are in "Switching models without changing code" below.
+
 ## Usage
 
 ### Text and streaming
@@ -114,7 +116,8 @@ def place_order(order: dict) -> str:
 - `tool_choice`: `"auto"` (default) / `"none"` / `"required"` / `{"name": "get_weather"}`
   - It is not sent unless you give it (every provider defaults to auto)
   - Naming a tool that is not in `tools` raises `ConfigurationError` before sending
-  - Some models reject `"required"` and a named tool (for example Anthropic's Opus 5.5 and Sonnet 5.5). The API's error is then raised as is as `BadRequestError`; switchllm never quietly changes it to `"auto"`
+  - Some models reject `"required"` and a named tool (for example Anthropic's Opus 5.5 and Sonnet 5.5). The API's error is then raised as `BadRequestError`, with a hint when the error names `tool_choice` (see "Errors" below); switchllm never quietly changes it to `"auto"`
+  - Ollama has no `tool_choice`: `"none"` and a forced choice raise `UnsupportedFeatureError` before sending, and `"auto"` is simply not sent
 - Parallel tool calls are supported (for Anthropic and Gemini, the results are sent together in one message)
 - `run_tool_calls` runs your functions with arguments chosen by the model. Validate the arguments in functions that do anything dangerous ([SECURITY.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/SECURITY.md), in Japanese)
 
@@ -296,6 +299,23 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 ```
 
 You can also skip registration and write `Client("openai-chat:<model>", base_url="...", api_key="...")`. `openai-chat` sends max_tokens as `max_completion_tokens` only when the server is OpenAI itself (OpenAI has deprecated `max_tokens`), and as `max_tokens` to any other server.
+
+## Switching models without changing code
+
+Most code runs unchanged when only the model string changes. A few arguments differ between providers, and some models reject settings that other models accept. The library keeps no list of models, so it stops before sending only what a whole provider lacks; anything else comes back from the API. Written as below, your code keeps working after a switch.
+
+- **Keep provider-specific settings side by side.** Put request parameters that only one provider understands in `extra_by_provider=`, and client options in `options_by_provider=`. Only the chosen provider's part is used. `extra=` and `**options` go to every provider, so use them only for what every provider accepts
+- **`max_tokens`: leave it out, or leave room for reasoning.** Left out, each model uses its own limit (Anthropic, which requires a value, gets 64000). If you set it to cap length or cost, remember that OpenAI, Gemini and Claude 5 models count reasoning tokens toward it. A reply cut off by the limit has `stop_reason == "max_tokens"` and may have no text
+- **Don't rely on `temperature` or `stop`.** `temperature` is dropped on Anthropic (with a `DroppedParameterWarning`) and ignored without an error by Gemini 3.6 and later and by DeepSeek in thinking mode. `stop` raises `UnsupportedFeatureError` on the OpenAI Responses API. Describe the length and format you want in the prompt (or use `response_schema=`), and cut the text yourself where you need to
+- **Pass images as base64.** `ImagePart.from_file()` and `ImagePart(data=..., media_type=...)` work on every preset. An image URL is fetched by the provider's API, and Ollama accepts no URLs
+- **Send PDFs or plain text.** PDFs work except on the `deepseek`, `ollama` and `lmstudio` presets. For other text files (CSV and so on), read the file and put its text in a `TextPart`, which works everywhere
+- **`reasoning_effort`: use `"low"`, `"medium"` or `"high"`.** These are the levels most reasoning models accept. `"none"`, `"minimal"`, `"xhigh"` and `"max"` are missing on some providers (`UnsupportedFeatureError` before sending) or some models (`BadRequestError`). Gemini 2.5 takes no level: write its `thinkingBudget` in `extra_by_provider=`
+- **Leave `tool_choice` unset.** `"auto"` is the default everywhere. A forced choice (`"required"` or a tool name) is rejected by several Claude 5 models, by DeepSeek in thinking mode, and by Ollama. Ask for the tool in the prompt instead, and to stop tool calls, don't pass `tools`
+- **Treat `res.thinking` as optional.** With `reasoning_summary=True`, the model still decides whether to return a summary. `openai-chat:` pointed at OpenAI raises `UnsupportedFeatureError`, and Claude 4.5 models reject it with a 400
+- **Structured output: list every property in `required`.** Make optional fields nullable (OpenAI requires it). DeepSeek has no JSON Schema, so `response_schema=` raises `UnsupportedFeatureError` there (see "Structured output" above)
+- **Switching in the middle of a conversation** works with the same `messages`: raw data goes back only to the same model (any Claude model for Anthropic), and other models get the history converted again. History that holds what the new provider cannot take (an image URL or a PDF for Ollama, for example) raises `UnsupportedFeatureError` before sending
+
+What each preset can send, and what stops before sending, is listed in a table in [public-api.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/public-api.md) (in Japanese). When a model rejects a setting, `str(e)` names the argument and says how to write it for every model (see "Errors" above). To catch dropped settings in your own tests, turn `DroppedParameterWarning` into an error.
 
 ---
 
