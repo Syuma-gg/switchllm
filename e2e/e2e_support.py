@@ -114,6 +114,8 @@ SCOPE: dict[str, frozenset[str]] = {
     "U33": frozenset({"anthropic"}),
     "U34": frozenset({"gemini"}),
     "U35": frozenset({"ollama", "lmstudio"}),
+    "U36": frozenset({"anthropic"}),
+    "U37": frozenset({"anthropic"}),
 }
 
 

@@ -134,6 +134,26 @@ def _table_names(marker: str) -> set[str]:
     return set(re.findall(r"^\|\s*`([^`]+)`", m.group(1), re.M))
 
 
+_PREMISE_MARK = re.compile(r"mark\.premise\(([^)]*)\)")
+
+
+def test_e2e_premises_are_documented_and_scoped():
+    # E2E の @pytest.mark.premise に書いた U 番号は、実 API 検証の前提にあり、e2e_support.SCOPE で対象の接続先が
+    # 決まっていること。SCOPE にないと、--models で回したときに KeyError になる（--models なしでは E2E を収集しないので、
+    # ここで見つける）
+    from e2e_support import SCOPE
+
+    used: set[str] = set()
+    for path in sorted((ROOT / "e2e").glob("test_e2e_*.py")):
+        for args in _PREMISE_MARK.findall(path.read_text(encoding="utf-8")):
+            used |= set(re.findall(r'"(U\d+)"', args))
+    plan = (DOCS / "exec-plans" / "active" / "real-api-verification.md").read_text(encoding="utf-8")
+    documented = set(re.findall(r"^### (U\d+) ", plan, re.M))
+    assert used, "no @pytest.mark.premise found in e2e/test_e2e_*.py"
+    assert not used - documented, f"add these to the premises in real-api-verification.md: {sorted(used - documented)}"
+    assert not used - set(SCOPE), f"add these to SCOPE in e2e/e2e_support.py: {sorted(used - set(SCOPE))}"
+
+
 def test_public_api_doc_matches_all():
     documented, actual = _table_names("public-api"), set(switchllm.__all__)
     assert documented == actual, (
