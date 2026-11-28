@@ -34,7 +34,7 @@ class OpenAIChatProvider(Provider):
     adapter = "openai_chat"
     default_base_url = OPENAI_BASE_URL
     api_key_env = ("OPENAI_API_KEY",)
-    option_names = frozenset({"max_tokens_field", "stream_usage", "json_schema", "file_input"})
+    option_names = frozenset({"max_tokens_field", "stream_usage", "json_schema", "file_input", "tool_choice", "image_url"})
     auth_header = "Authorization"
     # エラーの文言か本文に出てくる名前。reasoning_summary は何も送らないので持たない（docs/design-docs/error-hints.md）
     error_fields = {
@@ -60,10 +60,28 @@ class OpenAIChatProvider(Provider):
             if isinstance(p, TextPart):
                 out.append({"type": "text", "text": p.text})
             elif isinstance(p, ImagePart):
+                if p.url and not self.options.get("image_url", True):
+                    # Ollama の対応表は、画像を base64 だけとする（docs/design-docs/provider-capabilities.md）
+                    raise UnsupportedFeatureError(
+                        f"{self.key!r} does not accept image URLs. Pass the image as base64 instead "
+                        "(ImagePart.from_file() or ImagePart(data=..., media_type=...))"
+                    )
                 out.append({"type": "image_url", "image_url": {"url": p.as_data_url()}})
             elif isinstance(p, FilePart):
                 out.append({"type": "file", "file": self._file(p)})
         return out
+
+    def _reject_tool_choice(self, mode: str) -> None:
+        """tool_choice に対応しない接続先（Ollama）で、auto 以外を送る前に止める。黙って無視されると、
+        none でもツールを呼び、強制しても呼ばないことがある（docs/design-docs/provider-capabilities.md）。"""
+        if mode == "none":
+            raise UnsupportedFeatureError(
+                f"{self.key!r} does not support tool_choice='none'. To stop tool calls, don't pass tools"
+            )
+        if mode != "auto":
+            raise UnsupportedFeatureError(
+                f"{self.key!r} does not support a forced tool_choice. Leave tool_choice unset and ask for the tool in the prompt"
+            )
 
     def _file(self, p: FilePart) -> dict[str, str]:
         """OpenAI の形で送る。受け付けないと分かっているサーバーと、PDF 以外は送る前に止める
@@ -120,10 +138,13 @@ class OpenAIChatProvider(Provider):
                 {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
                 for t in req.tools
             ]
-            # 省略時の既定は auto。Ollama は tool_choice 自体に対応していないので、指定がなければ送らない
+            # 省略時の既定は auto なので、指定がなければ送らない
             if req.tool_choice is not None:
                 mode, name = normalize_tool_choice(req.tool_choice)
-                body["tool_choice"] = {"type": "function", "function": {"name": name}} if mode == "tool" else mode
+                if not self.options.get("tool_choice", True):
+                    self._reject_tool_choice(mode)  # auto は既定と同じなので、送らないだけ
+                else:
+                    body["tool_choice"] = {"type": "function", "function": {"name": name}} if mode == "tool" else mode
         if req.response_schema is not None:
             # DeepSeek の response_format は text と json_object だけ（docs/references/openai-chat-compatible.md）。
             # 黙って JSON モードに替えず、送る前に知らせる

@@ -50,8 +50,10 @@ PRESETS: dict[str, ProviderPreset] = {
         "openai_chat", "https://api.deepseek.com", ("DEEPSEEK_API_KEY",), {"json_schema": False, "file_input": False}
     ),
     # ローカル実行（APIキー不要）。base_url は docs/references/openai-chat-compatible.md の出典で確認済み。
-    # どちらも文書にファイルの入力の記述がない
-    "ollama": ProviderPreset("openai_chat", "http://localhost:11434/v1", (), {"file_input": False}),
+    # どちらも文書にファイルの入力の記述がない。Ollama の対応表は tool_choice と画像の URL を未対応とする
+    "ollama": ProviderPreset(
+        "openai_chat", "http://localhost:11434/v1", (), {"file_input": False, "tool_choice": False, "image_url": False}
+    ),
     "lmstudio": ProviderPreset("openai_chat", "http://localhost:1234/v1", (), {"file_input": False}),
 }
 

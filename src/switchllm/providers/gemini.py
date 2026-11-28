@@ -13,10 +13,22 @@ import json
 import uuid
 from typing import Any
 
+from pathlib import PurePosixPath
+from urllib.parse import urlsplit
+
 from .._http import HTTPRequest
 from ..errors import ConfigurationError, StreamError, UnsupportedFeatureError
-from ..types import FilePart, ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
+from ..types import _IMAGE_MEDIA_TYPES, FilePart, ImagePart, Message, ProviderState, Response, StreamEvent, TextPart, ToolCall, Usage
 from .base import ChatRequest, Provider, StreamParser, deep_merge, normalize_tool_choice
+
+
+def _url_media_type(p: ImagePart) -> str:
+    """URL の画像の mimeType。Gemini の文書は「Always provide the correct MIME type」と勧める。
+    ``media_type`` が既定（image/png）のままなら、URL の拡張子から推す（推せなければ既定のまま）。"""
+    if p.media_type != ImagePart.media_type:
+        return p.media_type
+    suffix = PurePosixPath(urlsplit(p.url or "").path).suffix.lower()
+    return _IMAGE_MEDIA_TYPES.get(suffix, p.media_type)
 
 SYNTHETIC_ID_PREFIX = "switchllm_"  # Gemini が id を返さなかった呼び出しに付ける仮 ID
 DUMMY_THOUGHT_SIGNATURE = "skip_thought_signature_validator"
@@ -47,10 +59,10 @@ class GeminiProvider(Provider):
                 parts.append({"text": p.text})
             elif isinstance(p, ImagePart):
                 if p.url:
-                    raise UnsupportedFeatureError(
-                        "Gemini generateContent does not accept arbitrary image URLs inline; "
-                        "use ImagePart.from_file() / base64 data instead"
-                    )
+                    # 公開の HTTPS の URL は、Gemini の API が取りに行く（ライブラリは取りに行かない。
+                    # docs/design-docs/provider-capabilities.md、U39）
+                    parts.append({"fileData": {"fileUri": p.url, "mimeType": _url_media_type(p)}})
+                    continue
                 parts.append({"inlineData": {"mimeType": p.media_type, "data": p.data}})
             elif isinstance(p, FilePart):
                 # 種類は確かめずに送る。文書の一覧は「not comprehensive」とされる

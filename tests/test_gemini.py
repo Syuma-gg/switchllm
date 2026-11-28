@@ -1,7 +1,7 @@
 import pytest
 
 from sample_tools import WEATHER_TOOL
-from switchllm import ConfigurationError, ImagePart, Message, TextPart, ToolCall, UnsupportedFeatureError
+from switchllm import ConfigurationError, ImagePart, Message, TextPart, ToolCall
 from switchllm.providers.gemini import SYNTHETIC_ID_PREFIX
 
 
@@ -42,11 +42,27 @@ def test_image_file_becomes_inline_data(api, tmp_path):
     ]
 
 
-def test_image_url_is_rejected_before_sending(api):
+def test_image_url_is_sent_as_file_data(api):
+    # 公開の HTTPS の URL は、Gemini の API が取りに行く（docs/design-docs/provider-capabilities.md、U39）。
+    # ライブラリは取りに行かない（通信先を増やさない）
+    # mimeType は必ず送る（「Always provide the correct MIME type」）。media_type が既定（image/png）のままなら、
+    # URL の拡張子から推す。利用者が URL の画像に media_type を書くことは少ないため
+    images = [
+        (ImagePart(url="https://example.com/cat.png"), "image/png"),
+        (ImagePart(url="https://example.com/a/cat.JPG?size=large#top"), "image/jpeg"),  # クエリと大文字は見ない
+        (ImagePart(url="https://example.com/cat", media_type="image/webp"), "image/webp"),  # 書いてあればそれ
+        (ImagePart(url="https://example.com/cat.jpg", media_type="image/webp"), "image/webp"),
+        (ImagePart(url="https://example.com/cat"), "image/png"),  # 推せなければ既定のまま
+    ]
     client = api.client("gemini:gemini-flash-latest")
-    with pytest.raises(UnsupportedFeatureError, match="from_file"):
-        client.chat([Message.user([ImagePart(url="https://example.com/cat.png")])])
-    assert api.requests == []  # 黙って画像を落として送らない
+    for image, _ in images:
+        api.reply_json(_resp([{"text": "猫"}]))
+        client.chat([Message.user([TextPart("これは何？"), image])])
+    for i, (image, mime) in enumerate(images):
+        assert api.body(i)["contents"][0]["parts"] == [
+            {"text": "これは何？"},
+            {"fileData": {"fileUri": image.url, "mimeType": mime}},
+        ]
 
 
 def test_parallel_calls_keep_signature_and_order(api):

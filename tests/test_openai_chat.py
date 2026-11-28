@@ -1,14 +1,14 @@
 import pytest
 
 from sample_tools import WEATHER_TOOL
-from switchllm import ImagePart, Message, TextPart, ToolCall, register_provider
+from switchllm import ImagePart, Message, TextPart, ToolCall, UnsupportedFeatureError, register_provider
 from switchllm.providers import PRESETS
 
 
 def test_image_parts_become_image_url(api):
     api.reply_json({"choices": [{"message": {"role": "assistant", "content": "どちらも猫"}, "finish_reason": "stop"}]})
     images = [ImagePart(url="https://example.com/a.png"), ImagePart(data="iVBORw0KGgo=", media_type="image/png")]
-    api.client("ollama:llava").chat([Message.user([TextPart("比べて"), *images])])
+    api.client("lmstudio:llava").chat([Message.user([TextPart("比べて"), *images])])  # Ollama は URL を受け付けない
     assert api.body()["messages"] == [
         {
             "role": "user",
@@ -254,3 +254,48 @@ def test_tool_call_with_empty_arguments_string(api):
         {"id": "c1", "type": "function", "function": {"name": "now", "arguments": ""}}]}, "finish_reason": "tool_calls"}]})
     call = api.client("ollama:llama3.2", api_key=None).chat("今何時", tools=[{"name": "now"}]).tool_calls[0]
     assert (call.arguments, call.arguments_json()) == ({}, "{}")
+
+
+# --------------------------------------------------------------------------- #
+# 接続先が対応しない tool_choice と画像の URL（docs/design-docs/provider-capabilities.md）
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("choice", "message"),
+    [
+        ("none", "don't pass tools"),  # 黙って無視されると、none でもツールを呼んでしまう
+        ("required", "ask for the tool in the prompt"),
+        ({"name": "get_weather"}, "ask for the tool in the prompt"),
+    ],
+)
+def test_ollama_rejects_tool_choice_before_sending(api, choice, message):
+    # Ollama の OpenAI 互換の対応表で、tool_choice は未対応
+    with pytest.raises(UnsupportedFeatureError, match=message):
+        api.client("ollama:llama3.2").chat("hi", tools=[WEATHER_TOOL], tool_choice=choice)
+    assert api.requests == []
+
+
+def test_ollama_auto_tool_choice_is_not_sent(api):
+    # auto は既定と同じなので、止めずに送らないだけ
+    api.reply_json(_ok())
+    api.client("ollama:llama3.2").chat("hi", tools=[WEATHER_TOOL], tool_choice="auto")
+    assert "tool_choice" not in api.body() and api.body()["tools"]
+
+
+def test_ollama_rejects_image_urls_before_sending(api):
+    # Ollama の対応表で、画像は base64 だけ（Image URL は未対応）。履歴に入っていても同じ
+    with pytest.raises(UnsupportedFeatureError, match="from_file"):
+        api.client("ollama:llama3.2").chat([Message.user([TextPart("何？"), ImagePart(url="https://example.com/cat.png")])])
+    assert api.requests == []
+
+
+def test_tool_choice_and_image_url_options_work_on_any_compatible_server(api):
+    # 互換サーバーは既定で送る。対応しないと分かっているなら、オプションで送る前に止められる
+    client = api.client("openai-chat:llama", base_url="http://gpu:8000/v1", tool_choice=False, image_url=False)
+    with pytest.raises(UnsupportedFeatureError, match="'openai-chat'"):
+        client.chat("hi", tools=[WEATHER_TOOL], tool_choice="required")
+    with pytest.raises(UnsupportedFeatureError, match="'openai-chat'"):
+        client.chat([Message.user([ImagePart(url="https://example.com/cat.png")])])
+    assert api.requests == []
+    api.reply_json(_ok())
+    api.client("openai-chat:llama", base_url="http://gpu:8000/v1").chat("hi", tools=[WEATHER_TOOL], tool_choice="none")
+    assert api.body()["tool_choice"] == "none"

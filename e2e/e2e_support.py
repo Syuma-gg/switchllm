@@ -60,6 +60,18 @@ def file_input_supported(model: str) -> bool:
     return bool(PRESETS[key].options.get("file_input", True))
 
 
+def tool_choice_supported(model: str) -> bool:
+    """``tool_choice`` の none と強制を送るか。送らない接続先（Ollama のプリセット）は、送る前に止める。"""
+    key, _ = parse_model(model)
+    return bool(PRESETS[key].options.get("tool_choice", True))
+
+
+def image_url_supported(model: str) -> bool:
+    """URL の画像を送るか。送らない接続先（Ollama のプリセット）は、送る前に止める。"""
+    key, _ = parse_model(model)
+    return bool(PRESETS[key].options.get("image_url", True))
+
+
 def json_schema_supported(model: str) -> bool:
     """``response_schema=`` を送るか。送らない接続先（DeepSeek のプリセット）は、送る前に UnsupportedFeatureError にする。
     モデルごとの一覧ではなく、ライブラリのプリセットの設定を見る。"""
@@ -117,6 +129,7 @@ SCOPE: dict[str, frozenset[str]] = {
     "U36": frozenset({"anthropic"}),
     "U37": frozenset({"anthropic"}),
     "U38": frozenset({"openai", "openai_chat", "anthropic", "gemini"}),  # どの接続先でも、断られたときに案内が付くか
+    "U39": frozenset({"gemini"}),
 }
 
 

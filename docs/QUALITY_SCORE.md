@@ -42,7 +42,8 @@
 | 推論の要約（`reasoning_summary=`） | B | `tests/test_reasoning_summary.py`（実装にわざと入れた誤り 16 通りを、どれも見つけた。2026-11-26） | 実 API（E2E の `test_e2e_reasoning_summary.py`。U32〜U35） |
 | Anthropic の API の版、`max_tokens` の既定、`temperature` を捨てる警告 | B | `tests/test_anthropic.py`（実装にわざと入れた誤りを、既定の `max_tokens` は 4 通り、`temperature` の警告は 8 通り、どれも見つけた。2026-11-28） | 実 API（U25、U36、U37） |
 | `@tool`、`run_tool_calls`、`arun_tool_calls` | B | `tests/test_tools.py` | 生成したスキーマを各社が受け付けるか |
-| 画像の入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py`、`tests/test_file_input.py` | 実 API |
+| 画像の入力（`ImagePart`） | B | 各 `tests/test_<adapter>.py`、`tests/test_file_input.py` | 実 API（Gemini の URL は U39） |
+| プリセットごとに送れるもの（対応表） | B | `tests/test_support_table.py`（表の全セルを各プリセットで呼ぶ）。Gemini の画像の URL と Ollama の tool_choice・画像の URL は、実装にわざと入れた誤り 14 通りを、どれも見つけた（2026-11-28） | 実 API |
 | ファイルの入力（`FilePart`） | B | `tests/test_file_input.py`、`tests/test_history.py` | 実 API（E2E の `test_e2e_files.py`。U28〜U31） |
 | SSE の解析 | B | `tests/test_client.py`、`tests/test_async_client.py` | — |
 | 非同期のクライアント（`AsyncClient`） | B | `tests/test_async_client.py`。`api` を使うテストはすべて非同期でも回る（非同期の経路にわざと入れた誤りを見つけることを確かめた。2026-11-23） | 実 API（E2E の `test_e2e_async.py`） |

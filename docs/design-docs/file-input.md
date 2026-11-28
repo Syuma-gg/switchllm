@@ -56,6 +56,7 @@
 - **Chat Completions 互換は OpenAI の形で送り、受け付けないと分かっているプリセットでは送る前に止める**（作者の判断）
   - プリセット別のオプション `file_input`（既定は `True`）を足した
   - DeepSeek（文書は `file_id` でだけ受け付け、形も違う）・Ollama・LM Studio（文書にファイルの記述がない）のプリセットを `False` にした
+  - 2026-11-28 に見直した。DeepSeek の Chat Completions のリファレンスに `file_data` が載ったが、文書の読み込みのガイドと食い違うので `False` のまま（[判断](provider-capabilities.md)）
   - `json_schema: False` と同じ仕組みで、`register_provider(..., file_input=False)` や `Client(..., file_input=False)` でも指定できる
 - **`filename` は、`FilePart` にあるときだけ送る**（OpenAI の2つのアダプター）
   - 文書では省ける（U28）。`from_file()` は必ず付ける

@@ -9,7 +9,7 @@
 | 共通 | generateContent |
 |---|---|
 | system | `systemInstruction.parts` |
-| user | `contents[]`（`role: "user"`）の `parts`（`text` / `inlineData`）。画像の URL は非対応で `UnsupportedFeatureError` |
+| user | `contents[]`（`role: "user"`）の `parts`（`text` / `inlineData` / `fileData`）。画像の URL は `fileData` の `fileUri` で送り、Gemini の API が取りに行く（下の「ファイルの入力」。U39） |
 | assistant（再送しないとき） | `role: "model"` の `text` と `functionCall`（`args` はオブジェクト） |
 | ツール結果 | user の `functionResponse`（`name` が必須、`response` はオブジェクト。下の一覧） |
 | 続く同じ role | 1つの content にまとめる（並列の呼び出しは FC1, FC2, FR1, FR2 の順） |
@@ -143,7 +143,12 @@
   - Office と OpenDocument のファイルも渡せると書かれている
   - 一覧が網羅的でないので、switchllm は種類を確かめずに送る
 - 上限: インラインは「100 MB per request or payload (50 MB for PDFs)」。それより大きいときは Files API（switchllm は扱わない）。1つのリクエストで、合わせて 1000 ページまでの PDF を読める（文脈の長さに収まる限り）
-- URL: `fileData` の `fileUri` は Files API の URI。公開された HTTPS の URL を渡す方法は Interactions の形の例しかなく、generateContent で使えるかは書かれていない（switchllm はファイルの URL を扱わない）
+- URL: 公開の HTTPS の URL と署名付きの URL は、Gemini の API が取りに行く（「The Gemini API will fetch the content securely during processing」）
+  - 1ファイル 15 MB まで。ログインが要るページや有料のページは不可。取りに行く前に、URL の内容の安全性を確かめる
+  - 「The new methods are supported in all of the Gemini API endpoints, including Batch, Interactions and Live API」。ただし例は Interactions の形（`{"type": "image", "uri", "mime_type"}`）だけで、generateContent の例はない（U39）
+  - Gemini 2.0 系は不可（「Gemini 2.0 family of models are not supported」）
+  - Part の `fileData` は `fileUri`（必須）と `mimeType`（任意）。文書は「Always provide the correct MIME type」と勧める
+  - switchllm は、URL の画像（`ImagePart(url=...)`）を `{"fileData": {"fileUri", "mimeType"}}` で送る。`media_type` が既定（`image/png`）のままなら、URL の拡張子から推す。ファイル（`FilePart`）の URL は扱わない（[判断](../design-docs/provider-capabilities.md)）
 
 ## エラー
 
@@ -193,6 +198,9 @@
   - 2026-11-23（ai.google.dev から移った）: 「Gemini models can process documents in PDF format, using native vision」「Other non-PDF documents, such as TXT, Markdown, or HTML files, are processed as plain text」。Office と OpenDocument のファイル。1000 ページ。例は Interactions API の形
 - [File input methods](https://aistudio.google.com/docs/file-input-methods)
   - 2026-11-23: インラインは「100 MB per request or payload (50 MB for PDFs)」。対応する種類の一覧。公開 URL は 15 MB まで
+  - 2026-11-28: 「External HTTP / Signed URLs」の節。「You can pass publicly accessible HTTPS URLs or pre-signed URLs directly in your request. The Gemini API will fetch the content securely during processing.」「Each file can be up to 15 MB.」「The new methods are supported in all of the Gemini API endpoints, including Batch, Interactions and Live API.」「Gemini 2.0 family of models are not supported」。REST の例は Interactions の形だけ
+- [Image understanding](https://ai.google.dev/gemini-api/docs/image-understanding)
+  - 2026-11-28: 複数の画像の例が `{"type": "image", "uri": "https://example.com/image1.jpg", "mime_type": "image/jpeg"}`（Interactions の形）。「Inline image data limits your total request size (text prompts, system instructions, and inline bytes) to 20MB.」（file-input-methods の 100 MB と食い違う）
 
 ### エラー
 
@@ -205,4 +213,4 @@
 
 ## 関連する未検証の前提
 
-U4〜U7、U14、U16、U20、U26、U31、U34、U38（[実 API 検証](../exec-plans/active/real-api-verification.md)）
+U4〜U7、U14、U16、U20、U26、U31、U34、U38、U39（[実 API 検証](../exec-plans/active/real-api-verification.md)）

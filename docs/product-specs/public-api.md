@@ -54,6 +54,7 @@
 [判断](../design-docs/file-input.md)
 
 - `ImagePart` は、`url` があれば `url` を、なければ `data` と `media_type` を送る。どちらもなければ、送る前に `TypeError`
+  - URL の画像は、各社の API が取りに行く（ライブラリは取りに行かない）。Gemini には `fileData.fileUri` で送り、`media_type` が既定のままなら URL の拡張子から種類を推す。Ollama は送る前に `UnsupportedFeatureError`（[判断](../design-docs/provider-capabilities.md)）
 - `FilePart` が受け付ける種類は、アダプターで違う
   - OpenAI Responses と Gemini は、種類を確かめずに送る
   - Chat Completions 互換は PDF だけ。Anthropic は PDF とテキスト
@@ -117,6 +118,35 @@
 | `lmstudio` | Chat Completions | `http://localhost:1234/v1` | 不要 |
 <!-- presets:end -->
 
+### プリセットごとに送れるもの
+
+載せ替える前に、送る前に止まる指定が分かるようにする（[判断](../design-docs/provider-capabilities.md)）。`google` は `gemini` と同じ。表とライブラリの振る舞いが一致することを `tests/test_support_table.py` が全プリセットで呼んで確かめる。
+
+- ○: 送る。モデルが受け付けなければ API のエラーになり、`str(e)` に案内が付くことがある（[判断](../design-docs/error-hints.md)）
+- ×: 送る前に `UnsupportedFeatureError`。メッセージで代わりの書き方を案内する
+- △: 送らずに捨て、`DroppedParameterWarning` を出す（[判断](../design-docs/dropped-parameter-warning.md)）
+
+<!-- support:start -->
+| 指定 | `openai` | `openai-chat` | `anthropic` | `gemini` | `deepseek` | `ollama` | `lmstudio` |
+|---|---|---|---|---|---|---|---|
+| `stop` | × | ○ | ○ | ○ | ○ | ○ | ○ |
+| 画像（base64） | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| 画像の URL | ○ | ○ | ○ | ○ | ○ | × | ○ |
+| ファイル（PDF） | ○ | ○ | ○ | ○ | × | × | × |
+| ファイル（テキスト） | ○ | × | ○ | ○ | × | × | × |
+| `response_schema` | ○ | ○ | ○ | ○ | × | ○ | ○ |
+| `reasoning_effort="none"` | ○ | ○ | ○ | × | ○ | ○ | ○ |
+| `reasoning_effort="minimal"` | ○ | ○ | × | ○ | ○ | ○ | ○ |
+| `reasoning_effort="max"` | ○ | ○ | ○ | × | ○ | ○ | ○ |
+| `reasoning_summary=True` | ○ | × | ○ | ○ | ○ | ○ | ○ |
+| `tool_choice="none"` | ○ | ○ | ○ | ○ | ○ | × | ○ |
+| 強制する `tool_choice` | ○ | ○ | ○ | ○ | ○ | × | ○ |
+| `temperature` | ○ | ○ | △ | ○ | ○ | ○ | ○ |
+<!-- support:end -->
+
+- 会話の途中で載せ替えるときも同じで、履歴に×のもの（PDF や画像の URL）があると、その接続先へは送れない
+- 互換サーバー（`register_provider()` や `base_url=`）は、オプション（`json_schema`・`file_input`・`tool_choice`・`image_url`）で決まる。既定ではどれも送る
+
 ## プロバイダー固有の指定と切り替え
 
 [判断](../design-docs/provider-specific-params.md)
@@ -144,6 +174,8 @@
 | `max_tokens_field` | `openai_chat` | max_tokens を送るフィールド名。既定は、接続先が OpenAI 本家なら `max_completion_tokens`、それ以外は `max_tokens` |
 | `stream_usage` | `openai_chat` | `False` にすると、ストリーミングで `stream_options.include_usage` を送らない（既定 `True`、U10） |
 | `json_schema` | `openai_chat` | `False` にすると、`response_schema=` を送る前に `UnsupportedFeatureError` にする。JSON Schema を受け付けない接続先のため（既定 `True`、`deepseek` のプリセットは `False`） |
+| `tool_choice` | `openai_chat` | `False` にすると、`tool_choice` の `"none"` と強制を送る前に `UnsupportedFeatureError` にし、`"auto"` は送らない。`tool_choice` に対応しない接続先のため（既定 `True`、`ollama` のプリセットは `False`。[判断](../design-docs/provider-capabilities.md)） |
+| `image_url` | `openai_chat` | `False` にすると、URL の画像を送る前に `UnsupportedFeatureError` にする。画像を base64 でしか受け付けない接続先のため（既定 `True`、`ollama` のプリセットは `False`。[判断](../design-docs/provider-capabilities.md)） |
 | `file_input` | `openai_chat` | `False` にすると、`FilePart` を送る前に `UnsupportedFeatureError` にする。ファイルを受け付けない接続先のため（既定 `True`、`deepseek`・`ollama`・`lmstudio` のプリセットは `False`。[判断](../design-docs/file-input.md)） |
 | `default_max_tokens` | `anthropic` | max_tokens を指定しなかったときの値（既定 64000。Anthropic は必須。[判断](../design-docs/anthropic-max-tokens.md)） |
 | `anthropic_version` | `anthropic` | `anthropic-version` ヘッダー（既定 `2026-10-21`）。`2026-10-21` 以降の版では、`temperature=` を送らずに捨て、`DroppedParameterWarning` を出す（[判断](../design-docs/dropped-parameter-warning.md)） |

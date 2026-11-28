@@ -59,8 +59,8 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
 | `test_tool_roundtrip_three_turns` | ツールを呼ぶ → 結果を渡して答える → 次のターンでもう一度ツール。推論情報を送り返しても拒否されない | | 3 | U3、U4、U6、U7、U11 |
-| `test_tool_choice_none` | `tool_choice="none"` ではツールを呼ばない | | 1 | U9、U15 |
-| `test_forced_tool_choice[required/named]` | ツールの強制。受け付けるモデルでは指定どおりに呼び、拒否するモデルでは API のエラーをそのまま返す。Anthropic で拒否されたら、エラーに `tool_choice` の案内が付く | | 2 | U15、U38 |
+| `test_tool_choice_none` | `tool_choice="none"` ではツールを呼ばない。Ollama は送る前に `UnsupportedFeatureError`（呼ばない） | | 1 | U9、U15 |
+| `test_forced_tool_choice[required/named]` | ツールの強制。受け付けるモデルでは指定どおりに呼び、拒否するモデルでは API のエラーをそのまま返す。Anthropic で拒否されたら、エラーに `tool_choice` の案内が付く。Ollama は送る前に `UnsupportedFeatureError`（呼ばない） | | 2 | U15、U38 |
 | `test_tool_without_parameters` | 引数のないツール（空の `properties`）を受け付け、`arguments == {}` で呼ぶ | ○ | 2 | U4 |
 | `test_tool_schema_types` | str・int・float・bool・Literal・`list[str]`・省略できる引数を持つスキーマを受け付け、型どおりの値で呼ぶ | ○ | 1 | U4 |
 | `test_parallel_tool_calls` | 2つの都市を調べさせる。並列の呼び出しと、まとめて返す結果を受け付ける | ○ | 3 | |
@@ -83,7 +83,7 @@ python -m pytest e2e --models "deepseek:deepseek-flash" -k "tool"
 | テスト | 確かめること | 境界 | 回数 | 前提 |
 |---|---|---|---|---|
 | `test_image_base64` | 64×64 の赤い PNG（base64）の色を答えられる | ○ | 1 | |
-| `test_image_url_is_rejected_before_sending`（Gemini だけ） | URL の画像は送る前に `UnsupportedFeatureError` | | 0 | |
+| `test_image_url` | 同じ赤い PNG を、このリポジトリの `e2e/assets/red.png` の GitHub の raw の URL で渡し、色を答えられる（接続先の API が取りに行く）。Ollama は送る前に `UnsupportedFeatureError`（呼ばない）。main に push してから回す | | 1 | U39 |
 
 ### ファイル（`test_e2e_files.py`）
 

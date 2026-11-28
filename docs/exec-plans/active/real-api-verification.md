@@ -15,6 +15,7 @@
 | U32〜U35 | 推論の要約（[推論の要約](../completed/2026-11-26-reasoning-summary.md)） |
 | U36〜U37 | Anthropic の `max_tokens` の既定（[載せ替えの負担を減らす](model-switch-friction.md)） |
 | U38 | 断られたエラーの案内（同上） |
+| U39 | Gemini の URL の画像（同上） |
 
 ## 手順
 
@@ -125,6 +126,7 @@ ID はほかの文書から参照しているので変えない。「文書で�
 - 実装: `tool_choice` は明示したときだけ送る
 - 不確実な理由: Ollama の公式の文書は `tool_choice` を非対応と書いている。明示したときに、無視されるのか拒否されるのかは分からない
 - 結果: 2026-11-15 に、指定がなければ送らないように変えた（[切り替えの精査](../completed/2026-11-15-switching-review.md) の S10）。明示したときの挙動は未確認
+- 結果: 2026-11-28 に修正済み。対応表で `tool_choice` が未対応（`[ ]`）と確かめ、`"none"` と強制は送る前に `UnsupportedFeatureError`、`"auto"` は送らないようにした（[判断](../../design-docs/provider-capabilities.md)）。Ollama の振る舞いには頼らなくなった。E2E は、送る前に止まることを確かめる
 
 ### U16 ストリーミングの終わりの合図（Chat Completions 互換・Gemini）
 
@@ -251,6 +253,11 @@ ID はほかの文書から参照しているので変えない。「文書で�
   - OpenAI は `error.param` が引数を指すと文書にあるが、`reasoning.effort` を断ったときの本文の例はない
   - Gemini（generateContent）と DeepSeek は、エラーの形も文言も書かれていない。Gemini は snake_case と camelCase のどちらで名前を出すかも分からない
   - E2E は、断られたときに案内が付いた引数を記録する。Anthropic のツールの強制では、案内が付くことを確かめる（`test_forced_tool_choice`）
+
+### U39 Gemini: URL の画像を `fileData.fileUri` で送る
+
+- 実装: `ImagePart(url=...)` を `{"fileData": {"fileUri": URL, "mimeType": ...}}` で送る。URL は Gemini の API が取りに行く（[判断](../../design-docs/provider-capabilities.md)）
+- 不確実な理由: 文書は「supported in all of the Gemini API endpoints」とするが、公開の URL を渡す例は Interactions API の形だけで、generateContent の例がない。Gemini 2.0 系は不可。E2E の `test_image_url` は、このリポジトリの `e2e/assets/red.png` を GitHub の raw の URL で読ませる
 
 ## 進捗ログ
 

@@ -312,7 +312,7 @@ client = Client("myvllm:Qwen/Qwen3-8B")
 ## 既知の制限
 
 - **実 API ではまだ検証していない**。テストは各社ドキュメントの形式を再現したモックに対するもの。`python -m pytest e2e --models "anthropic:claude-sonnet-5-5,openai:gpt-5.5,gemini:gemini-flash-latest"` で、手元のキーを使って疎通を確かめてほしい（少額の料金が発生する。先に `--collect-only` を付けると、API を呼ばずに呼び出しの回数だけを表示する）
-- 画像とファイルの入力は対応（ファイルは base64 だけ）、音声入力は未対応。Gemini への画像 URL は非対応（base64 で渡す）
+- 画像とファイルの入力は対応（ファイルは base64 だけ）、音声入力は未対応。URL の画像は各社の API が取りに行き、ライブラリは取りに行かない。Ollama は base64 の画像だけ。プリセットごとに送れるものと、送る前に止まるものは [public-api.md](https://github.com/Syuma-gg/switchllm/blob/main/docs/product-specs/public-api.md) の表にある
 - 推論の本文: OpenAI・Claude 5 系・Gemini は、頼まなければ推論の要約を返さないので、`res.thinking` は `None` のことが多い。`reasoning_summary=True` を渡すと頼める（上の「推論の要約」）。頼んでも、返すかはモデルが決める
 - Anthropic: 既定の API の版は `2026-10-21` で、どのモデルでも `temperature` を拒否する。そのため `temperature=` は送らずに捨て、`DroppedParameterWarning` で知らせる（リクエストの残りはそのまま送る）。受け付ける古いモデルでは `Client(..., anthropic_version="2023-06-01")` を使う。今の Claude は、古い版でも既定でない `temperature` を拒否する。Gemini 3.6 以降と DeepSeek の思考モードは、`temperature` をエラーにせずに無視する（[詳細](https://github.com/Syuma-gg/switchllm/blob/main/docs/design-docs/dropped-parameter-warning.md)）
 - 構造化出力: OpenAI は、すべてのプロパティを `required` に入れることを求める（省略できる項目は、`{"type": ["string", "null"]}` のように null も受け付ける形にする）。使える JSON Schema のキーワードは各社で違い、使えないものは `BadRequestError` になる（Gemini は無視する）

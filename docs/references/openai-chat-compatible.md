@@ -75,7 +75,9 @@ Ollama:
 
 - ローカルでは、キーは要らない（クライアントがキーを求めるならダミーの値でよく、Ollama は無視する）
 - Chat Completions・ストリーミング・ツールに対応する
-- `tool_choice` は非対応と明記されているので、指定がなければ送らない（明示したときの挙動は U15）
+- `tool_choice` は対応表で未対応（`[ ] tool_choice`）。指定がなければ送らない。プリセットは `tool_choice: False` で、`"auto"` は送らず、`"none"` と強制は送る前に `UnsupportedFeatureError`（[判断](../design-docs/provider-capabilities.md)）
+- 画像は base64 だけ（`[x] Base64 encoded image`・`[ ] Image URL`）。プリセットは `image_url: False` で、URL の画像は送る前に `UnsupportedFeatureError`
+- 対応表にない項目を送ったときに、無視するかエラーにするかは書かれていない
 
 LM Studio:
 
@@ -163,6 +165,7 @@ LM Studio:
   - 文書を読ませるのは「can be referenced only by `file_id`. Passing the file content or a file URL in the request is not supported」で、Files API でのアップロードが要る
   - switchllm はアップロードを扱わないので、プリセットを `file_input: False` にした
 - Ollama: OpenAI 互換の文書の対応表は、本文が文字列・画像（base64。URL は非対応）・パーツの配列だけで、ファイルの記述がない。プリセットを `file_input: False` にした
+- DeepSeek（2026-11-28 に見直した）: Chat Completions のリファレンスは、`content` のパーツに `text`・`image_url`・`file` を挙げ、`file` は `file_id` か `file_data`（`filename` は `file_data` と一緒のときだけ）。文書の読み込みのガイドの「can be referenced only by `file_id`」と食い違い、パーツの説明の一部は画像のものと混ざっている。プリセットは `file_input: False` のまま（[判断](../design-docs/provider-capabilities.md)）
 - LM Studio: 文書は Chat Completions を「text and images」とし、ファイルの記述がない。プリセットを `file_input: False` にした
 - ほかの互換サーバー（`register_provider()` や `base_url=`）には、OpenAI の形で送る
   - 受け付けないサーバーなら、API のエラーになる
@@ -210,6 +213,8 @@ LM Studio:
   - 2026-11-20: strict モード（beta）は `base_url="https://api.deepseek.com/beta"` で、ツールの引数にだけ効く
 - [Error codes](https://api-docs.deepseek.com/quick_start/error_codes)
   - 2026-11-28: 「400 - Invalid Format」は「Invalid request body format.」、「422 - Invalid Parameters」は「Your request contains invalid parameters.」で、どちらも「Please modify your request ... according to the hints in the error message.」。本文の JSON の例はない
+- [DeepSeek: Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion)（2026-11-28 に見直した）
+  - 2026-11-28: `content` は「Either a string, or an array of content parts (for image input)」。パーツは `text`・`image_url`・`file`。`image_url.url` は「Either an `http(s)` URL of the image (max 8192 characters) or a base64-encoded data URL」。`file` は `file_id`（「of the form `file-api-...`」）か `file_data`。`response_format.type` は「Must be one of `text` or `json_object`」のまま。`reasoning_effort` は `none`・`low`・`high`・`max`（`minimal` は `low`、`medium` と `xhigh` は `high` として受け付ける）
 - [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode)（エラー）
   - 2026-11-28: `tool_choice` の `required` とツール名の扱いは書かれていない。「Setting `tool_choice` to `none` disables tool calling even when `tools` is provided.」。`temperature` などは「setting these parameters will not trigger an error but will also have no effect」
 
@@ -220,6 +225,7 @@ LM Studio:
   - 2026-11-20: `/v1/chat/completions` の対応表に「JSON mode」と `response_format` のチェックがある。形の例はない
   - 2026-11-21: `/v1/chat/completions` に「`reasoning_effort` (model-defined names and compatibility aliases)」と `reasoning` の `effort`。「Boolean-only models that support enabling thinking map recognized compatibility efforts to `true`, while `"none"` requests `false`」「`"minimal"` maps to `"low"`, and `"xhigh"` or `"ultra"` map to `"max"`」「`"none"` uses `"low"` because GPT-OSS cannot disable thinking」「supported names are applied exactly and unsupported names resolve to the model default」
   - 2026-11-23（https://docs.ollama.com/openai ）: messages は Text `content`、Image `content`（Base64 encoded image は対応、Image URL は非対応）、Array of `content` parts。ファイルの記述はない
+  - 2026-11-28: 「Supported request fields」で `[x]` は model・messages・frequency_penalty・presence_penalty・response_format・seed・stop・stream・stream_options・temperature・top_p・max_tokens・tools・reasoning_effort・reasoning、`[ ]` は `tool_choice`・logit_bias・user・n。画像は「[x] Base64 encoded image」「[ ] Image URL」。対応表にない項目を送ったときの扱いは、この節には書かれていない
   - 2026-11-26: 互換 API が推論テキストを返すか、返すならどのフィールドかを書いていない（下の LM Studio と合わせて）
 - [Ollama: Structured Outputs](https://docs.ollama.com/capabilities/structured-outputs)
   - 2026-11-20: 「Structured outputs work through the OpenAI-compatible API via `response_format`」「Ollama's cloud currently does not support structured outputs」

@@ -7,9 +7,19 @@ from typing import Annotated, Literal
 import json
 
 import pytest
-from e2e_support import ASK_AGAIN, MAX_TOKENS, TOOLS, answered, ask_tool_call, describe_reasoning, rejection, tool_roundtrip
+from e2e_support import (
+    ASK_AGAIN,
+    MAX_TOKENS,
+    TOOLS,
+    answered,
+    ask_tool_call,
+    describe_reasoning,
+    rejection,
+    tool_choice_supported,
+    tool_roundtrip,
+)
 
-from switchllm import BadRequestError, Message, run_tool_calls, tool
+from switchllm import BadRequestError, Message, UnsupportedFeatureError, run_tool_calls, tool
 
 
 @tool
@@ -65,18 +75,30 @@ def test_tool_roundtrip_three_turns(client, note):
 
 @pytest.mark.premise("U9", "U15")
 @pytest.mark.calls(1)
-def test_tool_choice_none(client):
-    res = client.chat([Message.user("get_weather ツールで東京の天気を調べて。")], tools=TOOLS,
-                      tool_choice="none", max_tokens=MAX_TOKENS)
+def test_tool_choice_none(client, model, note):
+    msgs = [Message.user("get_weather ツールで東京の天気を調べて。")]
+    if not tool_choice_supported(model):
+        # Ollama の対応表で tool_choice は未対応。黙って無視されると none でもツールを呼ぶので、送る前に止める（U15）
+        with pytest.raises(UnsupportedFeatureError, match="don't pass tools"):
+            client.chat(msgs, tools=TOOLS, tool_choice="none")
+        note("送る前に UnsupportedFeatureError（呼ばない）")
+        return
+    res = client.chat(msgs, tools=TOOLS, tool_choice="none", max_tokens=MAX_TOKENS)
     assert not res.tool_calls, "tool was called although tool_choice='none'"
 
 
 @pytest.mark.premise("U15", "U38")
 @pytest.mark.calls(1)
 @pytest.mark.parametrize("choice", ["required", {"name": "get_weather"}], ids=["required", "named"])
-def test_forced_tool_choice(client, adapter, choice, note):
+def test_forced_tool_choice(client, adapter, model, choice, note):
     # 受け付けるモデルでは指定どおりに呼ぶ。拒否するモデル（Anthropic の一部、DeepSeek の思考モードなど）では
     # API のエラーをそのまま返す（モデルごとの一覧は持たない）。エラーに tool_choice の案内が付くかも見る（U38）
+    if not tool_choice_supported(model):
+        # Ollama の対応表で tool_choice は未対応なので、送る前に止める（U15）
+        with pytest.raises(UnsupportedFeatureError, match="ask for the tool in the prompt"):
+            client.chat("東京の天気を教えて。", tools=TOOLS, tool_choice=choice)
+        note("送る前に UnsupportedFeatureError（呼ばない）")
+        return
     try:
         res = client.chat("東京の天気を教えて。", tools=TOOLS, tool_choice=choice, max_tokens=MAX_TOKENS)
     except BadRequestError as e:
